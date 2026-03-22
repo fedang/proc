@@ -43,16 +43,16 @@ irgen_init(struct irgen *state, FILE *out)
     state->globals_count = 0;
 }
 
-static struct irval
+static inline unsigned
 irgen_fresh_reg(struct irgen *state)
 {
-    return IRVAL_REG(++state->regs);
+    return ++state->regs;
 }
 
-static struct irval
+static inline unsigned
 irgen_fresh_label(struct irgen *state)
 {
-    return IRVAL_LABEL(++state->labels);
+    return ++state->labels;
 }
 
 static struct irval
@@ -60,7 +60,7 @@ irgen_emit_simple0(struct irgen *state, const char *instr)
 {
     struct irval out;
 
-    out = irgen_fresh_reg(state);
+    out = IRVAL_REG(irgen_fresh_reg(state));
     fprintf(state->out, "\t%%%u = %s i32\n", out.reg, instr);
     return out;
 }
@@ -75,7 +75,7 @@ irgen_emit_simple2(struct irgen *state, const char *instr,
     irval_sprintf(op1, buf1);
     irval_sprintf(op2, buf2);
 
-    out = irgen_fresh_reg(state);
+    out = IRVAL_REG(irgen_fresh_reg(state));
     fprintf(state->out, "\t%%%u = %s i32 %s, %s\n", out.reg, instr, buf1, buf2);
     return out;
 }
@@ -89,7 +89,7 @@ irgen_emit_phi(struct irgen *state, unsigned n, ...)
     va_list args;
 
     va_start(args, n);
-    out = irgen_fresh_reg(state);
+    out = IRVAL_REG(irgen_fresh_reg(state));
     fprintf(state->out, "\t%%%u = phi i32", out.reg);
 
     for (i = 0; i < n; i++) {
@@ -172,7 +172,7 @@ irgen_expr_ident(struct irgen *state, struct expr_ident *expr)
     assert(0);
 
 found:
-    out = irgen_fresh_reg(state);
+    out = IRVAL_REG(irgen_fresh_reg(state));
     fprintf(state->out, "\t%%%u = load i32, ptr %%%u\n", out.reg, slot.reg);
     return out;
 }
@@ -180,8 +180,8 @@ found:
 static struct irval
 irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
 {
-    struct irval lhs, rhs, lhs_cond, rhs_cond, rhs_zext, rhs_label, merge_label;
-    unsigned block_lhs, block_rhs;
+    struct irval lhs, rhs, lhs_cond, rhs_cond, rhs_zext;
+    unsigned block_lhs, block_rhs, rhs_label, merge_label;
 
     lhs = irgen_expr(state, expr->op_lhs);
 
@@ -195,22 +195,22 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
         lhs_cond = irgen_emit_simple2(state, "icmp ne", lhs, IRVAL_INT(0));
 
         if (expr->binop == BINOP_AND) {
-            irgen_emit_condbr(state, lhs_cond, rhs_label.label, merge_label.label);
+            irgen_emit_condbr(state, lhs_cond, rhs_label, merge_label);
         } else {
-            irgen_emit_condbr(state, lhs_cond, merge_label.label, rhs_label.label);
+            irgen_emit_condbr(state, lhs_cond, merge_label, rhs_label);
         }
 
-        block_lhs = irgen_emit_block(state, rhs_label.label);
+        block_lhs = irgen_emit_block(state, rhs_label);
         rhs = irgen_expr(state, expr->op_rhs);
 
         rhs_cond = irgen_emit_simple2(state, "icmp ne", rhs, IRVAL_INT(0));
 
-        rhs_zext = irgen_fresh_reg(state);
+        rhs_zext = IRVAL_REG(irgen_fresh_reg(state));
         fprintf(state->out, "\t%%%u = zext i1 %%%u to i32\n",
                 rhs_zext.reg, rhs_cond.reg);
 
-        irgen_emit_br(state, merge_label.label);
-        block_rhs = irgen_emit_block(state, merge_label.label);
+        irgen_emit_br(state, merge_label);
+        block_rhs = irgen_emit_block(state, merge_label);
 
         /*
          * Coming from block_lhs means we exited early,
@@ -287,7 +287,7 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
 
     switch (expr->unop) {
         case UNOP_DEREF:
-            out = irgen_fresh_reg(state);
+            out = IRVAL_REG(irgen_fresh_reg(state));
             irval_sprintf(op, op_str);
             fprintf(state->out, "\t%%%u = load i32, ptr %s\n", out.reg, op_str);
             break;
@@ -327,7 +327,7 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
         vals[i] = irgen_expr(state, expr->args[i]);
     }
 
-    out = irgen_fresh_reg(state);
+    out = IRVAL_REG(irgen_fresh_reg(state));
     fprintf(state->out, "\t%%%u = call i32 %s(", out.reg, buf);
 
     for (i = 0; i < expr->args_count; i++) {
@@ -418,7 +418,34 @@ irgen_stmt_block(struct irgen *state, struct stmt_block *stmt)
 static void
 irgen_stmt_if(struct irgen *state, struct stmt_if *stmt)
 {
-    unreachable();
+    struct irval cond, cond_cmp;
+    unsigned t_label, f_label, merge_label;
+
+    cond = irgen_expr(state, stmt->cond);
+    cond_cmp = irgen_emit_simple2(state, "icmp ne", cond, IRVAL_INT(0));
+
+    t_label = irgen_fresh_label(state);
+
+    if (stmt->b_false) {
+        f_label = irgen_fresh_label(state);
+        merge_label = irgen_fresh_label(state);
+        irgen_emit_condbr(state, cond_cmp, t_label, f_label);
+    } else {
+        merge_label = irgen_fresh_label(state);
+        irgen_emit_condbr(state, cond_cmp, t_label, merge_label);
+    }
+
+    irgen_emit_block(state, t_label);
+    irgen_stmt(state, stmt->b_true);
+    irgen_emit_br(state, merge_label);
+
+    if (stmt->b_false) {
+        irgen_emit_block(state, f_label);
+        irgen_stmt(state, stmt->b_false);
+        irgen_emit_br(state, merge_label);
+    }
+
+    irgen_emit_block(state, merge_label);
 }
 
 void
