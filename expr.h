@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "symbol.h"
+#include "type.h"
 
 enum expr_tag {
     EXPR_INVALID,

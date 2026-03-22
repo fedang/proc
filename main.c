@@ -33,7 +33,7 @@ int main()
         stmt_make_expr(expr);
 
     ((struct stmt_block *)stmt)->items[2] =
-        stmt_make_expr(expr_make_ident(symbol_make("xxx")));
+        stmt_make_return(expr_make_ident(symbol_make("xxx")));
 
     struct proc_arg darg = { 0 };
     darg.sym = symbol_make("x");

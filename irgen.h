@@ -2,6 +2,7 @@
 #define _IRGEN_H
 
 #include <stdio.h>
+#include <stdbool.h>
 
 #include "decl.h"
 
@@ -38,6 +39,7 @@ struct irgen {
     unsigned regs;
     unsigned labels;
     unsigned in_block;
+    bool terminated;
 
     struct irvar locals[256];
     unsigned locals_count;
