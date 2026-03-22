@@ -398,6 +398,26 @@ irgen_stmt_expr(struct irgen *state, struct stmt_expr *stmt)
 }
 
 static void
+irgen_stmt_return(struct irgen *state, struct stmt_return *stmt)
+{
+    struct irval val;
+    char buf[32];
+
+    if (stmt->expr) {
+        val = irgen_expr(state, stmt->expr);
+        irval_sprintf(val, buf);
+        fprintf(state->out, "\tret i32 %s\n", buf);
+    } else {
+        fprintf(state->out, "\tret void\n");
+    }
+
+    /*
+     * The ret instruction terminated the previous block
+     */
+    irgen_emit_block(state, irgen_fresh_label(state));
+}
+
+static void
 irgen_stmt_block(struct irgen *state, struct stmt_block *stmt)
 {
     size_t i, locals;
@@ -462,6 +482,10 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
 
         case STMT_IF:
             irgen_stmt_if(state, (struct stmt_if *)stmt);
+            break;
+
+        case STMT_RETURN:
+            irgen_stmt_return(state, (struct stmt_return *)stmt);
             break;
 
         default:

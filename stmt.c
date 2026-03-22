@@ -57,3 +57,13 @@ stmt_make_if(struct expr *cond, struct stmt *b_true, struct stmt *b_false)
     stmt->b_false = b_false;
     return &stmt->stmt;
 }
+
+struct stmt *
+stmt_make_return(struct expr *expr)
+{
+    struct stmt_return *stmt;
+
+    stmt = stmt_make(sizeof(struct stmt_return), STMT_RETURN);
+    stmt->expr = expr;
+    return &stmt->stmt;
+}
