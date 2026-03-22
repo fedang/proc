@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#include "stmt.h"
+#include "decl.h"
 
 enum irval_tag {
     IRVAL_INVALID,
@@ -23,10 +23,10 @@ struct irval {
     };
 };
 
-#define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { (v) } })
-#define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { (v) } })
-#define IRVAL_LABEL(v) ((struct irval) { IRVAL_LABEL, { (v) } })
-#define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { (v) } })
+#define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { .ival = (v) } })
+#define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { .reg = (v) } })
+#define IRVAL_LABEL(v) ((struct irval) { IRVAL_LABEL, { .label = (v) } })
+#define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { .global = (v) } })
 
 struct irvar {
     struct symbol *sym;
@@ -47,6 +47,6 @@ struct irgen {
 
 void irgen_init(struct irgen *state, FILE *out);
 
-void irgen_module(struct irgen *state, struct stmt *stmt);
+void irgen_module(struct irgen *state, struct decl **decls, size_t decls_count);
 
 #endif

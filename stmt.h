@@ -56,4 +56,3 @@ struct stmt *stmt_make_if(struct expr *cond, struct stmt *b_true,
                           struct stmt *b_false);
 
 #endif
-

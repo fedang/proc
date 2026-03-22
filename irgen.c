@@ -36,10 +36,6 @@ void
 irgen_init(struct irgen *state, FILE *out)
 {
     state->out = out;
-    state->regs = 0;
-    state->labels = 0;
-    state->in_block = 0;
-    state->locals_count = 0;
     state->globals_count = 0;
 }
 
@@ -473,18 +469,88 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
     }
 }
 
-void
-irgen_module(struct irgen *state, struct stmt *stmt)
+static void
+irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 {
-    fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n\n");
-    fprintf(state->out, "@.str.fmt = private unnamed_addr constant [4 x i8] c\"%%d\\0A\\00\"\n\n");
-    fprintf(state->out, "declare i32 @printf(ptr, ...)\n\n");
+    struct proc_arg *ptr;
+    struct irval slot;
+    unsigned reg;
 
-    fprintf(state->out, "define i32 @main() {\n");
+    assert(state->globals_count < 256 && "too many globals!");
+    state->globals[state->globals_count].sym = decl->sym;
+    state->globals[state->globals_count].val = IRVAL_GLOBAL(decl->sym->str);
+    state->globals_count++;
+
+    /*
+     * External declaration
+     */
+    if (!decl->body) {
+        fprintf(state->out, "\ndeclare i32 @%s(", decl->sym->str);
+
+        for (ptr = decl->args; ptr; ptr = ptr->next) {
+            fprintf(state->out, "i32");
+            if (ptr->next)
+                fprintf(state->out, ", ");
+        }
+
+        fprintf(state->out, ")\n");
+        return;
+    }
+
+    state->regs = 0;
+    state->labels = 0;
+    state->locals_count = 0;
+
+    fprintf(state->out, "\ndefine i32 @%s(", decl->sym->str);
+
+    for (ptr = decl->args; ptr; ptr = ptr->next) {
+        fprintf(state->out, "i32 %%%u", irgen_fresh_reg(state));
+        if (ptr->next)
+            fprintf(state->out, ", ");
+    }
+
+    fprintf(state->out, ") {\n");
 
     irgen_emit_block(state, 0);
-    irgen_stmt(state, stmt);
+    reg = 1;
+
+    for (ptr = decl->args; ptr; ptr = ptr->next) {
+        slot = irgen_emit_simple0(state, "alloca");
+        fprintf(state->out, "\tstore i32 %%%u, ptr %%%u\n", reg++, slot.reg);
+
+        assert(state->locals_count < 256 && "too many locals!");
+        state->locals[state->locals_count].sym = ptr->sym;
+        state->locals[state->locals_count].val = slot;
+        state->locals_count++;
+    }
+
+    irgen_stmt(state, decl->body);
 
     fprintf(state->out, "\tret i32 0\n");
     fprintf(state->out, "}\n");
+}
+
+void
+irgen_decl(struct irgen *state, struct decl *decl)
+{
+    switch (decl->tag) {
+        case DECL_PROC:
+            irgen_decl_proc(state, (struct decl_proc *)decl);
+            break;
+
+        default:
+            unreachable();
+    }
+}
+
+void
+irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
+{
+    size_t i;
+
+    fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n");
+
+    for (i = 0; i < decls_count; i++) {
+        irgen_decl(state, decls[i]);
+    }
 }
