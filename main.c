@@ -5,13 +5,20 @@
 
 int main()
 {
+    struct expr *call = expr_make_call(expr_make_const(0), 1);
+    ((struct expr_call *)call)->args[0] = expr_make_const(59);
+
     struct expr *expr =
         expr_make_binop(
-            expr_make_const(64),
-                expr_make_unop(
-                    expr_make_const(12),
-                    UNOP_NEG
+            expr_make_binop(
+                expr_make_const(64),
+                    expr_make_unop(
+                        expr_make_const(12),
+                        UNOP_NEG
+                ),
+                BINOP_ADD
             ),
+            call,
             BINOP_AND
         );
 

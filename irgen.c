@@ -12,6 +12,7 @@ enum irval_tag {
     IRVAL_INT,
     IRVAL_REG,
     IRVAL_LABEL,
+    IRVAL_GLOBAL,
 };
 
 struct irval {
@@ -20,12 +21,14 @@ struct irval {
         int64_t ival;
         unsigned reg;
         unsigned label;
+        const char *global;
     };
 };
 
 #define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { (v) } })
 #define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { (v) } })
 #define IRVAL_LABEL(v) ((struct irval) { IRVAL_LABEL, { (v) } })
+#define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { (v) } })
 
 static void
 irval_sprintf(struct irval val, char buf[static 32])
@@ -41,6 +44,10 @@ irval_sprintf(struct irval val, char buf[static 32])
 
         case IRVAL_LABEL:
             snprintf(buf, 32, "%%b%u", val.label);
+            break;
+
+        case IRVAL_GLOBAL:
+            snprintf(buf, 32, "@%s", val.global);
             break;
 
         default:
@@ -92,10 +99,9 @@ irgen_emit_phi(struct irgen *state, unsigned n, ...)
     unsigned i, label;
     va_list args;
 
-    out = irgen_fresh_reg(state);
-    fprintf(state->out, "\t%%%u = phi i32 ", out.reg);
-
     va_start(args, n);
+    out = irgen_fresh_reg(state);
+    fprintf(state->out, "\t%%%u = phi i32", out.reg);
 
     for (i = 0; i < n; i++) {
         val = va_arg(args, struct irval);
@@ -105,9 +111,10 @@ irgen_emit_phi(struct irgen *state, unsigned n, ...)
             fputc(',', state->out);
 
         irval_sprintf(val, buf);
-        fprintf(state->out, "[ %s, %%b%u ]", buf, label);
+        fprintf(state->out, " [ %s, %%b%u ]", buf, label);
     }
 
+    fputc('\n', state->out);
     va_end(args);
     return out;
 }
@@ -298,7 +305,30 @@ irgen_expr_cast(struct irgen *state, struct expr_cast *expr)
 static struct irval
 irgen_expr_call(struct irgen *state, struct expr_call *expr)
 {
-    unreachable();
+    struct irval func, out, vals[expr->args_count];
+    char buf[32];
+    unsigned i;
+
+    func = irgen_expr(state, expr->op);
+    irval_sprintf(func, buf);
+
+    for (i = 0; i < expr->args_count; i++) {
+        vals[i] = irgen_expr(state, expr->args[i]);
+    }
+
+    out = irgen_fresh_reg(state);
+    fprintf(state->out, "\t%%%u = call i32 %s(", out.reg, buf);
+
+    for (i = 0; i < expr->args_count; i++) {
+        if (i != 0)
+            fprintf(state->out, ", ");
+
+        irval_sprintf(vals[i], buf);
+        fprintf(state->out, "i32 %s", buf);
+    }
+
+    fprintf(state->out, ")\n");
+    return out;
 }
 
 struct irval
