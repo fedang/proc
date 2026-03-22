@@ -9,6 +9,7 @@ struct irgen {
     FILE *out;
     unsigned regs;
     unsigned labels;
+    unsigned in_block;
 };
 
 void irgen_init(struct irgen *state, FILE *out);

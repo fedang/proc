@@ -86,17 +86,17 @@ struct expr_call {
     struct expr *args[];
 };
 
-struct expr *make_expr_const(int64_t value);
+struct expr *expr_make_const(int64_t value);
 
-struct expr *make_expr_ident(struct symbol *sym);
+struct expr *expr_make_ident(struct symbol *sym);
 
-struct expr *make_expr_binop(struct expr *op_lhs, struct expr *op_rhs,
+struct expr *expr_make_binop(struct expr *op_lhs, struct expr *op_rhs,
                              enum binop_tag binop);
 
-struct expr *make_expr_unop(struct expr *op, enum unop_tag unop);
+struct expr *expr_make_unop(struct expr *op, enum unop_tag unop);
 
-struct expr *make_expr_cast(struct expr *op, struct type *type);
+struct expr *expr_make_cast(struct expr *op, struct type *type);
 
-struct expr *make_expr_call(struct expr *op, size_t args);
+struct expr *expr_make_call(struct expr *op, size_t args);
 
 #endif

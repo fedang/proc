@@ -1,3 +1,5 @@
+#include <stdarg.h>
+
 #include "irgen.h"
 
 //#define unreachable() (__builtin_unreachable())
@@ -21,48 +23,24 @@ struct irval {
     };
 };
 
-void
-irgen_init(struct irgen *state, FILE *out)
-{
-    state->out = out;
-    state->regs = 0;
-    state->labels = 0;
-}
-
-static struct irval
-irgen_fresh_reg(struct irgen *state)
-{
-    struct irval out;
-
-    out.tag = IRVAL_REG;
-    out.reg = ++state->regs;
-    return out;
-}
-
-static struct irval
-irgen_fresh_label(struct irgen *state)
-{
-    struct irval out;
-
-    out.tag = IRVAL_LABEL;
-    out.label = ++state->labels;
-    return out;
-}
+#define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { (v) } })
+#define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { (v) } })
+#define IRVAL_LABEL(v) ((struct irval) { IRVAL_LABEL, { (v) } })
 
 static void
-irgen_print_val(struct irgen *state, struct irval val, char *buf)
+irval_sprintf(struct irval val, char buf[static 32])
 {
     switch (val.tag) {
         case IRVAL_INT:
-            sprintf(buf, "%ld", val.ival);
+            snprintf(buf, 32, "%ld", val.ival);
             break;
 
         case IRVAL_REG:
-            sprintf(buf, "%%%u", val.reg);
+            snprintf(buf, 32, "%%%u", val.reg);
             break;
 
         case IRVAL_LABEL:
-            sprintf(buf, "%%%u", val.label);
+            snprintf(buf, 32, "%%b%u", val.label);
             break;
 
         default:
@@ -70,16 +48,109 @@ irgen_print_val(struct irgen *state, struct irval val, char *buf)
     }
 }
 
+void
+irgen_init(struct irgen *state, FILE *out)
+{
+    state->out = out;
+    state->regs = 0;
+    state->labels = 0;
+    state->in_block = 0;
+}
+
+static struct irval
+irgen_fresh_reg(struct irgen *state)
+{
+    return IRVAL_REG(++state->regs);
+}
+
+static struct irval
+irgen_fresh_label(struct irgen *state)
+{
+    return IRVAL_LABEL(++state->labels);
+}
+
+static struct irval
+irgen_emit_simple2(struct irgen *state, const char *instr,
+                   struct irval op1, struct irval op2)
+{
+    char buf1[32], buf2[32];
+    struct irval out;
+
+    irval_sprintf(op1, buf1);
+    irval_sprintf(op2, buf2);
+
+    out = irgen_fresh_reg(state);
+    fprintf(state->out, "\t%%%u = %s i32 %s, %s\n", out.reg, instr, buf1, buf2);
+    return out;
+}
+
+static struct irval
+irgen_emit_phi(struct irgen *state, unsigned n, ...)
+{
+    char buf[32];
+    struct irval val, out;
+    unsigned i, label;
+    va_list args;
+
+    out = irgen_fresh_reg(state);
+    fprintf(state->out, "\t%%%u = phi i32 ", out.reg);
+
+    va_start(args, n);
+
+    for (i = 0; i < n; i++) {
+        val = va_arg(args, struct irval);
+        label = va_arg(args, unsigned);
+
+        if (i != 0)
+            fputc(',', state->out);
+
+        irval_sprintf(val, buf);
+        fprintf(state->out, "[ %s, %%b%u ]", buf, label);
+    }
+
+    va_end(args);
+    return out;
+}
+
+static void
+irgen_emit_br(struct irgen *state, unsigned label)
+{
+    fprintf(state->out, "\tbr label %%b%u\n", label);
+}
+
+static void
+irgen_emit_condbr(struct irgen *state, struct irval cond,
+                  unsigned t_label, unsigned f_label)
+{
+    char buf[32];
+
+    irval_sprintf(cond, buf);
+    fprintf(state->out, "\tbr i1 %s, label %%b%u, label %%b%u\n",
+            buf, t_label, f_label);
+}
+
+static unsigned
+irgen_emit_block(struct irgen *state, unsigned label)
+{
+    unsigned prev;
+
+    prev = state->in_block;
+    state->in_block = label;
+
+    fprintf(state->out, "b%u:\n", label);
+    return prev;
+}
+
+/*
+ * Expression
+ */
+
 struct irval irgen_expr(struct irgen *state, struct expr *expr);
 
 static struct irval
 irgen_expr_const(struct irgen *state, struct expr_const *expr)
 {
-    struct irval out;
-
-    out.tag = IRVAL_INT;
-    out.ival = expr->value;
-    return out;
+    return IRVAL_INT(expr->value);
 }
 
 static struct irval
@@ -91,115 +162,101 @@ irgen_expr_ident(struct irgen *state, struct expr_ident *expr)
 static struct irval
 irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
 {
-    struct irval lhs, rhs, out;
-    char right_str[32];
-    char left_str[32];
-
-    if (expr->binop == BINOP_OR || expr->binop == BINOP_AND) {
-        // TODO: Shortcircuit
-        unreachable();
-    }
+    struct irval lhs, rhs, lhs_cond, rhs_cond, rhs_zext, rhs_label, merge_label;
+    unsigned block_lhs, block_rhs;
 
     lhs = irgen_expr(state, expr->op_lhs);
-    irgen_print_val(state, lhs, left_str);
+
+    /*
+     * Logical && and || require shortcircuiting
+     */
+    if (expr->binop == BINOP_OR || expr->binop == BINOP_AND) {
+        rhs_label = irgen_fresh_label(state);
+        merge_label = irgen_fresh_label(state);
+
+        lhs_cond = irgen_emit_simple2(state, "icmp ne", lhs, IRVAL_INT(0));
+
+        if (expr->binop == BINOP_AND) {
+            irgen_emit_condbr(state, lhs_cond, rhs_label.label, merge_label.label);
+        } else {
+            irgen_emit_condbr(state, lhs_cond, merge_label.label, rhs_label.label);
+        }
+
+        block_lhs = irgen_emit_block(state, rhs_label.label);
+        rhs = irgen_expr(state, expr->op_rhs);
+
+        rhs_cond = irgen_emit_simple2(state, "icmp ne", rhs, IRVAL_INT(0));
+
+        rhs_zext = irgen_fresh_reg(state);
+        fprintf(state->out, "\t%%%u = zext i1 %%%u to i32\n",
+                rhs_zext.reg, rhs_cond.reg);
+
+        irgen_emit_br(state, merge_label.label);
+        block_rhs = irgen_emit_block(state, merge_label.label);
+
+        /*
+         * Coming from block_lhs means we exited early,
+         * for && this means false, while for || this means true
+         */
+        return irgen_emit_phi(state, 2,
+                              IRVAL_INT(expr->binop == BINOP_OR), block_lhs,
+                              rhs_zext, block_rhs);
+    }
 
     rhs = irgen_expr(state, expr->op_rhs);
-    irgen_print_val(state, rhs, right_str);
-
-    out = irgen_fresh_reg(state);
 
     switch (expr->binop) {
-        case BINOP_OR:
-			break;
-
-        case BINOP_AND:
-			break;
-
         case BINOP_BITOR:
-            fprintf(state->out, "  %%%d = or i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "or", lhs, rhs);
 
         case BINOP_BITAND:
-            fprintf(state->out, "  %%%d = and i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "and", lhs, rhs);
 
         case BINOP_BITXOR:
-            fprintf(state->out, "  %%%d = xor i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "xor", lhs, rhs);
 
         case BINOP_EQ:
-            fprintf(state->out, "  %%%d = icmp eq i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "icmp eq", lhs, rhs);
 
         case BINOP_NEQ:
-            fprintf(state->out, "  %%%d = icmp ne i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "icmp ne", lhs, rhs);
 
         case BINOP_GT:
-            fprintf(state->out, "  %%%d = icmp sgt i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "icmp sgt", lhs, rhs);
 
         case BINOP_GTEQ:
-            fprintf(state->out, "  %%%d = icmp sge i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "icmp sge", lhs, rhs);
 
         case BINOP_LT:
-            fprintf(state->out, "  %%%d = icmp slt i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "icmp slt", lhs, rhs);
 
         case BINOP_LTEQ:
-            fprintf(state->out, "  %%%d = icmp sle i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "icmp sle", lhs, rhs);
 
         case BINOP_LSHIFT:
-            fprintf(state->out, "  %%%d = shl i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "shl", lhs, rhs);
 
         case BINOP_RSHIFT:
-            fprintf(state->out, "  %%%d = ashr i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "ashr", lhs, rhs);
 
         case BINOP_ADD:
-            fprintf(state->out, "  %%%d = add i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "add", lhs, rhs);
 
         case BINOP_SUB:
-            fprintf(state->out, "  %%%d = sub i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "sub", lhs, rhs);
 
         case BINOP_MUL:
-            fprintf(state->out, "  %%%d = mul i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "mul", lhs, rhs);
 
         case BINOP_DIV:
-            fprintf(state->out, "  %%%d = sdiv i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "sdiv", lhs, rhs);
 
         case BINOP_MOD:
-            fprintf(state->out, "  %%%d = srem i32 %s, %s\n",
-                    out.reg, left_str, right_str);
-			break;
+            return irgen_emit_simple2(state, "srem", lhs, rhs);
 
         default:
             unreachable();
     }
-
-    return out;
 }
 
 static struct irval
@@ -209,21 +266,20 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
     char op_str[32];
 
     op = irgen_expr(state, expr->op);
-    irgen_print_val(state, op, op_str);
-
-    out = irgen_fresh_reg(state);
 
     switch (expr->unop) {
         case UNOP_DEREF:
-            fprintf(state->out, "  %%%d = load i32, ptr %s\n", out.reg, op_str);
+            out = irgen_fresh_reg(state);
+            irval_sprintf(op, op_str);
+            fprintf(state->out, "\t%%%u = load i32, ptr %s\n", out.reg, op_str);
             break;
 
         case UNOP_NOT:
-            fprintf(state->out, "  %%%d = xor i32 %s, -1\n", out.reg, op_str);
+            out = irgen_emit_simple2(state, "xor", op, IRVAL_INT(-1));
             break;
 
         case UNOP_NEG:
-            fprintf(state->out, "  %%%d = sub i32 0, %s\n", out.reg, op_str);
+            out = irgen_emit_simple2(state, "sub", IRVAL_INT(0), op);
             break;
 
         default:
@@ -280,14 +336,14 @@ irgen_expr2(struct irgen *state, struct expr *expr)
     fprintf(state->out, "declare i32 @printf(ptr, ...)\n\n");
 
     fprintf(state->out, "define i32 @main() {\n");
-    fprintf(state->out, "entry:\n");
 
+    irgen_emit_block(state, 0);
     struct irval val = irgen_expr(state, expr);
 
     char val_str[32];
-    irgen_print_val(state, val, val_str);
+    irval_sprintf(val, val_str);
 
-    fprintf(state->out, "  call i32 (ptr, ...) @printf(ptr @.str.fmt, i32 %s)\n", val_str);
-    fprintf(state->out, "  ret i32 0\n");
+    fprintf(state->out, "\tcall i32 (ptr, ...) @printf(ptr @.str.fmt, i32 %s)\n", val_str);
+    fprintf(state->out, "\tret i32 0\n");
     fprintf(state->out, "}\n");
 }

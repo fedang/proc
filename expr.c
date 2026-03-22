@@ -3,7 +3,7 @@
 #include "expr.h"
 
 static void *
-make_expr(size_t size, enum expr_tag tag)
+expr_make(size_t size, enum expr_tag tag)
 {
     struct expr *expr;
 
@@ -13,31 +13,31 @@ make_expr(size_t size, enum expr_tag tag)
 }
 
 struct expr *
-make_expr_const(int64_t value)
+expr_make_const(int64_t value)
 {
     struct expr_const *expr;
 
-    expr = make_expr(sizeof(struct expr_const), EXPR_CONST);
+    expr = expr_make(sizeof(struct expr_const), EXPR_CONST);
     expr->value = value;
     return (struct expr *)expr;
 }
 
 struct expr *
-make_expr_ident(struct symbol *sym)
+expr_make_ident(struct symbol *sym)
 {
     struct expr_ident *expr;
 
-    expr = make_expr(sizeof(struct expr_ident), EXPR_IDENT);
+    expr = expr_make(sizeof(struct expr_ident), EXPR_IDENT);
     expr->sym = sym;
     return (struct expr *)expr;
 }
 
 struct expr *
-make_expr_binop(struct expr *op_lhs, struct expr *op_rhs, enum binop_tag binop)
+expr_make_binop(struct expr *op_lhs, struct expr *op_rhs, enum binop_tag binop)
 {
     struct expr_binop *expr;
 
-    expr = make_expr(sizeof(struct expr_binop), EXPR_BINOP);
+    expr = expr_make(sizeof(struct expr_binop), EXPR_BINOP);
     expr->binop = binop;
     expr->op_lhs = op_lhs;
     expr->op_rhs = op_rhs;
@@ -45,33 +45,33 @@ make_expr_binop(struct expr *op_lhs, struct expr *op_rhs, enum binop_tag binop)
 }
 
 struct expr *
-make_expr_unop(struct expr *op, enum unop_tag unop)
+expr_make_unop(struct expr *op, enum unop_tag unop)
 {
     struct expr_unop *expr;
 
-    expr = make_expr(sizeof(struct expr_unop), EXPR_UNOP);
+    expr = expr_make(sizeof(struct expr_unop), EXPR_UNOP);
     expr->unop = unop;
     expr->op = op;
     return (struct expr *)expr;
 }
 
 struct expr *
-make_expr_cast(struct expr *op, struct type *type)
+expr_make_cast(struct expr *op, struct type *type)
 {
     struct expr_cast *expr;
 
-    expr = make_expr(sizeof(struct expr_cast), EXPR_CAST);
+    expr = expr_make(sizeof(struct expr_cast), EXPR_CAST);
     expr->op = op;
     expr->cast = type;
     return (struct expr *)expr;
 }
 
 struct expr *
-make_expr_call(struct expr *op, size_t args)
+expr_make_call(struct expr *op, size_t args)
 {
     struct expr_call *expr;
 
-    expr = make_expr(sizeof(struct expr_call) + args * sizeof(struct expr *),
+    expr = expr_make(sizeof(struct expr_call) + args * sizeof(struct expr *),
                      EXPR_CALL);
     expr->op = op;
     expr->args_count = args;

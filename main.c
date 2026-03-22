@@ -6,13 +6,13 @@
 int main()
 {
     struct expr *expr =
-        make_expr_binop(
-            make_expr_const(64),
-                make_expr_unop(
-                    make_expr_const(12),
+        expr_make_binop(
+            expr_make_const(64),
+                expr_make_unop(
+                    expr_make_const(12),
                     UNOP_NEG
             ),
-            BINOP_ADD
+            BINOP_AND
         );
 
     FILE *out = fopen("test.ll", "wb");

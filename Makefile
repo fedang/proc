@@ -2,7 +2,7 @@ SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)
 BIN = comp
 
-CFLAGS  += -Wall -O0 -g3
+CFLAGS  += -Wall -O0 -g3 -std=c99 -pedantic
 LDFLAGS +=
 
 all: $(BIN)
