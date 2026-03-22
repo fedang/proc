@@ -8,33 +8,25 @@ enum token_tag {
     TOKEN_EOF,
 
     /*
-     * Keywords
-     */
-    TOKEN_PROC,
-    TOKEN_LET,
-    TOKEN_VAR,
-    TOKEN_IF,
-    TOKEN_ELSE,
-    TOKEN_RETURN,
-
-    /*
      * Literals
      */
-    TOKEN_IDENT,
-    TOKEN_INT,
-    TOKEN_BOOL,
+    TOKEN_SYMBOL,
     TOKEN_STRING,
+    TOKEN_INT,
 
     /*
      * Separators
      */
     TOKEN_LPAREN,
     TOKEN_RPAREN,
+    TOKEN_LBRACK,
+    TOKEN_RBRACK,
     TOKEN_LBRACE,
     TOKEN_RBRACE,
     TOKEN_COLON,
     TOKEN_SEMI,
     TOKEN_COMMA,
+    TOKEN_DOT,
     TOKEN_HASH,
 
     /*
@@ -42,22 +34,34 @@ enum token_tag {
      */
     TOKEN_OR,
     TOKEN_AND,
-    TOKEN_BITOR,
-    TOKEN_BITAND,
-    TOKEN_BITXOR,
+    TOKEN_OROR,
+    TOKEN_ANDAND,
+    TOKEN_XOR,
+    TOKEN_NOT,
     TOKEN_EQ,
-    TOKEN_NEQ,
     TOKEN_GT,
-    TOKEN_GTEQ,
     TOKEN_LT,
+    TOKEN_SHL,
+    TOKEN_SHR,
+    TOKEN_PLUS,
+    TOKEN_MINUS,
+    TOKEN_STAR,
+    TOKEN_SLASH,
+    TOKEN_PERC,
+    TOKEN_EQEQ,
+    TOKEN_NOTEQ,
+    TOKEN_GTEQ,
     TOKEN_LTEQ,
-    TOKEN_LSHIFT,
-    TOKEN_RSHIFT,
-    TOKEN_ADD,
-    TOKEN_SUB,
-    TOKEN_MUL,
-    TOKEN_DIV,
-    TOKEN_MOD,
+    TOKEN_OREQ,
+    TOKEN_ANDEQ,
+    TOKEN_XOREQ,
+    TOKEN_SHLEQ,
+    TOKEN_SHREQ,
+    TOKEN_PLUSEQ,
+    TOKEN_MINUSEQ,
+    TOKEN_STAREQ,
+    TOKEN_SLASHEQ,
+    TOKEN_PERCEQ,
 };
 
 struct token {

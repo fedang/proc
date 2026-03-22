@@ -335,10 +335,10 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
         case BINOP_LTEQ:
             return irgen_emit_simple2(state, "icmp sle", type, lhs, rhs);
 
-        case BINOP_LSHIFT:
+        case BINOP_SHL:
             return irgen_emit_simple2(state, "shl", type, lhs, rhs);
 
-        case BINOP_RSHIFT:
+        case BINOP_SHR:
             return irgen_emit_simple2(state, "ashr", type, lhs, rhs);
 
         case BINOP_ADD:
