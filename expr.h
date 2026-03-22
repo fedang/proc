@@ -6,6 +6,7 @@
 
 #include "symbol.h"
 #include "type.h"
+#include "span.h"
 
 enum expr_tag {
     EXPR_INVALID,
@@ -47,7 +48,7 @@ enum unop_tag {
 };
 
 struct expr {
-    struct source *src;
+    struct span source;
     struct type *type;
     enum expr_tag tag;
 };
