@@ -7,29 +7,6 @@
 #include <assert.h>
 #define unreachable() assert(!"unreachable")
 
-enum irval_tag {
-    IRVAL_INVALID,
-    IRVAL_INT,
-    IRVAL_REG,
-    IRVAL_LABEL,
-    IRVAL_GLOBAL,
-};
-
-struct irval {
-    enum irval_tag tag;
-    union {
-        int64_t ival;
-        unsigned reg;
-        unsigned label;
-        const char *global;
-    };
-};
-
-#define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { (v) } })
-#define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { (v) } })
-#define IRVAL_LABEL(v) ((struct irval) { IRVAL_LABEL, { (v) } })
-#define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { (v) } })
-
 static void
 irval_sprintf(struct irval val, char buf[static 32])
 {
@@ -62,6 +39,8 @@ irgen_init(struct irgen *state, FILE *out)
     state->regs = 0;
     state->labels = 0;
     state->in_block = 0;
+    state->locals_count = 0;
+    state->globals_count = 0;
 }
 
 static struct irval
@@ -74,6 +53,16 @@ static struct irval
 irgen_fresh_label(struct irgen *state)
 {
     return IRVAL_LABEL(++state->labels);
+}
+
+static struct irval
+irgen_emit_simple0(struct irgen *state, const char *instr)
+{
+    struct irval out;
+
+    out = irgen_fresh_reg(state);
+    fprintf(state->out, "\t%%%u = %s i32\n", out.reg, instr);
+    return out;
 }
 
 static struct irval
@@ -149,7 +138,7 @@ irgen_emit_block(struct irgen *state, unsigned label)
 }
 
 /*
- * Expression
+ * Expressions
  */
 
 struct irval irgen_expr(struct irgen *state, struct expr *expr);
@@ -163,7 +152,29 @@ irgen_expr_const(struct irgen *state, struct expr_const *expr)
 static struct irval
 irgen_expr_ident(struct irgen *state, struct expr_ident *expr)
 {
-    unreachable();
+    struct irval slot, out;
+    size_t i;
+
+    for (i = state->locals_count; i > 0; i--) {
+        if (state->locals[i - 1].sym == expr->sym) {
+            slot = state->locals[i - 1].val;
+            goto found;
+        }
+    }
+
+    for (i = 0; i < state->globals_count; i++) {
+        if (state->globals[i].sym == expr->sym) {
+            return state->globals[i].val;
+        }
+    }
+
+    printf("Undefined variables '%s'\n", expr->sym->str);
+    assert(0);
+
+found:
+    out = irgen_fresh_reg(state);
+    fprintf(state->out, "\t%%%u = load i32, ptr %%%u\n", out.reg, slot.reg);
+    return out;
 }
 
 static struct irval
@@ -358,12 +369,30 @@ irgen_expr(struct irgen *state, struct expr *expr)
     }
 }
 
+/*
+ * Statements
+ */
+
 void irgen_stmt(struct irgen *state, struct stmt *stmt);
 
 static void
 irgen_stmt_var(struct irgen *state, struct stmt_var *stmt)
 {
-    //unreachable();
+    struct irval slot, val;
+    char buf[32];
+
+    slot = irgen_emit_simple0(state, "alloca");
+
+    assert(state->locals_count < 256 && "too many locals!");
+    state->locals[state->locals_count].sym = stmt->sym;
+    state->locals[state->locals_count].val = slot;
+    state->locals_count++;
+
+    if (stmt->value) {
+        val = irgen_expr(state, stmt->value);
+        irval_sprintf(val, buf);
+        fprintf(state->out, "\tstore i32 %s, ptr %%%u\n", buf, slot.reg);
+    }
 }
 
 static void
@@ -375,11 +404,15 @@ irgen_stmt_expr(struct irgen *state, struct stmt_expr *stmt)
 static void
 irgen_stmt_block(struct irgen *state, struct stmt_block *stmt)
 {
-    size_t i;
+    size_t i, locals;
+
+    locals = state->locals_count;
 
     for (i = 0; i < stmt->items_count; i++) {
         irgen_stmt(state, stmt->items[i]);
     }
+
+    state->locals_count = locals;
 }
 
 static void
