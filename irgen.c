@@ -358,8 +358,63 @@ irgen_expr(struct irgen *state, struct expr *expr)
     }
 }
 
+void irgen_stmt(struct irgen *state, struct stmt *stmt);
+
+static void
+irgen_stmt_var(struct irgen *state, struct stmt_var *stmt)
+{
+    //unreachable();
+}
+
+static void
+irgen_stmt_expr(struct irgen *state, struct stmt_expr *stmt)
+{
+    irgen_expr(state, stmt->expr);
+}
+
+static void
+irgen_stmt_block(struct irgen *state, struct stmt_block *stmt)
+{
+    size_t i;
+
+    for (i = 0; i < stmt->items_count; i++) {
+        irgen_stmt(state, stmt->items[i]);
+    }
+}
+
+static void
+irgen_stmt_if(struct irgen *state, struct stmt_if *stmt)
+{
+    unreachable();
+}
+
 void
-irgen_expr2(struct irgen *state, struct expr *expr)
+irgen_stmt(struct irgen *state, struct stmt *stmt)
+{
+    switch (stmt->tag) {
+        case STMT_VAR:
+            irgen_stmt_var(state, (struct stmt_var *)stmt);
+            break;
+
+        case STMT_EXPR:
+            irgen_stmt_expr(state, (struct stmt_expr *)stmt);
+            break;
+
+        case STMT_BLOCK:
+            irgen_stmt_block(state, (struct stmt_block *)stmt);
+            break;
+
+        case STMT_IF:
+            irgen_stmt_if(state, (struct stmt_if *)stmt);
+            break;
+
+        default:
+            unreachable();
+    }
+}
+
+void
+irgen_module(struct irgen *state, struct stmt *stmt)
 {
     fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n\n");
     fprintf(state->out, "@.str.fmt = private unnamed_addr constant [4 x i8] c\"%%d\\0A\\00\"\n\n");
@@ -368,12 +423,8 @@ irgen_expr2(struct irgen *state, struct expr *expr)
     fprintf(state->out, "define i32 @main() {\n");
 
     irgen_emit_block(state, 0);
-    struct irval val = irgen_expr(state, expr);
+    irgen_stmt(state, stmt);
 
-    char val_str[32];
-    irval_sprintf(val, val_str);
-
-    fprintf(state->out, "\tcall i32 (ptr, ...) @printf(ptr @.str.fmt, i32 %s)\n", val_str);
     fprintf(state->out, "\tret i32 0\n");
     fprintf(state->out, "}\n");
 }

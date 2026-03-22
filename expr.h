@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "symbol.h"
+
 enum expr_tag {
     EXPR_INVALID,
     EXPR_CONST,

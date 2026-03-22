@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#include "expr.h"
+#include "stmt.h"
 
 struct irgen {
     FILE *out;
@@ -14,6 +14,6 @@ struct irgen {
 
 void irgen_init(struct irgen *state, FILE *out);
 
-void irgen_expr2(struct irgen *state, struct expr *expr);
+void irgen_module(struct irgen *state, struct stmt *stmt);
 
 #endif
