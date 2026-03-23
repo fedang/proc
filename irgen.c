@@ -59,14 +59,15 @@ irgen_type(struct irgen *state, struct type *type)
 {
     if (!type) {
         printf("NULL TYPE\n");
-        fprintf(state->out, "i33");
+        fprintf(state->out, "i32");
         return;
     }
 
     switch (type->tag) {
         case TYPE_INT:
         case TYPE_UINT:
-            fprintf(state->out, "i%zu", type->bit_size);
+            fprintf(state->out, "i%zu",
+                    type->bit_size ? type->bit_size : sizeof(int) * 8);
             break;
 
         case TYPE_BOOL:

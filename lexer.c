@@ -39,7 +39,7 @@ lexer_peek(struct lexer *state)
 }
 
 static inline char
-lexer_eat(struct lexer *state)
+lexer_advance(struct lexer *state)
 {
     return lexer_eof(state) ? '\0' : state->str[state->curr++];
 }
@@ -76,25 +76,26 @@ lexer_skip(struct lexer *state)
             case ' ':
             case '\r':
             case '\t':
-                lexer_eat(state);
+                lexer_advance(state);
                 break;
 
             case '\n':
                 ++state->line;
-                lexer_eat(state);
+                lexer_advance(state);
                 break;
 
             case '/':
-                if (lexer_peek(state) == '/') {
-                    do {
-                        c = lexer_eat(state);
-                        if (c == '\n') {
-                            ++state->line;
-                            break;
-                        }
-                    } while (!lexer_eof(state));
-                }
-                /* fall through */
+                if (lexer_peek(state) != '/')
+                    return;
+
+                do {
+                    c = lexer_advance(state);
+                    if (c == '\n') {
+                        ++state->line;
+                        break;
+                    }
+                } while (!lexer_eof(state));
+                break;
 
             default:
                 return;
@@ -105,7 +106,7 @@ lexer_skip(struct lexer *state)
 #define LEXER_OPEQ(tag) \
     do { \
         if (lexer_curr(state) == '=') { \
-            lexer_eat(state); \
+            lexer_advance(state); \
             lexer_push(state, tag ## EQ); \
         } else { \
             lexer_push(state, tag); \
@@ -113,7 +114,7 @@ lexer_skip(struct lexer *state)
     } while (false)
 
 static void
-lexer_advance(struct lexer *state)
+lexer_next(struct lexer *state)
 {
     char c;
 
@@ -125,12 +126,12 @@ lexer_advance(struct lexer *state)
     if (lexer_eof(state))
         return;
 
-    c = lexer_eat(state);
+    c = lexer_advance(state);
 
     if (isalpha(c) || c == '_') {
         while (isalnum(lexer_curr(state))
                 || lexer_curr(state) == '_') {
-            lexer_eat(state);
+            lexer_advance(state);
         }
 
         lexer_push(state, TOKEN_SYMBOL);
@@ -139,7 +140,7 @@ lexer_advance(struct lexer *state)
 
     if (isdigit(c)) {
         while (isdigit(lexer_curr(state))) {
-            lexer_eat(state);
+            lexer_advance(state);
         }
 
         lexer_push(state, TOKEN_INT);
@@ -148,12 +149,15 @@ lexer_advance(struct lexer *state)
 
     if (c == '"') {
         do {
-            c = lexer_eat(state);
-            if (c == '"')
+            c = lexer_advance(state);
+            if (c == '\n')
+                ++state->line;
+            else if (c == '"')
                 break;
         } while (!lexer_eof(state));
 
-        lexer_push(state, TOKEN_STRING);
+        // TODO: Unterminated string error
+        lexer_push(state, TOKEN_INVALID);
         return;
     }
 
@@ -164,7 +168,7 @@ lexer_advance(struct lexer *state)
 
         case '|':
             if (lexer_curr(state) == '|') {
-                lexer_eat(state);
+                lexer_advance(state);
                 lexer_push(state, TOKEN_OROR);
             } else {
                 LEXER_OPEQ(TOKEN_OR);
@@ -173,7 +177,7 @@ lexer_advance(struct lexer *state)
 
         case '&':
             if (lexer_curr(state) == '&') {
-                lexer_eat(state);
+                lexer_advance(state);
                 lexer_push(state, TOKEN_ANDAND);
             } else {
                 LEXER_OPEQ(TOKEN_AND);
@@ -190,7 +194,7 @@ lexer_advance(struct lexer *state)
 
         case '>':
             if (lexer_curr(state) == '>') {
-                lexer_eat(state);
+                lexer_advance(state);
                 LEXER_OPEQ(TOKEN_SHR);
             } else {
                 LEXER_OPEQ(TOKEN_GT);
@@ -199,7 +203,7 @@ lexer_advance(struct lexer *state)
 
         case '<':
             if (lexer_curr(state) == '<') {
-                lexer_eat(state);
+                lexer_advance(state);
                 LEXER_OPEQ(TOKEN_SHL);
             } else {
                 LEXER_OPEQ(TOKEN_LT);
@@ -271,7 +275,9 @@ lexer_advance(struct lexer *state)
             break;
 
         default:
-            assert(false && "unknown char");
+            // TODO: Unknown char error
+            lexer_push(state, TOKEN_INVALID);
+            break;
     }
 }
 
@@ -279,7 +285,7 @@ void
 lexer_tokenize(struct lexer *state, struct token **tokens)
 {
     while (!lexer_eof(state)) {
-        lexer_advance(state);
+        lexer_next(state);
     }
 
     lexer_push(state, TOKEN_EOF);

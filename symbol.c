@@ -18,7 +18,7 @@ symbol_intern(const char *str, size_t len)
     size_t i;
 
     for (i = 0; i < sym_count; i++) {
-        if (sym_pool[i].len == len && !strcmp(sym_pool[i].str, str)) {
+        if (sym_pool[i].len == len && !strncmp(sym_pool[i].str, str, len)) {
             return &sym_pool[i];
         }
     }

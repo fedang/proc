@@ -3,9 +3,11 @@
 
 #include "irgen.h"
 #include "lexer.h"
+#include "parser.h"
 
 int main()
 {
+    /*
     struct expr *call = expr_make_call(expr_make_ident(symbol_make("print32")), 1);
     ((struct expr_call *)call)->args[0] = expr_make_const(59);
 
@@ -61,17 +63,23 @@ int main()
         decl,
     };
 
-    FILE *out = fopen("test.ll", "wb");
-
-    struct irgen state;
-    irgen_init(&state, out);
-    irgen_module(&state, decls, 2);
+    */
 
 
     struct lexer lex;
     struct token *toks;
 
-    const char *src = "proc func(id:i32): bool {\n if (id == 0) { return false; }\n return true;\n}\n";
+    //const char *src = "proc func(id:i32): bool {\n if (id == 0) { return false; }\n return true;\n}\n";
+
+    const char *src =
+        "proc print32(_:int);\n"
+        "proc main(x:int): int {\n"
+        "var x : int = 10;\n"
+        "if 0 { } else { }\n"
+        //"   print32(0);\n"
+        "   return 0;\n"
+        "}\n"
+        ;
 
     lexer_init(&lex, src, strlen(src));
     lexer_tokenize(&lex, &toks);
@@ -136,4 +144,23 @@ int main()
                len, t->source.start,
                t->source.start_line);
     }
+
+    struct parser pa;
+    parser_init(&pa, toks);
+
+    size_t outn;
+    struct decl **outd;
+
+    if (!parser_module(&pa, &outd, &outn)) {
+        printf("Failed to parse\n");
+    } else {
+        printf("Parsed %zu decls\n", outn);
+    }
+
+    FILE *out = fopen("test.ll", "wb");
+
+    struct irgen state;
+    irgen_init(&state, out);
+    irgen_module(&state, outd, outn);
+
 }

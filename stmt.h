@@ -34,7 +34,6 @@ struct stmt_expr {
 
 struct stmt_block {
     struct stmt stmt;
-    struct type *type;
     size_t items_count;
     struct stmt *items[];
 };
