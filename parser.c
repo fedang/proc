@@ -190,18 +190,22 @@ parser_type(struct parser *state, struct type **type)
         return true;
     }
 
+    parser_error(state, "Unknown type name");
     return false;
 }
 
 /*
  * Expressions
  */
-static bool parser_expr(struct parser *state, struct expr **expr);
+static bool parser_expr_prec(struct parser *state, struct expr **expr,
+                             unsigned base_prec);
 
 static bool
-parser_expr(struct parser *state, struct expr **expr)
+parser_expr_simple(struct parser *state, struct expr **expr)
 {
     int64_t value;
+    struct symbol *sym;
+    struct expr *op;
 
     if (parser_match(state, TOKEN_INT)) {
         value = strtol(parser_prev(state)->source.start, NULL, 10);
@@ -209,7 +213,219 @@ parser_expr(struct parser *state, struct expr **expr)
         return true;
     }
 
+    if (parser_match(state, TOKEN_STRING)) {
+        value = strtol(parser_prev(state)->source.start, NULL, 10);
+        *expr = expr_make_const(value);
+        return true;
+    }
+
+    if (parser_match_sym(state, &sym)) {
+        // TODO: Check for disallowed keywords?
+        *expr = expr_make_ident(sym);
+        return true;
+    }
+
+    if (parser_match(state, TOKEN_LPAREN)) {
+        if (!parser_expr_prec(state, expr, 0))
+            return false;
+
+        return parser_check(state, TOKEN_RPAREN, "Expected ')' after expr");
+    }
+
+    if (parser_match(state, TOKEN_MINUS)) {
+        if (!parser_expr_prec(state, &op, 13))
+            return false;
+
+        *expr = expr_make_unop(op, UNOP_NEG);
+        return true;
+    }
+
+    if (parser_match(state, TOKEN_NOT)) {
+        if (!parser_expr_prec(state, &op, 13))
+            return false;
+
+        *expr = expr_make_unop(op, UNOP_NOT);
+        return true;
+    }
+
+    if (parser_match(state, TOKEN_STAR)) {
+        if (!parser_expr_prec(state, &op, 13))
+            return false;
+
+        *expr = expr_make_unop(op, UNOP_DEREF);
+        return true;
+    }
+
+    if (parser_match(state, TOKEN_AND)) {
+        if (!parser_expr_prec(state, &op, 13))
+            return false;
+
+        *expr = expr_make_unop(op, UNOP_ADDROF);
+        return true;
+    }
+
+    parser_error(state, "Expected expression");
     return false;
+}
+
+static inline unsigned
+parser_token_prec(enum token_tag tag)
+{
+    static const int prec_table[TOKEN_EOF] = {
+        [TOKEN_EQ] = 1,
+        [TOKEN_ANDEQ] = 1,
+        [TOKEN_XOREQ] = 1,
+        [TOKEN_SHLEQ] = 1,
+        [TOKEN_SHREQ] = 1,
+        [TOKEN_PLUSEQ] = 1,
+        [TOKEN_MINUSEQ] = 1,
+        [TOKEN_STAREQ] = 1,
+        [TOKEN_SLASHEQ] = 1,
+        [TOKEN_PERCEQ] = 1,
+        [TOKEN_OROR] = 2,
+        [TOKEN_ANDAND] = 3,
+        [TOKEN_OR] = 4,
+        [TOKEN_XOR] = 5,
+        [TOKEN_AND] = 6,
+        [TOKEN_EQEQ] = 7,
+        [TOKEN_NOTEQ] = 7,
+        [TOKEN_LT] = 8,
+        [TOKEN_GT] = 8,
+        [TOKEN_LTEQ] = 8,
+        [TOKEN_GTEQ] = 8,
+        [TOKEN_SHL] = 9,
+        [TOKEN_SHR] = 9,
+        [TOKEN_PLUS] = 10,
+        [TOKEN_MINUS] = 10,
+        [TOKEN_STAR] = 11,
+        [TOKEN_SLASH] = 11,
+        [TOKEN_PERC] = 11,
+        [TOKEN_LPAREN] = 12,
+        [TOKEN_LBRACK] = 12,
+        [TOKEN_DOT] = 12,
+    };
+    return prec_table[tag];
+}
+
+static inline enum binop_tag
+parser_token_binop(enum token_tag tag)
+{
+    static const enum binop_tag binop_table[TOKEN_EOF] = {
+        [TOKEN_OR] = BINOP_OR,
+        [TOKEN_AND] = BINOP_AND,
+        [TOKEN_OROR] = BINOP_BOOL_OR,
+        [TOKEN_ANDAND] = BINOP_BOOL_AND,
+        [TOKEN_XOR] = BINOP_XOR,
+        [TOKEN_EQ] = BINOP_SET,
+        [TOKEN_GT] = BINOP_GT,
+        [TOKEN_LT] = BINOP_LT,
+        [TOKEN_SHL] = BINOP_SHL,
+        [TOKEN_SHR] = BINOP_SHR,
+        [TOKEN_PLUS] = BINOP_ADD,
+        [TOKEN_MINUS] = BINOP_SUB,
+        [TOKEN_STAR] = BINOP_MUL,
+        [TOKEN_SLASH] = BINOP_DIV,
+        [TOKEN_PERC] = BINOP_MOD,
+        [TOKEN_EQEQ] = BINOP_EQ,
+        [TOKEN_NOTEQ] = BINOP_NOTEQ,
+        [TOKEN_GTEQ] = BINOP_GTEQ,
+        [TOKEN_LTEQ] = BINOP_LTEQ,
+        [TOKEN_OREQ] = BINOP_OR_SET,
+        [TOKEN_ANDEQ] = BINOP_AND_SET,
+        [TOKEN_XOREQ] = BINOP_XOR_SET,
+        [TOKEN_SHLEQ] = BINOP_SHL_SET,
+        [TOKEN_SHREQ] = BINOP_SHR_SET,
+        [TOKEN_PLUSEQ] = BINOP_ADD_SET,
+        [TOKEN_MINUSEQ] = BINOP_SUB_SET,
+        [TOKEN_STAREQ] = BINOP_MUL_SET,
+        [TOKEN_SLASHEQ] = BINOP_DIV_SET,
+        [TOKEN_PERCEQ] = BINOP_MOD_SET,
+    };
+    return binop_table[tag];
+}
+
+static bool
+parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
+{
+    struct expr *rhs, *args[32];
+    enum token_tag op_tag;
+    struct symbol *field;
+    unsigned prec, count, i;
+
+    if (!parser_expr_simple(state, expr))
+        return false;
+
+    while (true) {
+        op_tag = parser_curr(state)->tag;
+        prec = parser_token_prec(op_tag);
+
+        if (prec < base_prec || prec == 0)
+            break;
+
+        parser_advance(state);
+
+        /*
+         * Special cases
+         */
+        if (op_tag == TOKEN_LPAREN) {
+            count = 0;
+            if (parser_curr(state)->tag != TOKEN_RPAREN) {
+                do {
+                    assert(count < 32 && "too many args");
+                    if (!parser_expr_prec(state, &args[count++], 0))
+                        return false;
+                } while (parser_match(state, TOKEN_COMMA));
+            }
+
+            if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after arguments"))
+                return false;
+
+            *expr = expr_make_call(*expr, count);
+            for (i = 0; i < count; i++) {
+                ((struct expr_call *)*expr)->args[i] = args[i];
+            }
+            continue;
+        }
+
+        if (op_tag == TOKEN_LBRACK) {
+            if (!parser_expr_prec(state, &rhs, 0))
+                return false;
+
+            if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after index"))
+                return false;
+
+            *expr = expr_make_index(*expr, rhs);
+            continue;
+        }
+
+        if (op_tag == TOKEN_DOT) {
+            if (!parser_check_sym(state, &field, "Expected field name after '.'"))
+                return false;
+
+            *expr = expr_make_access(*expr, field);
+            continue;
+        }
+
+        /*
+         * Assignment operators are right associative
+         */
+        if (prec != 1) {
+            prec++;
+        }
+
+        if (!parser_expr_prec(state, &rhs, prec))
+            return false;
+
+        *expr = expr_make_binop(*expr, rhs, parser_token_binop(op_tag));
+    }
+
+    return true;
+}
+
+static bool
+parser_expr(struct parser *state, struct expr **expr)
+{
+    return parser_expr_prec(state, expr, 0);
 }
 
 /*
@@ -370,7 +586,8 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     if (!parser_check_sym(state, &sym, "Expected procedure name"))
         return false;
 
-    parser_check(state, TOKEN_LPAREN, "Expected '(' after function name");
+    if (!parser_check(state, TOKEN_LPAREN, "Expected '(' after function name"))
+        return false;
 
     args = NULL;
     tail = &args;
@@ -380,7 +597,8 @@ parser_decl_proc(struct parser *state, struct decl **decl)
             if (!parser_check_sym(state, &arg_sym, "Expected arg name"))
                 return false;
 
-            parser_check(state, TOKEN_COLON, "Expected ':' after arg name");
+            if (!parser_check(state, TOKEN_COLON, "Expected ':' after arg name"))
+                return false;
 
             arg_type = NULL;
             if (!parser_type(state, &arg_type))
@@ -394,7 +612,8 @@ parser_decl_proc(struct parser *state, struct decl **decl)
             tail = &tmp->next;
         } while (parser_match(state, TOKEN_COMMA));
 
-        parser_check(state, TOKEN_RPAREN, "Expected ')' after function args");
+        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after function args"))
+            return false;
     }
 
     out = NULL;
@@ -406,7 +625,9 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     if (parser_match(state, TOKEN_SEMI)) {
         body = NULL;
     } else {
-        parser_check(state, TOKEN_LBRACE, "Expected '{' or ';' after function signature.");
+        if (!parser_check(state, TOKEN_LBRACE, "Expected '{' or ';' after function signature."))
+            return false;
+
         if (!parser_stmt_block(state, &body))
             return false;
     }

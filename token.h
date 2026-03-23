@@ -5,7 +5,6 @@
 
 enum token_tag {
     TOKEN_INVALID,
-    TOKEN_EOF,
 
     /*
      * Literals
@@ -62,6 +61,11 @@ enum token_tag {
     TOKEN_STAREQ,
     TOKEN_SLASHEQ,
     TOKEN_PERCEQ,
+
+    /*
+     * Terminator sentinel
+     */
+    TOKEN_EOF,
 };
 
 struct token {

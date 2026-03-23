@@ -75,8 +75,11 @@ int main()
         "proc print32(_:int);\n"
         "proc main(x:int): int {\n"
         "var x : int = 10;\n"
-        "if 0 { } else { }\n"
-        //"   print32(0);\n"
+        "if x == 10 {\n"
+        "   print32(222);\n"
+        "} else { \n"
+        "   print32(333);\n"
+        "}\n"
         "   return 0;\n"
         "}\n"
         ;

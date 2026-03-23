@@ -78,3 +78,25 @@ expr_make_call(struct expr *op, size_t args)
     expr->args_count = args;
     return &expr->expr;
 }
+
+struct expr *
+expr_make_index(struct expr *op, struct expr *index)
+{
+    struct expr_index *expr;
+
+    expr = expr_make(sizeof(struct expr_index), EXPR_INDEX);
+    expr->op = op;
+    expr->index = index;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_access(struct expr *op, struct symbol *field)
+{
+    struct expr_access *expr;
+
+    expr = expr_make(sizeof(struct expr_access), EXPR_ACCESS);
+    expr->op = op;
+    expr->field = field;
+    return &expr->expr;
+}

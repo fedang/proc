@@ -16,21 +16,23 @@ enum expr_tag {
     EXPR_UNOP,
     EXPR_CAST,
     EXPR_CALL,
+    EXPR_INDEX,
+    EXPR_ACCESS,
 };
 
 enum binop_tag {
     BINOP_INVALID,
-    BINOP_OR,
-    BINOP_AND,
-    BINOP_BITOR,
-    BINOP_BITAND,
-    BINOP_BITXOR,
     BINOP_EQ,
-    BINOP_NEQ,
+    BINOP_NOTEQ,
     BINOP_GT,
     BINOP_GTEQ,
     BINOP_LT,
     BINOP_LTEQ,
+    BINOP_BOOL_OR,
+    BINOP_BOOL_AND,
+    BINOP_OR,
+    BINOP_AND,
+    BINOP_XOR,
     BINOP_SHL,
     BINOP_SHR,
     BINOP_ADD,
@@ -38,19 +40,22 @@ enum binop_tag {
     BINOP_MUL,
     BINOP_DIV,
     BINOP_MOD,
-    BINOP_SHLEQ,
-    BINOP_SHREQ,
-    BINOP_ADDEQ,
-    BINOP_SUBEQ,
-    BINOP_MULEQ,
-    BINOP_DIVEQ,
-    BINOP_MODEQ,
-    //BINOP_DOT,
-    //BINOP_INDEX,
+    BINOP_SET,
+    BINOP_OR_SET,
+    BINOP_AND_SET,
+    BINOP_XOR_SET,
+    BINOP_SHL_SET,
+    BINOP_SHR_SET,
+    BINOP_ADD_SET,
+    BINOP_SUB_SET,
+    BINOP_MUL_SET,
+    BINOP_DIV_SET,
+    BINOP_MOD_SET,
 };
 
 enum unop_tag {
     UNOP_INVALID,
+    UNOP_ADDROF,
     UNOP_DEREF,
     UNOP_NEG,
     UNOP_NOT,
@@ -99,6 +104,18 @@ struct expr_call {
     struct expr *args[];
 };
 
+struct expr_index {
+    struct expr expr;
+    struct expr *op;
+    struct expr *index;
+};
+
+struct expr_access {
+    struct expr expr;
+    struct expr *op;
+    struct symbol *field;
+};
+
 struct expr *expr_make_const(int64_t value);
 
 struct expr *expr_make_ident(struct symbol *sym);
@@ -111,5 +128,9 @@ struct expr *expr_make_unop(struct expr *op, enum unop_tag unop);
 struct expr *expr_make_cast(struct expr *op, struct type *type);
 
 struct expr *expr_make_call(struct expr *op, size_t args);
+
+struct expr *expr_make_index(struct expr *op, struct expr *index);
+
+struct expr *expr_make_access(struct expr *op, struct symbol *field);
 
 #endif

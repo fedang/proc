@@ -281,11 +281,11 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
     /*
      * Logical && and || require shortcircuiting
      */
-    if (expr->binop == BINOP_OR || expr->binop == BINOP_AND) {
+    if (expr->binop == BINOP_BOOL_OR || expr->binop == BINOP_BOOL_AND) {
         rhs_label = irgen_fresh_label(state);
         merge_label = irgen_fresh_label(state);
 
-        if (expr->binop == BINOP_AND) {
+        if (expr->binop == BINOP_BOOL_AND) {
             irgen_emit_condbr(state, lhs, rhs_label, merge_label);
         } else {
             irgen_emit_condbr(state, lhs, merge_label, rhs_label);
@@ -302,26 +302,17 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
          * for && this means false, while for || this means true
          */
         return irgen_emit_phi(state, expr->expr.type, 2,
-                              IRVAL_INT(expr->binop == BINOP_OR), block_lhs,
-                              rhs, block_rhs);
+                              IRVAL_INT(expr->binop == BINOP_BOOL_OR),
+                              block_lhs, rhs, block_rhs);
     }
 
     rhs = irgen_expr(state, expr->op_rhs);
 
     switch (expr->binop) {
-        case BINOP_BITOR:
-            return irgen_emit_simple2(state, "or", type, lhs, rhs);
-
-        case BINOP_BITAND:
-            return irgen_emit_simple2(state, "and", type, lhs, rhs);
-
-        case BINOP_BITXOR:
-            return irgen_emit_simple2(state, "xor", type, lhs, rhs);
-
         case BINOP_EQ:
             return irgen_emit_simple2(state, "icmp eq", type, lhs, rhs);
 
-        case BINOP_NEQ:
+        case BINOP_NOTEQ:
             return irgen_emit_simple2(state, "icmp ne", type, lhs, rhs);
 
         case BINOP_GT:
@@ -335,6 +326,15 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
 
         case BINOP_LTEQ:
             return irgen_emit_simple2(state, "icmp sle", type, lhs, rhs);
+
+        case BINOP_OR:
+            return irgen_emit_simple2(state, "or", type, lhs, rhs);
+
+        case BINOP_AND:
+            return irgen_emit_simple2(state, "and", type, lhs, rhs);
+
+        case BINOP_XOR:
+            return irgen_emit_simple2(state, "xor", type, lhs, rhs);
 
         case BINOP_SHL:
             return irgen_emit_simple2(state, "shl", type, lhs, rhs);
@@ -370,6 +370,9 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
     op = irgen_expr(state, expr->op);
 
     switch (expr->unop) {
+        case UNOP_ADDROF:
+            assert(0 && "TODO");
+
         case UNOP_DEREF:
             return irgen_emit_load(state, expr->expr.type, op);
 
