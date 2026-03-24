@@ -56,6 +56,8 @@ irgen_fresh_label(struct irgen *state)
 void
 irgen_type(struct irgen *state, struct type *type)
 {
+    size_t i;
+
     if (!type) {
         printf("NULL TYPE\n");
         fprintf(state->out, "i32");
@@ -78,7 +80,32 @@ irgen_type(struct irgen *state, struct type *type)
             break;
 
         case TYPE_PTR:
+        case TYPE_PROC:
             fprintf(state->out, "ptr");
+            break;
+
+        case TYPE_ARRAY:
+            fprintf(state->out, "[%zu x ", type->array.count);
+            irgen_type(state, type->array.item);
+            fprintf(state->out, "]");
+            break;
+
+        case TYPE_STRUCT:
+            if (type->strukt.name) {
+                fprintf(state->out, "%%%s", type->strukt.name->str);
+            } else {
+                /*
+                 * Anonymous structs
+                 */
+                fprintf(state->out, "{ ");
+                for (i = 0; i < type->strukt.fields_count; i++) {
+                    if (i != 0)
+                        fprintf(state->out, ", ");
+
+                    irgen_type(state, type->strukt.fields[i].type);
+                }
+                fprintf(state->out, " }");
+            }
             break;
 
         default:
