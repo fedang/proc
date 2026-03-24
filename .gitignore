@@ -2,3 +2,5 @@
 *.o
 *.swp
 *.ll
+test
+comp

@@ -1,0 +1,14 @@
+proc main(argc: int): int {
+	var x : int = 10;
+	x *= 1 + 2;
+	if x == 10 {
+		print32(1);
+	} else {
+		print32(2);
+	}
+
+	print32(x / 2);
+	return 0;
+}
+
+proc print32(_: int);

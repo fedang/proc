@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <assert.h>
 
 #include "type.h"
@@ -59,18 +60,6 @@ type_get_simple(struct attr *attr, enum type_tag tag)
 }
 
 struct type *
-type_get_int(struct attr *attr, size_t bit_size)
-{
-    return type_get_xint(attr, bit_size, TYPE_INT);
-}
-
-struct type *
-type_get_uint(struct attr *attr, size_t bit_size)
-{
-    return type_get_xint(attr, bit_size, TYPE_UINT);
-}
-
-struct type *
 type_get_bool(struct attr *attr)
 {
     return type_get_simple(attr, TYPE_BOOL);
@@ -80,6 +69,18 @@ struct type *
 type_get_void(struct attr *attr)
 {
     return type_get_simple(attr, TYPE_VOID);
+}
+
+struct type *
+type_get_int(struct attr *attr, size_t bit_size)
+{
+    return type_get_xint(attr, bit_size, TYPE_INT);
+}
+
+struct type *
+type_get_uint(struct attr *attr, size_t bit_size)
+{
+    return type_get_xint(attr, bit_size, TYPE_UINT);
 }
 
 struct type *
