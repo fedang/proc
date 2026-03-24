@@ -10,7 +10,6 @@ enum irval_tag {
     IRVAL_INVALID,
     IRVAL_INT,
     IRVAL_REG,
-    IRVAL_LABEL,
     IRVAL_GLOBAL,
 };
 
@@ -19,7 +18,6 @@ struct irval {
     union {
         int64_t ival;
         unsigned reg;
-        unsigned label;
         const char *global;
     };
 };

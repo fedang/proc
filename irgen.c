@@ -19,10 +19,6 @@ irval_sprintf(struct irval val, char buf[static 32])
             snprintf(buf, 32, "%%%u", val.reg);
             break;
 
-        case IRVAL_LABEL:
-            snprintf(buf, 32, "%%b%u", val.label);
-            break;
-
         case IRVAL_GLOBAL:
             snprintf(buf, 32, "@%s", val.global);
             break;
@@ -54,6 +50,9 @@ irgen_fresh_label(struct irgen *state)
 //#define IR_EMITF(state, ...) fprintf((state)->out, __VA_ARGS__)
 //#define IR_EMITC(state, chr) fputc((chr), (state)->out)
 
+/*
+ * Types
+ */
 void
 irgen_type(struct irgen *state, struct type *type)
 {
@@ -86,6 +85,10 @@ irgen_type(struct irgen *state, struct type *type)
             unreachable();
     }
 }
+
+/*
+ * IR instruction helpers
+ */
 
 static struct irval
 irgen_emit_simple0(struct irgen *state, const char *instr, struct type *type)
@@ -138,6 +141,35 @@ irgen_emit_phi(struct irgen *state, struct type *type, unsigned n, ...)
 
         irval_sprintf(val, buf);
         fprintf(state->out, " [ %s, %%b%u ]", buf, label);
+    }
+
+    fputc('\n', state->out);
+    va_end(args);
+    return out;
+}
+
+static struct irval
+irgen_emit_gep(struct irgen *state, struct type *type, struct irval ptr,
+               unsigned n, ...)
+{
+    char buf[32];
+    struct irval val, out;
+    unsigned i;
+    va_list args;
+
+    va_start(args, n);
+    out = IRVAL_REG(irgen_fresh_reg(state));
+    fprintf(state->out, "\t%%%u = getelementptr ", out.reg);
+    irgen_type(state, type);
+
+    irval_sprintf(ptr, buf);
+    fprintf(state->out, ", ptr %s", buf);
+
+    for (i = 0; i < n; i++) {
+        val = va_arg(args, struct irval);
+
+        irval_sprintf(val, buf);
+        fprintf(state->out, ", i32 %s", buf);
     }
 
     fputc('\n', state->out);
@@ -239,44 +271,199 @@ irgen_emit_block(struct irgen *state, unsigned label)
 struct irval irgen_expr(struct irgen *state, struct expr *expr);
 
 static struct irval
+irgen_expr_lvalue(struct irgen *state, struct expr *expr)
+{
+    struct expr_ident *ident;
+    struct expr_unop *unop;
+    struct expr_index *index;
+    struct expr_access *access;
+    struct irval ptr, idx;
+    struct type *type;
+    size_t i;
+
+    switch (expr->tag) {
+        case EXPR_IDENT:
+            ident = (struct expr_ident *)expr;
+
+            for (i = state->locals_count; i > 0; i--) {
+                if (state->locals[i - 1].sym == ident->sym)
+                    return state->locals[i - 1].val;
+            }
+
+            for (i = 0; i < state->globals_count; i++) {
+                if (state->globals[i].sym == ident->sym)
+                    return state->globals[i].val;
+            }
+
+            printf("Undefined variable '%s'\n", ident->sym->str);
+            assert(0);
+
+        case EXPR_UNOP:
+            unop = (struct expr_unop *)expr;
+            if (unop->unop == UNOP_DEREF) {
+                return irgen_expr(state, unop->op);
+            }
+            break;
+
+        case EXPR_INDEX:
+            index = (struct expr_index *)expr;
+            ptr = irgen_expr_lvalue(state, index->op);
+            idx = irgen_expr(state, index->index);
+
+            /*
+             * Pointers must be loaded beforehand
+             */
+            if (index->op->type->tag == TYPE_PTR) {
+                ptr = irgen_emit_load(state, index->op->type, ptr);
+                return irgen_emit_gep(state, index->expr.type, ptr, 1, idx);
+            }
+
+            return irgen_emit_gep(state, index->op->type, ptr,
+                                  2, IRVAL_INT(0), idx);
+
+        case EXPR_ACCESS:
+            access = (struct expr_access *)expr;
+            ptr = irgen_expr_lvalue(state, access->op);
+
+            /*
+             * Auto-dereference struct pointers
+             */
+            type = access->op->type;
+            while (type->tag == TYPE_PTR) {
+                ptr = irgen_emit_load(state, type, ptr);
+                type = type->pointer;
+            }
+
+            return irgen_emit_gep(state, type, ptr,
+                                  2, IRVAL_INT(0), IRVAL_INT(access->offset));
+
+        default:
+            break;
+    }
+
+    assert(0 && "invalid lvalue");
+}
+
+static struct irval
 irgen_expr_const(struct irgen *state, struct expr_const *expr)
 {
     return IRVAL_INT(expr->value);
 }
 
 static struct irval
-irgen_expr_ident(struct irgen *state, struct expr_ident *expr)
-{
-    struct irvar *var;
-    size_t i;
-
-    for (i = state->locals_count; i > 0; i--) {
-        var = &state->locals[i - 1];
-
-        if (var->sym == expr->sym) {
-            return irgen_emit_load(state, expr->expr.type, var->val);
-        }
-    }
-
-    for (i = 0; i < state->globals_count; i++) {
-        if (state->globals[i].sym == expr->sym) {
-            return state->globals[i].val;
-        }
-    }
-
-    printf("Undefined variables '%s'\n", expr->sym->str);
-    assert(0);
-}
-
-static struct irval
 irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
 {
-    struct irval lhs, rhs;
+    struct irval lhs, rhs, tmp;
     unsigned block_lhs, block_rhs, rhs_label, merge_label;
-    struct type *type;
+    const char *instr;
+
+    /*
+     * Select the correct IR instruction
+     */
+    switch (expr->binop) {
+        case BINOP_BOOL_OR:
+        case BINOP_BOOL_AND:
+        case BINOP_SET:
+            instr = NULL;
+            break;
+
+        case BINOP_EQ:
+            instr = "icmp eq";
+            break;
+
+        case BINOP_NOTEQ:
+            instr = "icmp ne";
+            break;
+
+        case BINOP_GT:
+            instr = "icmp sgt";
+            break;
+
+        case BINOP_GTEQ:
+            instr = "icmp sge";
+            break;
+
+        case BINOP_LT:
+            instr = "icmp slt";
+            break;
+
+        case BINOP_LTEQ:
+            instr = "icmp sle";
+            break;
+
+        case BINOP_OR:
+        case BINOP_OR_SET:
+            instr = "or";
+            break;
+
+        case BINOP_AND:
+        case BINOP_AND_SET:
+            instr = "and";
+            break;
+
+        case BINOP_XOR:
+        case BINOP_XOR_SET:
+            instr = "xor";
+            break;
+
+        case BINOP_SHL:
+        case BINOP_SHL_SET:
+            instr = "shl";
+            break;
+
+        case BINOP_SHR:
+        case BINOP_SHR_SET:
+            instr = "ashr";
+            break;
+
+        case BINOP_ADD:
+        case BINOP_ADD_SET:
+            instr = "add";
+            break;
+
+        case BINOP_SUB:
+        case BINOP_SUB_SET:
+            instr = "sub";
+            break;
+
+        case BINOP_MUL:
+        case BINOP_MUL_SET:
+            instr = "mul";
+            break;
+
+        case BINOP_DIV:
+        case BINOP_DIV_SET:
+            instr = "sdiv";
+            break;
+
+        case BINOP_MOD:
+        case BINOP_MOD_SET:
+            instr = "srem";
+            break;
+
+        default:
+            unreachable();
+    }
+
+    /*
+     * Assignments require lvalue handling
+     */
+    if (expr->binop >= BINOP_SET && expr->binop <= BINOP_MOD_SET) {
+        lhs = irgen_expr_lvalue(state, expr->op_lhs);
+        rhs = irgen_expr(state, expr->op_rhs);
+
+        if (expr->binop != BINOP_SET) {
+            tmp = irgen_emit_load(state, expr->op_rhs->type, lhs);
+
+            rhs = irgen_emit_simple2(state, instr, expr->op_rhs->type,
+                                     tmp, rhs);
+        }
+
+        irgen_emit_store(state, expr->op_rhs->type, lhs, rhs);
+        return IRVAL_INT(0);
+    }
 
     lhs = irgen_expr(state, expr->op_lhs);
-    type = expr->op_lhs->type;
 
     /*
      * Logical && and || require shortcircuiting
@@ -307,59 +494,7 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
     }
 
     rhs = irgen_expr(state, expr->op_rhs);
-
-    switch (expr->binop) {
-        case BINOP_EQ:
-            return irgen_emit_simple2(state, "icmp eq", type, lhs, rhs);
-
-        case BINOP_NOTEQ:
-            return irgen_emit_simple2(state, "icmp ne", type, lhs, rhs);
-
-        case BINOP_GT:
-            return irgen_emit_simple2(state, "icmp sgt", type, lhs, rhs);
-
-        case BINOP_GTEQ:
-            return irgen_emit_simple2(state, "icmp sge", type, lhs, rhs);
-
-        case BINOP_LT:
-            return irgen_emit_simple2(state, "icmp slt", type, lhs, rhs);
-
-        case BINOP_LTEQ:
-            return irgen_emit_simple2(state, "icmp sle", type, lhs, rhs);
-
-        case BINOP_OR:
-            return irgen_emit_simple2(state, "or", type, lhs, rhs);
-
-        case BINOP_AND:
-            return irgen_emit_simple2(state, "and", type, lhs, rhs);
-
-        case BINOP_XOR:
-            return irgen_emit_simple2(state, "xor", type, lhs, rhs);
-
-        case BINOP_SHL:
-            return irgen_emit_simple2(state, "shl", type, lhs, rhs);
-
-        case BINOP_SHR:
-            return irgen_emit_simple2(state, "ashr", type, lhs, rhs);
-
-        case BINOP_ADD:
-            return irgen_emit_simple2(state, "add", type, lhs, rhs);
-
-        case BINOP_SUB:
-            return irgen_emit_simple2(state, "sub", type, lhs, rhs);
-
-        case BINOP_MUL:
-            return irgen_emit_simple2(state, "mul", type, lhs, rhs);
-
-        case BINOP_DIV:
-            return irgen_emit_simple2(state, "sdiv", type, lhs, rhs);
-
-        case BINOP_MOD:
-            return irgen_emit_simple2(state, "srem", type, lhs, rhs);
-
-        default:
-            unreachable();
-    }
+    return irgen_emit_simple2(state, instr, expr->op_lhs->type, lhs, rhs);
 }
 
 static struct irval
@@ -367,12 +502,13 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
 {
     struct irval op;
 
+    if (expr->unop == UNOP_ADDROF) {
+        return irgen_expr_lvalue(state, expr->op);
+    }
+
     op = irgen_expr(state, expr->op);
 
     switch (expr->unop) {
-        case UNOP_ADDROF:
-            assert(0 && "TODO");
-
         case UNOP_DEREF:
             return irgen_emit_load(state, expr->expr.type, op);
 
@@ -430,12 +566,18 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
 struct irval
 irgen_expr(struct irgen *state, struct expr *expr)
 {
+    struct irval ptr;
+
+    if (expr_is_lvalue(expr)) {
+        ptr = irgen_expr_lvalue(state, expr);
+        return ptr.tag == IRVAL_GLOBAL
+             ? ptr
+             : irgen_emit_load(state, expr->type, ptr);
+    }
+
     switch (expr->tag) {
         case EXPR_CONST:
             return irgen_expr_const(state, (struct expr_const *)expr);
-
-        case EXPR_IDENT:
-            return irgen_expr_ident(state, (struct expr_ident *)expr);
 
         case EXPR_BINOP:
             return irgen_expr_binop(state, (struct expr_binop *)expr);
@@ -578,17 +720,16 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
     }
 }
 
+/*
+ * Declarations
+ */
+
 static void
 irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 {
     struct proc_arg *ptr;
     struct irval slot;
     unsigned reg;
-
-    assert(state->globals_count < 256 && "too many globals!");
-    state->globals[state->globals_count].sym = decl->sym;
-    state->globals[state->globals_count].val = IRVAL_GLOBAL(decl->sym->str);
-    state->globals_count++;
 
     /*
      * External declaration
@@ -667,10 +808,22 @@ irgen_decl(struct irgen *state, struct decl *decl)
 void
 irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
 {
+    struct symbol *sym;
     size_t i;
 
-    fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n");
+    for (i = 0; i < decls_count; i++) {
+        if (decls[i]->tag != DECL_PROC)
+            continue;
 
+        sym = ((struct decl_proc *)decls[i])->sym;
+        assert(state->globals_count < 256 && "too many globals!");
+        state->globals[state->globals_count].sym = sym;
+        state->globals[state->globals_count].val = IRVAL_GLOBAL(sym->str);
+        state->globals_count++;
+
+    }
+
+    fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n");
     for (i = 0; i < decls_count; i++) {
         irgen_decl(state, decls[i]);
     }

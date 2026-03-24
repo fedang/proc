@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "symbol.h"
 #include "type.h"
@@ -114,7 +115,19 @@ struct expr_access {
     struct expr expr;
     struct expr *op;
     struct symbol *field;
+    unsigned offset;
 };
+
+static inline bool
+expr_is_lvalue(struct expr *expr)
+{
+    if (expr->tag == EXPR_UNOP)
+        return ((struct expr_unop *)expr)->unop == UNOP_DEREF;
+
+    return expr->tag == EXPR_IDENT
+        || expr->tag == EXPR_INDEX
+        || expr->tag == EXPR_ACCESS;
+}
 
 struct expr *expr_make_const(int64_t value);
 

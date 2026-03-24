@@ -72,9 +72,9 @@ int main()
     //const char *src = "proc func(id:i32): bool {\n if (id == 0) { return false; }\n return true;\n}\n";
 
     const char *src =
-        "proc print32(_:int);\n"
         "proc main(x:int): int {\n"
         "var x : int = 10;\n"
+        " x *= 1 + 2;\n"
         "if x == 10 {\n"
         "   print32(222);\n"
         "} else { \n"
@@ -82,6 +82,7 @@ int main()
         "}\n"
         "   return 0;\n"
         "}\n"
+        "proc print32(_:int);\n"
         ;
 
     lexer_init(&lex, src, strlen(src));
