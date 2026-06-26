@@ -12,7 +12,15 @@ static struct symbol *sym_else;
 static struct symbol *sym_return;
 static struct symbol *sym_proc;
 
+static struct symbol *sym_i8;
+static struct symbol *sym_i16;
+static struct symbol *sym_i32;
+static struct symbol *sym_i64;
 static struct symbol *sym_int;
+static struct symbol *sym_u8;
+static struct symbol *sym_u16;
+static struct symbol *sym_u32;
+static struct symbol *sym_u64;
 static struct symbol *sym_uint;
 static struct symbol *sym_bool;
 static struct symbol *sym_void;
@@ -38,7 +46,15 @@ parser_init(struct parser *state, struct token *tokens)
     /*
      * Intern type symbols
      */
+    sym_i8 = symbol_make("i8");
+    sym_i16 = symbol_make("i16");
+    sym_i32 = symbol_make("i32");
+    sym_i64 = symbol_make("i64");
     sym_int = symbol_make("int");
+    sym_u8 = symbol_make("u8");
+    sym_u16 = symbol_make("u16");
+    sym_u32 = symbol_make("u32");
+    sym_u64 = symbol_make("u64");
     sym_uint = symbol_make("uint");
     sym_bool = symbol_make("bool");
     sym_void = symbol_make("void");
@@ -153,6 +169,15 @@ parser_sync(struct parser *state)
 /*
  * Types
  */
+
+#define MATCH_TYPE(x, ...) \
+    do { \
+        if (sym == (x)) { \
+            *type = __VA_ARGS__; \
+            return true; \
+        } \
+    } while (false)
+
 static bool
 parser_type(struct parser *state, struct type **type)
 {
@@ -170,25 +195,20 @@ parser_type(struct parser *state, struct type **type)
     if (!parser_check_sym(state, &sym, "Expected primitive type"))
         return false;
 
-    if (sym == sym_int) {
-        *type = type_get_int(NULL, 0);
-        return true;
-    }
+    MATCH_TYPE(sym_i8, type_get_int(NULL, 8));
+    MATCH_TYPE(sym_i16, type_get_int(NULL, 16));
+    MATCH_TYPE(sym_i32, type_get_int(NULL, 32));
+    MATCH_TYPE(sym_i64, type_get_int(NULL, 64));
+    MATCH_TYPE(sym_int, type_get_int(NULL, 0));
 
-    if (sym == sym_uint) {
-        *type = type_get_uint(NULL, 0);
-        return true;
-    }
+    MATCH_TYPE(sym_u8, type_get_uint(NULL, 8));
+    MATCH_TYPE(sym_u16, type_get_uint(NULL, 16));
+    MATCH_TYPE(sym_u32, type_get_uint(NULL, 32));
+    MATCH_TYPE(sym_u64, type_get_uint(NULL, 64));
+    MATCH_TYPE(sym_uint, type_get_uint(NULL, 0));
 
-    if (sym == sym_bool) {
-        *type = type_get_bool(NULL);
-        return true;
-    }
-
-    if (sym == sym_void) {
-        *type = type_get_void(NULL);
-        return true;
-    }
+    MATCH_TYPE(sym_bool, type_get_bool(NULL));
+    MATCH_TYPE(sym_void, type_get_void(NULL));
 
     parser_error(state, "Unknown type name");
     return false;

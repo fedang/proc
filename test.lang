@@ -1,4 +1,4 @@
-proc main(argc: int): int {
+proc main(argc: int, argv: **u8): int {
 	var x : int = 10;
 	x *= 1 + 2;
 	if x == 10 {
