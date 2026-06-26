@@ -662,6 +662,7 @@ irgen_stmt_return(struct irgen *state, struct stmt_return *stmt)
         val = irgen_expr(state, stmt->expr);
         irgen_emit_ret(state, stmt->expr->type, val);
     } else {
+        val = IRVAL_INT(0);
         irgen_emit_ret(state, type_get_void(NULL), val);
     }
 }
