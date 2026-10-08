@@ -136,9 +136,45 @@ typecheck_expr_binop(struct typecheck *tychk, struct expr_binop *expr)
 static bool
 typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
 {
-    int ret = typecheck_expr(tychk, expr->op);
-    expr->expr.type = expr->op->type;
-    return ret;
+    if (expr->unop == UNOP_ADDROF) {
+        if (!expr_is_lvalue(expr->op))
+            return false;
+    }
+
+    if (!typecheck_expr(tychk, expr->op))
+        return false;
+
+    switch (expr->unop) {
+        case UNOP_DEREF:
+            if (expr->op->type->tag != TYPE_PTR)
+                return false;
+
+            expr->expr.type = expr->op->type->pointer;
+            break;
+
+        case UNOP_ADDROF:
+            expr->expr.type = type_get_ptr(NULL, expr->op->type);
+            break;
+
+        case UNOP_NOT:
+            if (expr->op->type->tag != TYPE_BOOL)
+                return false;
+
+            expr->expr.type = type_get_bool(NULL);
+            break;
+
+        case UNOP_NEG:
+            if (expr->op->type->tag != TYPE_INT && expr->op->type->tag != TYPE_UINT)
+                return false;
+
+            expr->expr.type = expr->op->type;
+            break;
+
+        default:
+            unreachable();
+    }
+
+    return true;
 }
 
 static bool
@@ -177,12 +213,55 @@ typecheck_expr_call(struct typecheck *tychk, struct expr_call *expr)
 static bool
 typecheck_expr_index(struct typecheck *tychk, struct expr_index *expr)
 {
+    if (!typecheck_expr(tychk, expr->op) || !typecheck_expr(tychk, expr->index))
+        return false;
+
+    if (expr->index->type->tag != TYPE_INT && expr->index->type->tag != TYPE_UINT) {
+        printf("Invalid index type\n");
+        return false;
+    }
+
+    if (expr->op->type->tag == TYPE_ARRAY) {
+        expr->expr.type = expr->op->type->array.item;
+        return true;
+    } else if (expr->op->type->tag == TYPE_PTR) {
+        expr->expr.type = expr->op->type->pointer;
+        return true;
+    }
+
     return false;
 }
 
 static bool
 typecheck_expr_access(struct typecheck *tychk, struct expr_access *expr)
 {
+    struct type *type;
+    size_t i;
+
+    if (!typecheck_expr(tychk, expr->op))
+        return false;
+
+    type = expr->op->type;
+
+    /*
+     * Automatically dereference struct pointers
+     */
+    while (type->tag == TYPE_PTR) {
+        type = type->pointer;
+    }
+
+    if (type->tag != TYPE_STRUCT)
+        return false;
+
+    for (i = 0; i < type->strukt.fields_count; i++) {
+        if (type->strukt.fields[i].name == expr->field) {
+            expr->expr.type = type->strukt.fields[i].type;
+            expr->offset = i;
+            return true;
+        }
+    }
+
+    printf("Found no field named '%s'\n", expr->field->str);
     return false;
 }
 
@@ -224,16 +303,16 @@ static bool typecheck_stmt(struct typecheck *tychk, struct stmt *stmt);
 static bool
 typecheck_stmt_var(struct typecheck *tychk, struct stmt_var *stmt)
 {
-    bool ok;
+    if (stmt->value) {
+        if (!typecheck_expr(tychk, stmt->value))
+            return false;
 
-    ok = typecheck_expr(tychk, stmt->value);
+        if (!typecheck_cmp(tychk, stmt->type, stmt->value->type))
+            return false;
+    }
 
     typecheck_local_push(tychk, stmt->sym, stmt->type);
-
-    if (!ok)
-        return ok;
-
-    return typecheck_cmp(tychk, stmt->type, stmt->value->type);
+    return true;
 }
 
 static bool
