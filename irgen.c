@@ -2,8 +2,6 @@
 
 #include "irgen.h"
 
-//#define unreachable() (__builtin_unreachable())
-
 #include <assert.h>
 #define unreachable() assert(!"unreachable")
 
@@ -323,7 +321,7 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
             }
 
             printf("Undefined variable '%s'\n", ident->sym->str);
-            assert(0);
+            longjmp(state->recovery, 1);
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -368,7 +366,8 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
             break;
     }
 
-    assert(0 && "invalid lvalue");
+    printf("Invalid lvalue\n");
+    longjmp(state->recovery, 1);
 }
 
 static struct irval
@@ -572,8 +571,14 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
         vals[i] = irgen_expr(state, expr->args[i]);
     }
 
-    out = IRVAL_REG(irgen_fresh_reg(state));
-    fprintf(state->out, "\t%%%u = call ", out.reg);
+    if (expr->expr.type->tag == TYPE_VOID) {
+        out = IRVAL_REG(0);
+        fprintf(state->out, "call ");
+    } else {
+        out = IRVAL_REG(irgen_fresh_reg(state));
+        fprintf(state->out, "\t%%%u = call ", out.reg);
+    }
+
     irgen_type(state, expr->expr.type);
     fprintf(state->out, " %s(", buf);
 
@@ -833,11 +838,16 @@ irgen_decl(struct irgen *state, struct decl *decl)
     }
 }
 
-void
+bool
 irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
 {
     struct symbol *sym;
     size_t i;
+    bool ok = true;
+
+    if (setjmp(state->recovery) != 0) {
+        ok = false;
+    }
 
     for (i = 0; i < decls_count; i++) {
         if (decls[i]->tag != DECL_PROC)
@@ -855,4 +865,6 @@ irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
     for (i = 0; i < decls_count; i++) {
         irgen_decl(state, decls[i]);
     }
+
+    return ok;
 }

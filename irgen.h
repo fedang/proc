@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <setjmp.h>
 
 #include "decl.h"
 
@@ -38,6 +39,7 @@ struct irgen {
     unsigned labels;
     unsigned in_block;
     bool terminated;
+    jmp_buf recovery;
 
     struct irvar locals[256];
     unsigned locals_count;
@@ -47,6 +49,6 @@ struct irgen {
 
 void irgen_init(struct irgen *state, FILE *out);
 
-void irgen_module(struct irgen *state, struct decl **decls, size_t decls_count);
+bool irgen_module(struct irgen *state, struct decl **decls, size_t decls_count);
 
 #endif

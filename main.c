@@ -3,9 +3,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include "irgen.h"
 #include "lexer.h"
 #include "parser.h"
+#include "typecheck.h"
+#include "irgen.h"
 
 static bool
 file_read(const char *path, char **src, size_t *src_len)
@@ -45,6 +46,7 @@ int main(int argc, char **argv)
 {
     struct lexer lexer;
     struct parser parser;
+    struct typecheck tychk;
     struct irgen irgen;
     struct token *tokens;
     struct decl **decls;
@@ -71,6 +73,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    typecheck_init(&tychk);
+    if (!typecheck_module(&tychk, decls, decls_count)) {
+        printf("Failed to typecheck file\n");
+        return 1;
+    }
+
     printf("Parsed %zu declarations\n", decls_count);
 
     out = fopen("test.ll", "wb");
@@ -80,7 +88,10 @@ int main(int argc, char **argv)
     }
 
     irgen_init(&irgen, out);
-    irgen_module(&irgen, decls, decls_count);
+    if (!irgen_module(&irgen, decls, decls_count)) {
+        printf("Failed to generate IR\n");
+        return 1;
+    }
 
     fclose(out);
     system("clang test.ll test.c -o test");

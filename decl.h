@@ -29,10 +29,11 @@ struct decl_proc {
     struct symbol *sym;
     struct type *out;
     struct proc_arg *args;
+    size_t args_count;
     struct stmt *body;
 };
 
 struct decl *decl_make_proc(struct symbol *sym, struct type *out,
-                            struct proc_arg *args, struct stmt *body);
+                            struct proc_arg *args, size_t args_count, struct stmt *body);
 
 #endif

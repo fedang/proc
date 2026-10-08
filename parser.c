@@ -602,6 +602,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     struct type *out, *arg_type;
     struct stmt *body;
     struct proc_arg *args, **tail, *tmp;
+    size_t args_count;
 
     if (!parser_check_sym(state, &sym, "Expected procedure name"))
         return false;
@@ -610,6 +611,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
         return false;
 
     args = NULL;
+    args_count = 0;
     tail = &args;
 
     if (!parser_match(state, TOKEN_RPAREN)) {
@@ -630,6 +632,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
 
             *tail = tmp;
             tail = &tmp->next;
+            args_count++;
         } while (parser_match(state, TOKEN_COMMA));
 
         if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after function args"))
@@ -652,7 +655,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
             return false;
     }
 
-    *decl = decl_make_proc(sym, out, args, body);
+    *decl = decl_make_proc(sym, out, args, args_count, body);
     return true;
 }
 
