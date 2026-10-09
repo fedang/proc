@@ -90,6 +90,34 @@ parser_check(struct parser *state, enum token_tag tag, const char *msg)
     return false;
 }
 
+static inline bool
+parser_same_line(struct parser *state)
+{
+    return parser_curr(state)->source.start_line == parser_prev(state)->source.end_line;
+}
+
+static bool
+parser_check_end(struct parser *state, const char *msg)
+{
+    if (parser_match(state, TOKEN_SEMI))
+        return true;
+
+    if (parser_eof(state))
+        return true;
+
+    if (parser_curr(state)->tag == TOKEN_RBRACE)
+        return true;
+
+    /*
+     * Implicit newline termination
+     */
+    if (parser_curr(state)->source.start_line > parser_prev(state)->source.end_line)
+        return true;
+
+    parser_error(state, msg);
+    return false;
+}
+
 static bool
 parser_peek_sym(struct parser *state, struct symbol **sym)
 {
@@ -483,7 +511,7 @@ parser_stmt_var(struct parser *state, struct stmt **stmt)
             return false;
     }
 
-    if (!parser_check(state, TOKEN_SEMI, "Expected ';' after var"))
+    if (!parser_check_end(state, "Expected newline or ';' after statement"))
         return false;
 
     *stmt = stmt_make_var(name, type, value);
@@ -496,13 +524,12 @@ parser_stmt_return(struct parser *state, struct stmt **stmt)
     struct expr *value;
 
     value = NULL;
-    if (parser_curr(state)->tag != TOKEN_SEMI) {
+    if (parser_same_line(state) && parser_curr(state)->tag != TOKEN_SEMI && parser_curr(state)->tag != TOKEN_RBRACE) {
         if (!parser_expr(state, &value))
             return false;
-
     }
 
-    if (!parser_check(state, TOKEN_SEMI, "Expect ';' after return"))
+    if (!parser_check_end(state, "Expected newline or ';' after return"))
         return false;
 
     *stmt = stmt_make_return(value);
@@ -570,7 +597,7 @@ parser_stmt(struct parser *state, struct stmt **stmt)
     if (!parser_expr(state, &expr))
         return false;
 
-    if (!parser_check(state, TOKEN_SEMI, "Expect ';' after stmt"))
+    if (!parser_check_end(state, "Expected newline or ';' after statement"))
         return false;
 
     *stmt = stmt_make_expr(expr);
@@ -630,13 +657,12 @@ parser_decl_proc(struct parser *state, struct decl **decl)
             return false;
     }
 
-    if (parser_match(state, TOKEN_SEMI)) {
-        body = NULL;
-    } else {
-        if (!parser_check(state, TOKEN_LBRACE, "Expected '{' or ';' after function signature."))
-            return false;
-
+    body = NULL;
+    if (parser_match(state, TOKEN_LBRACE)) {
         if (!parser_stmt_block(state, &body))
+            return false;
+    } else {
+        if (!parser_check_end(state, "Expected '{' or termination after proc signature"))
             return false;
     }
 
@@ -655,7 +681,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
     if (!parser_check_sym(state, &sym, "Expected structure name"))
         return false;
 
-    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after structure."))
+    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after structure"))
         return false;
 
     fields_count = 0;
@@ -676,7 +702,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
         fields[fields_count].offset = fields_count;
         fields_count++;
 
-        if (!parser_check(state, TOKEN_SEMI, "Expected ';' after field"))
+        if (!parser_check_end(state, "Expected newline or ';' after field"))
             return false;
     } while (!parser_match(state, TOKEN_RBRACE));
 
@@ -702,7 +728,7 @@ parser_decl_type(struct parser *state, struct decl **decl)
     if (!parser_type(state, &type))
         return false;
 
-    if (!parser_check(state, TOKEN_SEMI, "Expected ';' after type"))
+    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
         return false;
 
     *decl = decl_make_type(sym, type);
