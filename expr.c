@@ -13,12 +13,25 @@ expr_make(size_t size, enum expr_tag tag)
 }
 
 struct expr *
-expr_make_const(int64_t value)
+expr_make_literal(enum literal_tag literal, intptr_t value)
 {
-    struct expr_const *expr;
+    struct expr_literal *expr;
 
-    expr = expr_make(sizeof(struct expr_const), EXPR_CONST);
-    expr->value = value;
+    expr = expr_make(sizeof(struct expr_literal), EXPR_LITERAL);
+    expr->literal = literal;
+
+    switch (literal) {
+        case LIT_INTEGER:
+            expr->integer = value;
+            break;
+
+        case LIT_STRING:
+            expr->string = (void *)value;
+            break;
+
+        default:
+            break;
+    }
     return &expr->expr;
 }
 

@@ -7,6 +7,12 @@ proc main(argc: int, argv: **u8): int {
         print32(2)
     }
 
+    var y : int[4]
+    y[0] = 99
+    print32(y[0])
+
+    puts("Hello World")
+
     structural()
     print32(x / 2)
     return 0
@@ -21,6 +27,8 @@ proc structural() {
 type ABC_s = ABC
 
 proc print32(_: int)
+
+proc puts(_: *u8)
 
 struct ABC {
     a: int

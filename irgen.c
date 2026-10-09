@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <string.h>
 
 #include "irgen.h"
 
@@ -21,6 +22,10 @@ irval_sprintf(struct irval val, char buf[static 32])
             snprintf(buf, 32, "@%s", val.global);
             break;
 
+        case IRVAL_STRING:
+            snprintf(buf, 32, "@.str.%u", val.reg);
+            break;
+
         default:
             unreachable();
     }
@@ -30,7 +35,13 @@ void
 irgen_init(struct irgen *state, FILE *out)
 {
     state->out = out;
+    state->regs = 0;
+    state->labels = 0;
+    state->in_block = 0;
+    state->terminated = false;
+    state->locals_count = 0;
     state->globals_count = 0;
+    state->strings_count = 0;
 }
 
 static inline unsigned
@@ -57,7 +68,7 @@ irgen_type(struct irgen *state, struct type *type)
     size_t i;
 
     if (!type) {
-        printf("NULL TYPE\n");
+        printf("No type detected during irgen!\n");
         fprintf(state->out, "i32");
         return;
     }
@@ -371,9 +382,20 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
 }
 
 static struct irval
-irgen_expr_const(struct irgen *state, struct expr_const *expr)
+irgen_expr_literal(struct irgen *state, struct expr_literal *expr)
 {
-    return IRVAL_INT(expr->value);
+    switch (expr->literal) {
+        case LIT_INTEGER:
+            return IRVAL_INT(expr->integer);
+
+        case LIT_STRING:
+            state->strings[state->strings_count] = expr->string;
+            assert(state->strings_count < 256 && "too many strings!");
+            return IRVAL_STRING(state->strings_count++);
+
+        default:
+            unreachable();
+    }
 }
 
 static struct irval
@@ -573,7 +595,7 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
 
     if (expr->expr.type->tag == TYPE_VOID) {
         out = IRVAL_REG(0);
-        fprintf(state->out, "call ");
+        fprintf(state->out, "\tcall ");
     } else {
         out = IRVAL_REG(irgen_fresh_reg(state));
         fprintf(state->out, "\t%%%u = call ", out.reg);
@@ -608,8 +630,8 @@ irgen_expr(struct irgen *state, struct expr *expr)
     }
 
     switch (expr->tag) {
-        case EXPR_CONST:
-            return irgen_expr_const(state, (struct expr_const *)expr);
+        case EXPR_LITERAL:
+            return irgen_expr_literal(state, (struct expr_literal *)expr);
 
         case EXPR_BINOP:
             return irgen_expr_binop(state, (struct expr_binop *)expr);
@@ -829,14 +851,14 @@ irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
 {
     size_t i;
 
-    fprintf(state->out, "%%%s = type { ", decl->sym->str);
+    fprintf(state->out, "\n%%%s = type { ", decl->sym->str);
     for (i = 0; i < decl->fields_count; i++) {
         if (i != 0)
             fprintf(state->out, ", ");
 
         irgen_type(state, decl->fields[i].type);
     }
-    fprintf(state->out, " }\n\n");
+    fprintf(state->out, " }\n");
 }
 
 void
@@ -860,7 +882,8 @@ bool
 irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
 {
     struct symbol *sym;
-    size_t i;
+    size_t i, j, len;
+    uint8_t c;
     bool ok = true;
 
     fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n");
@@ -887,6 +910,22 @@ irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
     for (i = 0; i < decls_count; i++) {
         if (decls[i]->tag == DECL_PROC)
             irgen_decl(state, decls[i]);
+    }
+
+    for (i = 0; i < state->strings_count; i++) {
+        len = strlen(state->strings[i]);
+        fprintf(state->out, "\n@.str.%zu = private unnamed_addr constant [%zu x i8] c\"",
+                i, len + 1);
+
+        for (j = 0; j < len; j++) {
+            c = state->strings[i][j];
+            if (c >= 32 && c <= 126 && c != '"' && c != '\\') {
+                fputc(c, state->out);
+            } else {
+                fprintf(state->out, "\\%02X", c);
+            }
+        }
+        fprintf(state->out, "\\00\", align 1\n");
     }
 
     return ok;

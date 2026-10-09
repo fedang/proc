@@ -12,6 +12,7 @@ enum irval_tag {
     IRVAL_INT,
     IRVAL_REG,
     IRVAL_GLOBAL,
+    IRVAL_STRING,
 };
 
 struct irval {
@@ -25,8 +26,8 @@ struct irval {
 
 #define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { .ival = (v) } })
 #define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { .reg = (v) } })
-#define IRVAL_LABEL(v) ((struct irval) { IRVAL_LABEL, { .label = (v) } })
 #define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { .global = (v) } })
+#define IRVAL_STRING(v) ((struct irval) { IRVAL_STRING, { .reg = (v) } })
 
 struct irvar {
     struct symbol *sym;
@@ -45,6 +46,9 @@ struct irgen {
     unsigned locals_count;
     struct irvar globals[256];
     unsigned globals_count;
+
+    const char *strings[256];
+    unsigned strings_count;
 };
 
 void irgen_init(struct irgen *state, FILE *out);

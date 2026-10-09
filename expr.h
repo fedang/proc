@@ -11,7 +11,7 @@
 
 enum expr_tag {
     EXPR_INVALID,
-    EXPR_CONST,
+    EXPR_LITERAL,
     EXPR_IDENT,
     EXPR_BINOP,
     EXPR_UNOP,
@@ -19,6 +19,12 @@ enum expr_tag {
     EXPR_CALL,
     EXPR_INDEX,
     EXPR_ACCESS,
+};
+
+enum literal_tag {
+    LIT_INVALID,
+    LIT_INTEGER,
+    LIT_STRING,
 };
 
 enum binop_tag {
@@ -68,10 +74,13 @@ struct expr {
     enum expr_tag tag;
 };
 
-struct expr_const {
+struct expr_literal {
     struct expr expr;
-    // assume int for now
-    int64_t value;
+    enum literal_tag literal;
+    union {
+        int64_t integer;
+        const char *string;
+    };
 };
 
 struct expr_ident {
@@ -129,7 +138,7 @@ expr_is_lvalue(struct expr *expr)
         || expr->tag == EXPR_ACCESS;
 }
 
-struct expr *expr_make_const(int64_t value);
+struct expr *expr_make_literal(enum literal_tag literal, intptr_t value);
 
 struct expr *expr_make_ident(struct symbol *sym);
 

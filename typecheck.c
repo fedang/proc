@@ -152,9 +152,21 @@ typecheck_cmp(struct typecheck *tychk, struct type *t1, struct type *t2)
 static bool typecheck_expr(struct typecheck *tychk, struct expr *expr);
 
 static bool
-typecheck_expr_const(struct typecheck *tychk, struct expr_const *expr)
+typecheck_expr_literal(struct typecheck *tychk, struct expr_literal *expr)
 {
-    expr->expr.type = type_get_int(NULL, 0);
+    switch (expr->literal) {
+        case LIT_INTEGER:
+            expr->expr.type = type_get_int(NULL, 0);
+            break;
+
+        case LIT_STRING:
+            expr->expr.type = type_get_ptr(NULL, type_get_uint(NULL, 8));
+            break;
+
+        default:
+            unreachable();
+    }
+
     return true;
 }
 
@@ -367,8 +379,8 @@ static bool
 typecheck_expr(struct typecheck *tychk, struct expr *expr)
 {
     switch (expr->tag) {
-        case EXPR_CONST:
-            return typecheck_expr_const(tychk, (struct expr_const *)expr);
+        case EXPR_LITERAL:
+            return typecheck_expr_literal(tychk, (struct expr_literal *)expr);
 
         case EXPR_IDENT:
             return typecheck_expr_ident(tychk, (struct expr_ident *)expr);

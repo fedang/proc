@@ -103,6 +103,60 @@ lexer_skip(struct lexer *state)
     }
 }
 
+static void
+lexer_sym(struct lexer *state)
+{
+    while (isalnum(lexer_curr(state))
+            || lexer_curr(state) == '_') {
+        lexer_advance(state);
+    }
+
+    lexer_push(state, TOKEN_SYMBOL);
+}
+
+static void
+lexer_int(struct lexer *state)
+{
+    while (isdigit(lexer_curr(state))) {
+        lexer_advance(state);
+    }
+
+    lexer_push(state, TOKEN_INT);
+}
+
+static void
+lexer_string(struct lexer *state)
+{
+    char c;
+    bool valid = false;
+
+    do {
+        c = lexer_advance(state);
+
+        if (c == '\n') {
+            ++state->line;
+        } else if (c == '\\') {
+            // TODO: More complex escapes
+            if (!lexer_eof(state)) {
+                c = lexer_advance(state);
+                if (c == '\n') {
+                    ++state->line;
+                }
+            }
+        } else if (c == '"') {
+            valid = true;
+            break;
+        }
+    } while (!lexer_eof(state));
+
+    if (valid) {
+        lexer_push(state, TOKEN_STRING);
+    } else {
+        // TODO: Unterminated string error
+        lexer_push(state, TOKEN_INVALID);
+    }
+}
+
 #define LEXER_OPEQ(tag) \
     do { \
         if (lexer_curr(state) == '=') { \
@@ -129,35 +183,17 @@ lexer_next(struct lexer *state)
     c = lexer_advance(state);
 
     if (isalpha(c) || c == '_') {
-        while (isalnum(lexer_curr(state))
-                || lexer_curr(state) == '_') {
-            lexer_advance(state);
-        }
-
-        lexer_push(state, TOKEN_SYMBOL);
+        lexer_sym(state);
         return;
     }
 
     if (isdigit(c)) {
-        while (isdigit(lexer_curr(state))) {
-            lexer_advance(state);
-        }
-
-        lexer_push(state, TOKEN_INT);
+        lexer_int(state);
         return;
     }
 
     if (c == '"') {
-        do {
-            c = lexer_advance(state);
-            if (c == '\n')
-                ++state->line;
-            else if (c == '"')
-                break;
-        } while (!lexer_eof(state));
-
-        // TODO: Unterminated string error
-        lexer_push(state, TOKEN_INVALID);
+        lexer_string(state);
         return;
     }
 

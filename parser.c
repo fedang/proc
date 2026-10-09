@@ -234,21 +234,75 @@ static bool parser_expr_prec(struct parser *state, struct expr **expr,
                              unsigned base_prec);
 
 static bool
+parser_escape_string(struct parser *state, const char **string)
+{
+    struct span span;
+    size_t i, j, len;
+    char c, *buf;
+
+    span = parser_prev(state)->source;
+    len = (span.end - span.start) - 2;
+    buf = malloc(len + 1);
+
+    for (i = 0, j = 0; j < len; ++j) {
+        c = span.start[j + 1];
+
+        if (c == '\\' && j + 1 < len) {
+            j++;
+            c = span.start[j + 1];
+
+            switch (c) {
+                case 'n':
+                    buf[i++] = '\n';
+                    break;
+                case 't':
+                    buf[i++] = '\t';
+                    break;
+                case 'r':
+                    buf[i++] = '\r';
+                    break;
+                case '0':
+                    buf[i++] = '\0';
+                    break;
+                case '\\':
+                    buf[i++] = '\\';
+                    break;
+                case '"':
+                    buf[i++] = '"';
+                    break;
+                default:
+                    buf[i++] = c;
+                    break;
+            }
+        } else {
+            buf[i++] = c;
+        }
+    }
+
+    buf[i] = '\0';
+    *string = buf;
+    return true;
+}
+
+static bool
 parser_expr_simple(struct parser *state, struct expr **expr)
 {
     int64_t value;
     struct symbol *sym;
     struct expr *op;
+    const char *string;
 
     if (parser_match(state, TOKEN_INT)) {
         value = strtol(parser_prev(state)->source.start, NULL, 10);
-        *expr = expr_make_const(value);
+        *expr = expr_make_literal(LIT_INTEGER, value);
         return true;
     }
 
     if (parser_match(state, TOKEN_STRING)) {
-        value = strtol(parser_prev(state)->source.start, NULL, 10);
-        *expr = expr_make_const(value);
+        if (!parser_escape_string(state, &string))
+            return false;
+
+        *expr = expr_make_literal(LIT_STRING, (intptr_t)string);
         return true;
     }
 
