@@ -15,8 +15,8 @@ enum expr_tag {
     EXPR_IDENT,
     EXPR_BINOP,
     EXPR_UNOP,
-    EXPR_CAST,
     EXPR_CALL,
+    EXPR_BUILTIN,
     EXPR_INDEX,
     EXPR_ACCESS,
 };
@@ -101,15 +101,16 @@ struct expr_unop {
     enum unop_tag unop;
 };
 
-struct expr_cast {
-    struct expr expr;
-    struct expr *op;
-    struct type *cast;
-};
-
 struct expr_call {
     struct expr expr;
     struct expr *op;
+    size_t args_count;
+    struct expr *args[];
+};
+
+struct expr_builtin {
+    struct expr expr;
+    struct symbol *name;
     size_t args_count;
     struct expr *args[];
 };
@@ -147,9 +148,9 @@ struct expr *expr_make_binop(struct expr *op_lhs, struct expr *op_rhs,
 
 struct expr *expr_make_unop(struct expr *op, enum unop_tag unop);
 
-struct expr *expr_make_cast(struct expr *op, struct type *type);
+struct expr *expr_make_call(struct expr *op, size_t args_count);
 
-struct expr *expr_make_call(struct expr *op, size_t args);
+struct expr *expr_make_builtin(struct symbol *name, size_t args_count);
 
 struct expr *expr_make_index(struct expr *op, struct expr *index);
 

@@ -11,73 +11,73 @@
 #define TYCHK_THIRD_PASS    2
 
 static void
-typecheck_type_push(struct typecheck *tychk, struct symbol *sym,
+typecheck_type_push(struct typecheck *state, struct symbol *sym,
                     struct type *type)
 {
-    assert(tychk->types_count < 256 && "too many types!");
+    assert(state->types_count < 256 && "too many types!");
 
-    tychk->types[tychk->types_count].sym = sym;
-    tychk->types[tychk->types_count].type = type;
-    tychk->types_count++;
+    state->types[state->types_count].sym = sym;
+    state->types[state->types_count].type = type;
+    state->types_count++;
 }
 
 void
-typecheck_init(struct typecheck *tychk)
+typecheck_init(struct typecheck *state)
 {
-    tychk->pass = TYCHK_FIRST_PASS;
-    tychk->ret_type = NULL;
-    tychk->loop_depth = 0;
-    tychk->locals_count = 0;
-    tychk->globals_count = 0;
-    tychk->types_count = 0;
+    state->pass = TYCHK_FIRST_PASS;
+    state->ret_type = NULL;
+    state->loop_depth = 0;
+    state->locals_count = 0;
+    state->globals_count = 0;
+    state->types_count = 0;
 
-    typecheck_type_push(tychk, symbol_make("i8"), type_get_int(NULL, 8));
-    typecheck_type_push(tychk, symbol_make("i16"), type_get_int(NULL, 16));
-    typecheck_type_push(tychk, symbol_make("i32"), type_get_int(NULL, 32));
-    typecheck_type_push(tychk, symbol_make("i64"), type_get_int(NULL, 64));
-    typecheck_type_push(tychk, symbol_make("int"), type_get_int(NULL, 0));
-    typecheck_type_push(tychk, symbol_make("u8"), type_get_uint(NULL, 8));
-    typecheck_type_push(tychk, symbol_make("u16"), type_get_uint(NULL, 16));
-    typecheck_type_push(tychk, symbol_make("u32"), type_get_uint(NULL, 32));
-    typecheck_type_push(tychk, symbol_make("u64"), type_get_uint(NULL, 64));
-    typecheck_type_push(tychk, symbol_make("uint"), type_get_uint(NULL, 0));
-    typecheck_type_push(tychk, symbol_make("bool"), type_get_bool(NULL));
-    typecheck_type_push(tychk, symbol_make("void"), type_get_void(NULL));
+    typecheck_type_push(state, symbol_make("i8"), type_get_int(NULL, 8));
+    typecheck_type_push(state, symbol_make("i16"), type_get_int(NULL, 16));
+    typecheck_type_push(state, symbol_make("i32"), type_get_int(NULL, 32));
+    typecheck_type_push(state, symbol_make("i64"), type_get_int(NULL, 64));
+    typecheck_type_push(state, symbol_make("int"), type_get_int(NULL, 0));
+    typecheck_type_push(state, symbol_make("u8"), type_get_uint(NULL, 8));
+    typecheck_type_push(state, symbol_make("u16"), type_get_uint(NULL, 16));
+    typecheck_type_push(state, symbol_make("u32"), type_get_uint(NULL, 32));
+    typecheck_type_push(state, symbol_make("u64"), type_get_uint(NULL, 64));
+    typecheck_type_push(state, symbol_make("uint"), type_get_uint(NULL, 0));
+    typecheck_type_push(state, symbol_make("bool"), type_get_bool(NULL));
+    typecheck_type_push(state, symbol_make("void"), type_get_void(NULL));
 }
 
 static void
-typecheck_local_push(struct typecheck *tychk, struct symbol *sym,
+typecheck_local_push(struct typecheck *state, struct symbol *sym,
                      struct type *type)
 {
-    assert(tychk->locals_count < 256 && "too many locals!");
+    assert(state->locals_count < 256 && "too many locals!");
 
-    tychk->locals[tychk->locals_count].sym = sym;
-    tychk->locals[tychk->locals_count].type = type;
-    tychk->locals_count++;
+    state->locals[state->locals_count].sym = sym;
+    state->locals[state->locals_count].type = type;
+    state->locals_count++;
 }
 
 static void
-typecheck_local_pop(struct typecheck *tychk, unsigned n)
+typecheck_local_pop(struct typecheck *state, unsigned n)
 {
-    assert(n <= tychk->locals_count && "locals overflow");
+    assert(n <= state->locals_count && "locals overflow");
 
     // TODO: Cleanup memory?
-    tychk->locals_count = n;
+    state->locals_count = n;
 }
 
 static void
-typecheck_global_push(struct typecheck *tychk, struct symbol *sym,
+typecheck_global_push(struct typecheck *state, struct symbol *sym,
                       struct type *type)
 {
-    assert(tychk->globals_count < 256 && "too many globals!");
+    assert(state->globals_count < 256 && "too many globals!");
 
-    tychk->globals[tychk->globals_count].sym = sym;
-    tychk->globals[tychk->globals_count].type = type;
-    tychk->globals_count++;
+    state->globals[state->globals_count].sym = sym;
+    state->globals[state->globals_count].type = type;
+    state->globals_count++;
 }
 
 static struct type *
-typecheck_lookup(struct typecheck *tychk, struct symbol *sym)
+typecheck_lookup(struct typecheck *state, struct symbol *sym)
 {
     size_t i;
 
@@ -85,21 +85,21 @@ typecheck_lookup(struct typecheck *tychk, struct symbol *sym)
      * First search the locals, starting from the latest,
      * then continue with the globals (in any order)
      */
-    for (i = tychk->locals_count; i > 0; i--) {
-        if (tychk->locals[i - 1].sym == sym)
-            return tychk->locals[i - 1].type;
+    for (i = state->locals_count; i > 0; i--) {
+        if (state->locals[i - 1].sym == sym)
+            return state->locals[i - 1].type;
     }
 
-    for (i = 0; i < tychk->globals_count; i++) {
-        if (tychk->globals[i].sym == sym)
-            return tychk->globals[i].type;
+    for (i = 0; i < state->globals_count; i++) {
+        if (state->globals[i].sym == sym)
+            return state->globals[i].type;
     }
 
     return NULL;
 }
 
 static bool
-typecheck_resolve(struct typecheck *tychk, struct type **type)
+typecheck_resolve(struct typecheck *state, struct type **type)
 {
     size_t i;
     struct type *t = *type;
@@ -109,10 +109,10 @@ typecheck_resolve(struct typecheck *tychk, struct type **type)
         return true;
 
     if (t->tag == TYPE_NAMED) {
-        for (i = 0; i < tychk->types_count; i++) {
-            if (tychk->types[i].sym == t->named) {
-                *type = tychk->types[i].type;
-                return typecheck_resolve(tychk, type);
+        for (i = 0; i < state->types_count; i++) {
+            if (state->types[i].sym == t->named) {
+                *type = state->types[i].type;
+                return typecheck_resolve(state, type);
             }
         }
 
@@ -121,20 +121,20 @@ typecheck_resolve(struct typecheck *tychk, struct type **type)
     }
 
     if (t->tag == TYPE_PTR) {
-        return typecheck_resolve(tychk, &t->pointer);
+        return typecheck_resolve(state, &t->pointer);
     }
 
     if (t->tag == TYPE_ARRAY) {
-        return typecheck_resolve(tychk, &t->array.item);
+        return typecheck_resolve(state, &t->array.item);
     }
 
     if (t->tag == TYPE_PROC) {
-        if (!typecheck_resolve(tychk, &t->proc.out)) {
+        if (!typecheck_resolve(state, &t->proc.out)) {
             ok = false;
         }
 
         for (i = 0; i < t->proc.args_count; i++) {
-            if (!typecheck_resolve(tychk, &t->proc.args[i])) {
+            if (!typecheck_resolve(state, &t->proc.args[i])) {
                 ok = false;
             }
         }
@@ -145,15 +145,15 @@ typecheck_resolve(struct typecheck *tychk, struct type **type)
 }
 
 static bool
-typecheck_cmp(struct typecheck *tychk, struct type *t1, struct type *t2)
+typecheck_cmp(struct typecheck *state, struct type *t1, struct type *t2)
 {
     return t1 == t2;
 }
 
-static bool typecheck_expr(struct typecheck *tychk, struct expr *expr);
+static bool typecheck_expr(struct typecheck *state, struct expr *expr);
 
 static bool
-typecheck_expr_literal(struct typecheck *tychk, struct expr_literal *expr)
+typecheck_expr_literal(struct typecheck *state, struct expr_literal *expr)
 {
     switch (expr->literal) {
         case LIT_INTEGER:
@@ -172,11 +172,11 @@ typecheck_expr_literal(struct typecheck *tychk, struct expr_literal *expr)
 }
 
 static bool
-typecheck_expr_ident(struct typecheck *tychk, struct expr_ident *expr)
+typecheck_expr_ident(struct typecheck *state, struct expr_ident *expr)
 {
     struct type *type;
 
-    type = typecheck_lookup(tychk, expr->sym);
+    type = typecheck_lookup(state, expr->sym);
     if (!type) {
         printf("Undefined variable '%s'\n", expr->sym->str);
         return false;
@@ -187,12 +187,12 @@ typecheck_expr_ident(struct typecheck *tychk, struct expr_ident *expr)
 }
 
 static bool
-typecheck_expr_binop(struct typecheck *tychk, struct expr_binop *expr)
+typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
 {
-    if (!typecheck_expr(tychk, expr->op_lhs) || !typecheck_expr(tychk, expr->op_rhs))
+    if (!typecheck_expr(state, expr->op_lhs) || !typecheck_expr(state, expr->op_rhs))
         return false;
 
-    if (!typecheck_cmp(tychk, expr->op_lhs->type, expr->op_rhs->type)) {
+    if (!typecheck_cmp(state, expr->op_lhs->type, expr->op_rhs->type)) {
         printf("Binop operands have different types\n");
         return false;
     }
@@ -205,14 +205,20 @@ typecheck_expr_binop(struct typecheck *tychk, struct expr_binop *expr)
     }
 
     switch (expr->binop) {
+        case BINOP_BOOL_OR:
+        case BINOP_BOOL_AND:
+            if (!typecheck_cmp(state, expr->op_lhs->type, type_get_bool(NULL))) {
+                printf("Expected bool operands for and/or\n");
+                return false;
+            }
+            /* fall through */
+
         case BINOP_EQ:
         case BINOP_NOTEQ:
         case BINOP_GT:
         case BINOP_GTEQ:
         case BINOP_LT:
         case BINOP_LTEQ:
-        case BINOP_BOOL_OR:
-        case BINOP_BOOL_AND:
             expr->expr.type = type_get_bool(NULL);
             break;
 
@@ -225,7 +231,7 @@ typecheck_expr_binop(struct typecheck *tychk, struct expr_binop *expr)
 }
 
 static bool
-typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
+typecheck_expr_unop(struct typecheck *state, struct expr_unop *expr)
 {
     if (expr->unop == UNOP_ADDROF) {
         if (!expr_is_lvalue(expr->op)) {
@@ -234,7 +240,7 @@ typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
         }
     }
 
-    if (!typecheck_expr(tychk, expr->op))
+    if (!typecheck_expr(state, expr->op))
         return false;
 
     switch (expr->unop) {
@@ -277,25 +283,12 @@ typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
 }
 
 static bool
-typecheck_expr_cast(struct typecheck *tychk, struct expr_cast *expr)
-{
-    bool ok;
-
-    if (!typecheck_resolve(tychk, &expr->cast))
-        return false;
-
-    ok = typecheck_expr(tychk, expr->op);
-    expr->expr.type = expr->cast;
-    return ok;
-}
-
-static bool
-typecheck_expr_call(struct typecheck *tychk, struct expr_call *expr)
+typecheck_expr_call(struct typecheck *state, struct expr_call *expr)
 {
     struct type *proc;
     size_t i;
 
-    if (!typecheck_expr(tychk, expr->op))
+    if (!typecheck_expr(state, expr->op))
         return false;
 
     proc = expr->op->type;
@@ -305,10 +298,10 @@ typecheck_expr_call(struct typecheck *tychk, struct expr_call *expr)
     }
 
     for (i = 0; i < expr->args_count; i++) {
-        if (!typecheck_expr(tychk, expr->args[i]))
+        if (!typecheck_expr(state, expr->args[i]))
             return false;
 
-        if (!typecheck_cmp(tychk, proc->proc.args[i], expr->args[i]->type)) {
+        if (!typecheck_cmp(state, proc->proc.args[i], expr->args[i]->type)) {
             printf("Call argument does not match proc\n");
             return false;
         }
@@ -319,9 +312,9 @@ typecheck_expr_call(struct typecheck *tychk, struct expr_call *expr)
 }
 
 static bool
-typecheck_expr_index(struct typecheck *tychk, struct expr_index *expr)
+typecheck_expr_index(struct typecheck *state, struct expr_index *expr)
 {
-    if (!typecheck_expr(tychk, expr->op) || !typecheck_expr(tychk, expr->index))
+    if (!typecheck_expr(state, expr->op) || !typecheck_expr(state, expr->index))
         return false;
 
     if (expr->index->type->tag != TYPE_INT && expr->index->type->tag != TYPE_UINT) {
@@ -342,12 +335,12 @@ typecheck_expr_index(struct typecheck *tychk, struct expr_index *expr)
 }
 
 static bool
-typecheck_expr_access(struct typecheck *tychk, struct expr_access *expr)
+typecheck_expr_access(struct typecheck *state, struct expr_access *expr)
 {
     struct type *type;
     size_t i;
 
-    if (!typecheck_expr(tychk, expr->op))
+    if (!typecheck_expr(state, expr->op))
         return false;
 
     type = expr->op->type;
@@ -377,58 +370,55 @@ typecheck_expr_access(struct typecheck *tychk, struct expr_access *expr)
 }
 
 static bool
-typecheck_expr(struct typecheck *tychk, struct expr *expr)
+typecheck_expr(struct typecheck *state, struct expr *expr)
 {
     switch (expr->tag) {
         case EXPR_LITERAL:
-            return typecheck_expr_literal(tychk, (struct expr_literal *)expr);
+            return typecheck_expr_literal(state, (struct expr_literal *)expr);
 
         case EXPR_IDENT:
-            return typecheck_expr_ident(tychk, (struct expr_ident *)expr);
+            return typecheck_expr_ident(state, (struct expr_ident *)expr);
 
         case EXPR_BINOP:
-            return typecheck_expr_binop(tychk, (struct expr_binop *)expr);
+            return typecheck_expr_binop(state, (struct expr_binop *)expr);
 
         case EXPR_UNOP:
-            return typecheck_expr_unop(tychk, (struct expr_unop *)expr);
-
-        case EXPR_CAST:
-            return typecheck_expr_cast(tychk, (struct expr_cast *)expr);
+            return typecheck_expr_unop(state, (struct expr_unop *)expr);
 
         case EXPR_CALL:
-            return typecheck_expr_call(tychk, (struct expr_call *)expr);
+            return typecheck_expr_call(state, (struct expr_call *)expr);
 
         case EXPR_INDEX:
-            return typecheck_expr_index(tychk, (struct expr_index *)expr);
+            return typecheck_expr_index(state, (struct expr_index *)expr);
 
         case EXPR_ACCESS:
-            return typecheck_expr_access(tychk, (struct expr_access *)expr);
+            return typecheck_expr_access(state, (struct expr_access *)expr);
 
         default:
             unreachable();
     }
 }
 
-static bool typecheck_stmt(struct typecheck *tychk, struct stmt *stmt);
+static bool typecheck_stmt(struct typecheck *state, struct stmt *stmt);
 
 static bool
-typecheck_stmt_var(struct typecheck *tychk, struct stmt_var *stmt)
+typecheck_stmt_var(struct typecheck *state, struct stmt_var *stmt)
 {
     /*
      * The user could have provided an explicit type
      */
     if (stmt->type) {
-        if (!typecheck_resolve(tychk, &stmt->type))
+        if (!typecheck_resolve(state, &stmt->type))
             return false;
     }
 
     if (stmt->value) {
-        if (!typecheck_expr(tychk, stmt->value))
+        if (!typecheck_expr(state, stmt->value))
             return false;
 
         if (!stmt->type) {
             stmt->type = stmt->value->type;
-        } else if (!typecheck_cmp(tychk, stmt->type, stmt->value->type)) {
+        } else if (!typecheck_cmp(state, stmt->type, stmt->value->type)) {
             printf("Type mismatch in variable assignment\n");
             return false;
         }
@@ -439,69 +429,69 @@ typecheck_stmt_var(struct typecheck *tychk, struct stmt_var *stmt)
         return false;
     }
 
-    typecheck_local_push(tychk, stmt->sym, stmt->type);
+    typecheck_local_push(state, stmt->sym, stmt->type);
     return true;
 }
 
 static bool
-typecheck_stmt_expr(struct typecheck *tychk, struct stmt_expr *stmt)
+typecheck_stmt_expr(struct typecheck *state, struct stmt_expr *stmt)
 {
-    return typecheck_expr(tychk, stmt->expr);
+    return typecheck_expr(state, stmt->expr);
 }
 
 static bool
-typecheck_stmt_block(struct typecheck *tychk, struct stmt_block *stmt)
+typecheck_stmt_block(struct typecheck *state, struct stmt_block *stmt)
 {
     size_t i;
     unsigned locals;
     bool ok = true;
 
-    locals = tychk->locals_count;
+    locals = state->locals_count;
 
     for (i = 0; i < stmt->items_count; i++) {
-        if (!typecheck_stmt(tychk, stmt->items[i])) {
+        if (!typecheck_stmt(state, stmt->items[i])) {
             ok = false;
         }
     }
 
-    typecheck_local_pop(tychk, locals);
+    typecheck_local_pop(state, locals);
 
     return ok;
 }
 
 static bool
-typecheck_stmt_if(struct typecheck *tychk, struct stmt_if *stmt)
+typecheck_stmt_if(struct typecheck *state, struct stmt_if *stmt)
 {
-    if (!typecheck_expr(tychk, stmt->cond))
+    if (!typecheck_expr(state, stmt->cond))
         return false;
 
-    if (!typecheck_cmp(tychk, stmt->cond->type, type_get_bool(NULL))) {
+    if (!typecheck_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
         printf("If condition is not of type bool\n");
         return false;
     }
 
-    if (!typecheck_stmt(tychk, stmt->b_true))
+    if (!typecheck_stmt(state, stmt->b_true))
         return false;
 
-    if (stmt->b_false && !typecheck_stmt(tychk, stmt->b_false))
+    if (stmt->b_false && !typecheck_stmt(state, stmt->b_false))
         return false;
 
     return true;
 }
 
 static bool
-typecheck_stmt_return(struct typecheck *tychk, struct stmt_return *stmt)
+typecheck_stmt_return(struct typecheck *state, struct stmt_return *stmt)
 {
     if (!stmt->expr) {
-        if (!typecheck_cmp(tychk, tychk->ret_type, type_get_void(NULL))) {
+        if (!typecheck_cmp(state, state->ret_type, type_get_void(NULL))) {
             printf("Expected return value\n");
             return false;
         }
     } else {
-        if (!typecheck_expr(tychk, stmt->expr))
+        if (!typecheck_expr(state, stmt->expr))
             return false;
 
-        if (!typecheck_cmp(tychk, stmt->expr->type, tychk->ret_type)) {
+        if (!typecheck_cmp(state, stmt->expr->type, state->ret_type)) {
             printf("Return value type does not match\n");
             return false;
         }
@@ -511,49 +501,49 @@ typecheck_stmt_return(struct typecheck *tychk, struct stmt_return *stmt)
 }
 
 static bool
-typecheck_stmt_while(struct typecheck *tychk, struct stmt_while *stmt)
+typecheck_stmt_while(struct typecheck *state, struct stmt_while *stmt)
 {
-    if (!typecheck_expr(tychk, stmt->cond))
+    if (!typecheck_expr(state, stmt->cond))
         return false;
 
-    if (!typecheck_cmp(tychk, stmt->cond->type, type_get_bool(NULL))) {
+    if (!typecheck_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
         printf("While condition is not of type bool\n");
         return false;
     }
 
-    tychk->loop_depth++;
-    if (!typecheck_stmt(tychk, stmt->body))
+    state->loop_depth++;
+    if (!typecheck_stmt(state, stmt->body))
         return false;
 
-    tychk->loop_depth--;
+    state->loop_depth--;
     return true;
 }
 
 static bool
-typecheck_stmt(struct typecheck *tychk, struct stmt *stmt)
+typecheck_stmt(struct typecheck *state, struct stmt *stmt)
 {
     switch (stmt->tag) {
         case STMT_VAR:
-            return typecheck_stmt_var(tychk, (struct stmt_var *)stmt);
+            return typecheck_stmt_var(state, (struct stmt_var *)stmt);
 
         case STMT_EXPR:
-            return typecheck_stmt_expr(tychk, (struct stmt_expr *)stmt);
+            return typecheck_stmt_expr(state, (struct stmt_expr *)stmt);
 
         case STMT_BLOCK:
-            return typecheck_stmt_block(tychk, (struct stmt_block *)stmt);
+            return typecheck_stmt_block(state, (struct stmt_block *)stmt);
 
         case STMT_IF:
-            return typecheck_stmt_if(tychk, (struct stmt_if *)stmt);
+            return typecheck_stmt_if(state, (struct stmt_if *)stmt);
 
         case STMT_RETURN:
-            return typecheck_stmt_return(tychk, (struct stmt_return *)stmt);
+            return typecheck_stmt_return(state, (struct stmt_return *)stmt);
 
         case STMT_WHILE:
-            return typecheck_stmt_while(tychk, (struct stmt_while *)stmt);
+            return typecheck_stmt_while(state, (struct stmt_while *)stmt);
 
         case STMT_BREAK:
         case STMT_CONTINUE:
-            if (tychk->loop_depth == 0) {
+            if (state->loop_depth == 0) {
                 printf("Cannot break/continue outside of a loop\n");
                 return false;
             }
@@ -565,7 +555,7 @@ typecheck_stmt(struct typecheck *tychk, struct stmt *stmt)
 }
 
 static bool
-typecheck_decl_proc(struct typecheck *tychk, struct decl_proc *decl)
+typecheck_decl_proc(struct typecheck *state, struct decl_proc *decl)
 {
     struct type *proc;
     struct type **args;
@@ -573,14 +563,14 @@ typecheck_decl_proc(struct typecheck *tychk, struct decl_proc *decl)
     size_t i;
     bool ok = true;
 
-    if (tychk->pass == TYCHK_FIRST_PASS) {
+    if (state->pass == TYCHK_FIRST_PASS) {
         args = malloc(decl->args_count * sizeof(struct type *));
 
         for (i = 0, ptr = decl->args; ptr != NULL; ptr = ptr->next) {
             args[i++] = ptr->type;
         }
 
-        if (typecheck_lookup(tychk, decl->sym) != NULL) {
+        if (typecheck_lookup(state, decl->sym) != NULL) {
             printf("Invalid redefinition of symbol '%s'\n", decl->sym->str);
             return false;
         }
@@ -591,30 +581,30 @@ typecheck_decl_proc(struct typecheck *tychk, struct decl_proc *decl)
         }
 
         proc = type_get_proc(decl->decl.attr, decl->out, args, decl->args_count);
-        typecheck_global_push(tychk, decl->sym, proc);
+        typecheck_global_push(state, decl->sym, proc);
 
         return true;
     }
 
-    if (tychk->pass == TYCHK_SECOND_PASS) {
-        if (!typecheck_resolve(tychk, &decl->out)) {
+    if (state->pass == TYCHK_SECOND_PASS) {
+        if (!typecheck_resolve(state, &decl->out)) {
             ok = false;
         }
 
         for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
-            if (!typecheck_resolve(tychk, &ptr->type)) {
+            if (!typecheck_resolve(state, &ptr->type)) {
                 ok = false;
             }
         }
 
-        proc = typecheck_lookup(tychk, decl->sym);
+        proc = typecheck_lookup(state, decl->sym);
         if (proc && proc->tag == TYPE_PROC) {
-            if (!typecheck_resolve(tychk, &proc->proc.out)) {
+            if (!typecheck_resolve(state, &proc->proc.out)) {
                 ok = false;
             }
 
             for (i = 0; i < proc->proc.args_count; i++) {
-                if (!typecheck_resolve(tychk, &proc->proc.args[i])) {
+                if (!typecheck_resolve(state, &proc->proc.args[i])) {
                     ok = false;
                 }
             }
@@ -625,51 +615,51 @@ typecheck_decl_proc(struct typecheck *tychk, struct decl_proc *decl)
     /*
      * Proc without a body should not be checked...
      */
-    if (tychk->pass == TYCHK_THIRD_PASS && decl->body) {
-        assert(tychk->locals_count == 0 && "leftover locals!");
+    if (state->pass == TYCHK_THIRD_PASS && decl->body) {
+        assert(state->locals_count == 0 && "leftover locals!");
 
         for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
-            typecheck_local_push(tychk, ptr->sym, ptr->type);
+            typecheck_local_push(state, ptr->sym, ptr->type);
         }
 
-        tychk->loop_depth = 0;
-        tychk->ret_type = decl->out;
-        ok = typecheck_stmt(tychk, decl->body);
-        typecheck_local_pop(tychk, 0);
+        state->loop_depth = 0;
+        state->ret_type = decl->out;
+        ok = typecheck_stmt(state, decl->body);
+        typecheck_local_pop(state, 0);
     }
 
     return ok;
 }
 
 static bool
-typecheck_decl_struct(struct typecheck *tychk, struct decl_struct *decl)
+typecheck_decl_struct(struct typecheck *state, struct decl_struct *decl)
 {
     struct type *type;
     size_t i;
     bool ok = true;
 
-    if (tychk->pass == TYCHK_FIRST_PASS) {
+    if (state->pass == TYCHK_FIRST_PASS) {
         type = type_get_struct(decl->decl.attr, decl->sym,
                                decl->fields, decl->fields_count);
 
-        typecheck_type_push(tychk, decl->sym, type);
-    } else if (tychk->pass == TYCHK_SECOND_PASS) {
+        typecheck_type_push(state, decl->sym, type);
+    } else if (state->pass == TYCHK_SECOND_PASS) {
         for (i = 0; i < decl->fields_count; i++) {
-            if (!typecheck_resolve(tychk, &decl->fields[i].type)) {
+            if (!typecheck_resolve(state, &decl->fields[i].type)) {
                 ok = false;
             }
         }
 
-        for (i = 0; i < tychk->types_count; i++) {
-            if (tychk->types[i].sym == decl->sym) {
-                type = tychk->types[i].type;
+        for (i = 0; i < state->types_count; i++) {
+            if (state->types[i].sym == decl->sym) {
+                type = state->types[i].type;
                 break;
             }
         }
 
         if (type && type->tag == TYPE_STRUCT) {
             for (size_t i = 0; i < type->strukt.fields_count; i++) {
-                if (!typecheck_resolve(tychk, &type->strukt.fields[i].type)) {
+                if (!typecheck_resolve(state, &type->strukt.fields[i].type)) {
                     ok = false;
                 }
             }
@@ -680,19 +670,19 @@ typecheck_decl_struct(struct typecheck *tychk, struct decl_struct *decl)
 }
 
 static bool
-typecheck_decl_type(struct typecheck *tychk, struct decl_type *decl)
+typecheck_decl_type(struct typecheck *state, struct decl_type *decl)
 {
     size_t i;
 
-    if (tychk->pass == TYCHK_FIRST_PASS) {
-        typecheck_type_push(tychk, decl->sym, decl->type);
-    } else if (tychk->pass == TYCHK_SECOND_PASS) {
-        if (!typecheck_resolve(tychk, &decl->type))
+    if (state->pass == TYCHK_FIRST_PASS) {
+        typecheck_type_push(state, decl->sym, decl->type);
+    } else if (state->pass == TYCHK_SECOND_PASS) {
+        if (!typecheck_resolve(state, &decl->type))
             return false;
 
-        for (i = 0; i < tychk->types_count; i++) {
-            if (tychk->types[i].sym == decl->sym) {
-                tychk->types[i].type = decl->type;
+        for (i = 0; i < state->types_count; i++) {
+            if (state->types[i].sym == decl->sym) {
+                state->types[i].type = decl->type;
                 break;
             }
         }
@@ -702,17 +692,17 @@ typecheck_decl_type(struct typecheck *tychk, struct decl_type *decl)
 }
 
 static bool
-typecheck_decl(struct typecheck *tychk, struct decl *decl)
+typecheck_decl(struct typecheck *state, struct decl *decl)
 {
     switch (decl->tag) {
         case DECL_PROC:
-            return typecheck_decl_proc(tychk, (struct decl_proc *)decl);
+            return typecheck_decl_proc(state, (struct decl_proc *)decl);
 
         case DECL_STRUCT:
-            return typecheck_decl_struct(tychk, (struct decl_struct *)decl);
+            return typecheck_decl_struct(state, (struct decl_struct *)decl);
 
         case DECL_TYPE:
-            return typecheck_decl_type(tychk, (struct decl_type *)decl);
+            return typecheck_decl_type(state, (struct decl_type *)decl);
 
         default:
             unreachable();
@@ -720,15 +710,15 @@ typecheck_decl(struct typecheck *tychk, struct decl *decl)
 }
 
 bool
-typecheck_module(struct typecheck *tychk, struct decl **decls, size_t decls_count)
+typecheck_module(struct typecheck *state, struct decl **decls, size_t decls_count)
 {
     size_t i;
     bool ok = true;
 
-    tychk->pass = TYCHK_FIRST_PASS;
+    state->pass = TYCHK_FIRST_PASS;
 
     for (i = 0; i < decls_count; i++) {
-        if (!typecheck_decl(tychk, decls[i])) {
+        if (!typecheck_decl(state, decls[i])) {
             ok = false;
         }
     }
@@ -736,10 +726,10 @@ typecheck_module(struct typecheck *tychk, struct decl **decls, size_t decls_coun
     if (!ok)
         goto done;
 
-    tychk->pass = TYCHK_SECOND_PASS;
+    state->pass = TYCHK_SECOND_PASS;
 
     for (i = 0; i < decls_count; i++) {
-        if (!typecheck_decl(tychk, decls[i])) {
+        if (!typecheck_decl(state, decls[i])) {
             ok = false;
         }
     }
@@ -747,10 +737,10 @@ typecheck_module(struct typecheck *tychk, struct decl **decls, size_t decls_coun
     if (!ok)
         goto done;
 
-    tychk->pass = TYCHK_THIRD_PASS;
+    state->pass = TYCHK_THIRD_PASS;
 
     for (i = 0; i < decls_count; i++) {
-        if (!typecheck_decl(tychk, decls[i])) {
+        if (!typecheck_decl(state, decls[i])) {
             ok = false;
         }
     }

@@ -21,7 +21,7 @@ enum decl_tag {
 };
 
 struct decl {
-    struct source *src;
+    struct span source;
     enum decl_tag tag;
     struct attr *attr;
 };

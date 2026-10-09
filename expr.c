@@ -69,26 +69,28 @@ expr_make_unop(struct expr *op, enum unop_tag unop)
 }
 
 struct expr *
-expr_make_cast(struct expr *op, struct type *type)
-{
-    struct expr_cast *expr;
-
-    expr = expr_make(sizeof(struct expr_cast), EXPR_CAST);
-    expr->op = op;
-    expr->cast = type;
-    return &expr->expr;
-}
-
-struct expr *
-expr_make_call(struct expr *op, size_t args)
+expr_make_call(struct expr *op, size_t args_count)
 {
     struct expr_call *expr;
     size_t size;
 
-    size = sizeof(struct expr_call) + args * sizeof(struct expr *);
+    size = sizeof(struct expr_call) + args_count * sizeof(struct expr *);
     expr = expr_make(size, EXPR_CALL);
     expr->op = op;
-    expr->args_count = args;
+    expr->args_count = args_count;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_builtin(struct symbol *name, size_t args_count)
+{
+    struct expr_builtin *expr;
+    size_t size;
+
+    size = sizeof(struct expr_builtin) + args_count * sizeof(struct expr *);
+    expr = expr_make(size, EXPR_BUILTIN);
+    expr->name = name;
+    expr->args_count = args_count;
     return &expr->expr;
 }
 

@@ -574,12 +574,6 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
 }
 
 static struct irval
-irgen_expr_cast(struct irgen *state, struct expr_cast *expr)
-{
-    unreachable();
-}
-
-static struct irval
 irgen_expr_call(struct irgen *state, struct expr_call *expr)
 {
     struct irval func, out, vals[expr->args_count];
@@ -638,9 +632,6 @@ irgen_expr(struct irgen *state, struct expr *expr)
 
         case EXPR_UNOP:
             return irgen_expr_unop(state, (struct expr_unop *)expr);
-
-        case EXPR_CAST:
-            return irgen_expr_cast(state, (struct expr_cast *)expr);
 
         case EXPR_CALL:
             return irgen_expr_call(state, (struct expr_call *)expr);

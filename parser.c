@@ -529,7 +529,7 @@ static bool parser_stmt(struct parser *state, struct stmt **stmt);
 static bool
 parser_stmt_block(struct parser *state, struct stmt **stmt)
 {
-    struct stmt *tmp[32];
+    struct stmt *tmp[64];
     unsigned n;
 
     n = 0;
@@ -538,9 +538,9 @@ parser_stmt_block(struct parser *state, struct stmt **stmt)
         if (parser_match(state, TOKEN_RBRACE))
             break;
 
-        assert(n++ <= 32);
+        assert(n < 64 && "too many stmts!");
 
-        if (!parser_stmt(state, &tmp[n-1]))
+        if (!parser_stmt(state, &tmp[n++]))
             return false;
     }
 

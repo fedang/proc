@@ -19,7 +19,7 @@ enum stmt_tag {
 };
 
 struct stmt {
-    struct source *src;
+    struct span source;
     enum stmt_tag tag;
 };
 
