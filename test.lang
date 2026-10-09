@@ -7,8 +7,21 @@ proc main(argc: int, argv: **u8): int {
 		print32(2);
 	}
 
+    structural();
 	print32(x / 2);
 	return 0;
 }
 
+proc structural() {
+    var s : ABC;
+    s.a = 10;
+    print32(s.a);
+}
+
 proc print32(_: int);
+
+struct ABC {
+    a: int;
+    b: bool;
+    c: u8;
+}

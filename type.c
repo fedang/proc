@@ -62,6 +62,26 @@ type_get_simple(struct attr *attr, enum type_tag tag)
 }
 
 struct type *
+type_get_named(struct attr *attr, struct symbol *sym)
+{
+    struct type *type;
+    size_t i;
+
+    for (i = 0; i < type_count; i++) {
+        type = &type_pool[i];
+
+        if (type->tag == TYPE_NAMED && type->attr == attr
+            && type->named == sym) {
+            return type;
+        }
+    }
+
+    type = type_get_fresh(attr, TYPE_NAMED);
+    type->named = sym;
+    return type;
+}
+
+struct type *
 type_get_bool(struct attr *attr)
 {
     return type_get_simple(attr, TYPE_BOOL);

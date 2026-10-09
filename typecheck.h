@@ -6,18 +6,20 @@
 #include "type.h"
 #include "decl.h"
 
-struct variable {
+struct named {
     struct symbol *sym;
     struct type *type;
 };
 
 struct typecheck {
     int pass;
-    struct variable locals[256];
-    unsigned locals_count;
-    struct variable globals[256];
-    unsigned globals_count;
     struct type *ret_type;
+    struct named locals[256];
+    unsigned locals_count;
+    struct named globals[256];
+    unsigned globals_count;
+    struct named types[256];
+    unsigned types_count;
 };
 
 void typecheck_init(struct typecheck *tychk);

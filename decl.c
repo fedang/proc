@@ -26,3 +26,16 @@ decl_make_proc(struct symbol *sym, struct type *out,
     decl->body = body;
     return &decl->decl;
 }
+
+struct decl *
+decl_make_struct(struct symbol *sym, struct struct_field *fields,
+                 size_t fields_count)
+{
+    struct decl_struct *decl;
+
+    decl = decl_make(sizeof(struct decl_struct), DECL_STRUCT);
+    decl->sym = sym;
+    decl->fields = fields;
+    decl->fields_count = fields_count;
+    return &decl->decl;
+}

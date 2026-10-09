@@ -16,6 +16,7 @@ struct proc_arg {
 enum decl_tag {
     DECL_INVALID,
     DECL_PROC,
+    DECL_STRUCT,
 };
 
 struct decl {
@@ -33,7 +34,18 @@ struct decl_proc {
     struct stmt *body;
 };
 
+struct decl_struct {
+    struct decl decl;
+    struct symbol *sym;
+    struct struct_field *fields;
+    size_t fields_count;
+};
+
 struct decl *decl_make_proc(struct symbol *sym, struct type *out,
-                            struct proc_arg *args, size_t args_count, struct stmt *body);
+                            struct proc_arg *args, size_t args_count,
+                            struct stmt *body);
+
+struct decl *decl_make_struct(struct symbol *sym, struct struct_field *fields,
+                              size_t fields_count);
 
 #endif

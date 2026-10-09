@@ -6,21 +6,47 @@
 
 #include "typecheck.h"
 
-#define TYCHK_FIRST_PASS 0
-#define TYCHK_SECOND_PASS 1
+#define TYCHK_FIRST_PASS    0
+#define TYCHK_SECOND_PASS   1
+#define TYCHK_THIRD_PASS    2
+
+static void
+typecheck_type_push(struct typecheck *tychk, struct symbol *sym,
+                    struct type *type)
+{
+    assert(tychk->types_count < 256 && "too many types!");
+
+    tychk->types[tychk->types_count].sym = sym;
+    tychk->types[tychk->types_count].type = type;
+    tychk->types_count++;
+}
 
 void
 typecheck_init(struct typecheck *tychk)
 {
     tychk->pass = TYCHK_FIRST_PASS;
+    tychk->ret_type = NULL;
     tychk->locals_count = 0;
     tychk->globals_count = 0;
-    tychk->ret_type = NULL;
+    tychk->types_count = 0;
+
+    typecheck_type_push(tychk, symbol_make("i8"), type_get_int(NULL, 8));
+    typecheck_type_push(tychk, symbol_make("i16"), type_get_int(NULL, 16));
+    typecheck_type_push(tychk, symbol_make("i32"), type_get_int(NULL, 32));
+    typecheck_type_push(tychk, symbol_make("i64"), type_get_int(NULL, 64));
+    typecheck_type_push(tychk, symbol_make("int"), type_get_int(NULL, 0));
+    typecheck_type_push(tychk, symbol_make("u8"), type_get_uint(NULL, 8));
+    typecheck_type_push(tychk, symbol_make("u16"), type_get_uint(NULL, 16));
+    typecheck_type_push(tychk, symbol_make("u32"), type_get_uint(NULL, 32));
+    typecheck_type_push(tychk, symbol_make("u64"), type_get_uint(NULL, 64));
+    typecheck_type_push(tychk, symbol_make("uint"), type_get_uint(NULL, 0));
+    typecheck_type_push(tychk, symbol_make("bool"), type_get_bool(NULL));
+    typecheck_type_push(tychk, symbol_make("void"), type_get_void(NULL));
 }
 
 static void
 typecheck_local_push(struct typecheck *tychk, struct symbol *sym,
-                      struct type *type)
+                     struct type *type)
 {
     assert(tychk->locals_count < 256 && "too many locals!");
 
@@ -69,6 +95,52 @@ typecheck_lookup(struct typecheck *tychk, struct symbol *sym)
     }
 
     return NULL;
+}
+
+static bool
+typecheck_resolve(struct typecheck *tychk, struct type **type)
+{
+    size_t i;
+    struct type *t = *type;
+    bool ok = true;
+
+    if (!type)
+        return true;
+
+    if (t->tag == TYPE_NAMED) {
+        for (i = 0; i < tychk->types_count; i++) {
+            if (tychk->types[i].sym == t->named) {
+                *type = tychk->types[i].type;
+                return true;
+            }
+        }
+
+        printf("Unknown type '%s'\n", t->named->str);
+        return false;
+    }
+
+    if (t->tag == TYPE_PTR) {
+        return typecheck_resolve(tychk, &t->pointer);
+    }
+
+    if (t->tag == TYPE_ARRAY) {
+        return typecheck_resolve(tychk, &t->array.item);
+    }
+
+    if (t->tag == TYPE_PROC) {
+        if (!typecheck_resolve(tychk, &t->proc.out)) {
+            ok = false;
+        }
+
+        for (i = 0; i < t->proc.args_count; i++) {
+            if (!typecheck_resolve(tychk, &t->proc.args[i])) {
+                ok = false;
+            }
+        }
+        return ok;
+    }
+
+    return true;
 }
 
 static bool
@@ -180,7 +252,12 @@ typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
 static bool
 typecheck_expr_cast(struct typecheck *tychk, struct expr_cast *expr)
 {
-    bool ok = typecheck_expr(tychk, expr->op);
+    bool ok;
+
+    if (!typecheck_resolve(tychk, &expr->cast))
+        return false;
+
+    ok = typecheck_expr(tychk, expr->op);
     expr->expr.type = expr->cast;
     return ok;
 }
@@ -303,12 +380,29 @@ static bool typecheck_stmt(struct typecheck *tychk, struct stmt *stmt);
 static bool
 typecheck_stmt_var(struct typecheck *tychk, struct stmt_var *stmt)
 {
+    /*
+     * The user could have provided an explicit type
+     */
+    if (stmt->type) {
+        if (!typecheck_resolve(tychk, &stmt->type))
+            return false;
+    }
+
     if (stmt->value) {
         if (!typecheck_expr(tychk, stmt->value))
             return false;
 
-        if (!typecheck_cmp(tychk, stmt->type, stmt->value->type))
+        if (!stmt->type) {
+            stmt->type = stmt->value->type;
+        } else if (!typecheck_cmp(tychk, stmt->type, stmt->value->type)) {
+            printf("Type mismatch in variable assignment\n");
             return false;
+        }
+    }
+
+    if (!stmt->type) {
+        printf("Cannot infer type for variable '%s'\n", stmt->sym->str);
+        return false;
     }
 
     typecheck_local_push(tychk, stmt->sym, stmt->type);
@@ -427,24 +521,89 @@ typecheck_decl_proc(struct typecheck *tychk, struct decl_proc *decl)
         return true;
     }
 
+    if (tychk->pass == TYCHK_SECOND_PASS) {
+        if (!typecheck_resolve(tychk, &decl->out)) {
+            ok = false;
+        }
+
+        for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
+            if (!typecheck_resolve(tychk, &ptr->type)) {
+                ok = false;
+            }
+        }
+
+        proc = typecheck_lookup(tychk, decl->sym);
+        if (proc && proc->tag == TYPE_PROC) {
+            if (!typecheck_resolve(tychk, &proc->proc.out)) {
+                ok = false;
+            }
+
+            for (i = 0; i < proc->proc.args_count; i++) {
+                if (!typecheck_resolve(tychk, &proc->proc.args[i])) {
+                    ok = false;
+                }
+            }
+        }
+        return ok;
+    }
+
     /*
-     * Proc without a body should not be checked in the second pass
+     * Proc without a body should not be checked...
      */
-    if (decl->body) {
+    if (tychk->pass == TYCHK_THIRD_PASS && decl->body) {
+        assert(tychk->locals_count == 0 && "leftover locals!");
+
         for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
             typecheck_local_push(tychk, ptr->sym, ptr->type);
         }
 
         tychk->ret_type = decl->out;
-
         ok = typecheck_stmt(tychk, decl->body);
-
         typecheck_local_pop(tychk, 0);
-
-        assert(tychk->locals_count == 0 && "leftover locals!");
     }
 
     return ok;
+}
+
+static bool
+typecheck_decl_struct(struct typecheck *tychk, struct decl_struct *decl)
+{
+    struct type *type;
+    size_t i;
+    bool ok = true;
+
+    if (tychk->pass == TYCHK_FIRST_PASS) {
+        type = type_get_struct(decl->decl.attr, decl->sym,
+                               decl->fields, decl->fields_count);
+
+        typecheck_type_push(tychk, decl->sym, type);
+    }
+
+    if (tychk->pass == TYCHK_SECOND_PASS) {
+        for (i = 0; i < decl->fields_count; i++) {
+            if (!typecheck_resolve(tychk, &decl->fields[i].type)) {
+                ok = false;
+            }
+        }
+
+        for (i = 0; i < tychk->types_count; i++) {
+            if (tychk->types[i].sym == decl->sym) {
+                type = tychk->types[i].type;
+                break;
+            }
+        }
+
+        if (type && type->tag == TYPE_STRUCT) {
+            for (size_t i = 0; i < type->strukt.fields_count; i++) {
+                if (!typecheck_resolve(tychk, &type->strukt.fields[i].type)) {
+                    ok = false;
+                }
+            }
+        }
+        return ok;
+    }
+
+    return true;
 }
 
 static bool
@@ -453,6 +612,9 @@ typecheck_decl(struct typecheck *tychk, struct decl *decl)
     switch (decl->tag) {
         case DECL_PROC:
             return typecheck_decl_proc(tychk, (struct decl_proc *)decl);
+
+        case DECL_STRUCT:
+            return typecheck_decl_struct(tychk, (struct decl_struct *)decl);
 
         default:
             unreachable();
@@ -477,6 +639,17 @@ typecheck_module(struct typecheck *tychk, struct decl **decls, size_t decls_coun
         goto done;
 
     tychk->pass = TYCHK_SECOND_PASS;
+
+    for (i = 0; i < decls_count; i++) {
+        if (!typecheck_decl(tychk, decls[i])) {
+            ok = false;
+        }
+    }
+
+    if (!ok)
+        goto done;
+
+    tychk->pass = TYCHK_THIRD_PASS;
 
     for (i = 0; i < decls_count; i++) {
         if (!typecheck_decl(tychk, decls[i])) {

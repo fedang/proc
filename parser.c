@@ -11,19 +11,7 @@ static struct symbol *sym_if;
 static struct symbol *sym_else;
 static struct symbol *sym_return;
 static struct symbol *sym_proc;
-
-static struct symbol *sym_i8;
-static struct symbol *sym_i16;
-static struct symbol *sym_i32;
-static struct symbol *sym_i64;
-static struct symbol *sym_int;
-static struct symbol *sym_u8;
-static struct symbol *sym_u16;
-static struct symbol *sym_u32;
-static struct symbol *sym_u64;
-static struct symbol *sym_uint;
-static struct symbol *sym_bool;
-static struct symbol *sym_void;
+static struct symbol *sym_struct;
 
 void
 parser_init(struct parser *state, struct token *tokens)
@@ -42,22 +30,7 @@ parser_init(struct parser *state, struct token *tokens)
     sym_else = symbol_make("else");
     sym_return = symbol_make("return");
     sym_proc = symbol_make("proc");
-
-    /*
-     * Intern type symbols
-     */
-    sym_i8 = symbol_make("i8");
-    sym_i16 = symbol_make("i16");
-    sym_i32 = symbol_make("i32");
-    sym_i64 = symbol_make("i64");
-    sym_int = symbol_make("int");
-    sym_u8 = symbol_make("u8");
-    sym_u16 = symbol_make("u16");
-    sym_u32 = symbol_make("u32");
-    sym_u64 = symbol_make("u64");
-    sym_uint = symbol_make("uint");
-    sym_bool = symbol_make("bool");
-    sym_void = symbol_make("void");
+    sym_struct = symbol_make("struct");
 }
 
 static inline struct token *
@@ -183,6 +156,7 @@ parser_type(struct parser *state, struct type **type)
 {
     struct symbol *sym;
     struct type *pointer;
+    size_t count;
 
     if (parser_match(state, TOKEN_STAR)) {
         if (!parser_type(state, &pointer))
@@ -192,26 +166,35 @@ parser_type(struct parser *state, struct type **type)
         return true;
     }
 
-    if (!parser_check_sym(state, &sym, "Expected primitive type"))
-        return false;
+    if (parser_match(state, TOKEN_LPAREN)) {
+        if (!parser_type(state, type))
+            return false;
 
-    MATCH_TYPE(sym_i8, type_get_int(NULL, 8));
-    MATCH_TYPE(sym_i16, type_get_int(NULL, 16));
-    MATCH_TYPE(sym_i32, type_get_int(NULL, 32));
-    MATCH_TYPE(sym_i64, type_get_int(NULL, 64));
-    MATCH_TYPE(sym_int, type_get_int(NULL, 0));
+        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after type"))
+            return false;
+    } else {
+        if (!parser_check_sym(state, &sym, "Expected type name"))
+            return false;
 
-    MATCH_TYPE(sym_u8, type_get_uint(NULL, 8));
-    MATCH_TYPE(sym_u16, type_get_uint(NULL, 16));
-    MATCH_TYPE(sym_u32, type_get_uint(NULL, 32));
-    MATCH_TYPE(sym_u64, type_get_uint(NULL, 64));
-    MATCH_TYPE(sym_uint, type_get_uint(NULL, 0));
+        *type = type_get_named(NULL, sym);
+    }
 
-    MATCH_TYPE(sym_bool, type_get_bool(NULL));
-    MATCH_TYPE(sym_void, type_get_void(NULL));
+    while (parser_match(state, TOKEN_LBRACK)) {
+        if (parser_curr(state)->tag != TOKEN_INT) {
+            parser_error(state, "Expected integer for array size");
+            return false;
+        }
 
-    parser_error(state, "Unknown type name");
-    return false;
+        count = strtoull(parser_curr(state)->source.start, NULL, 10);
+        parser_advance(state);
+
+        if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after array size"))
+            return false;
+
+        *type = type_get_array(NULL, *type, count);
+    }
+
+    return true;
 }
 
 /*
@@ -492,11 +475,11 @@ parser_stmt_var(struct parser *state, struct stmt **stmt)
             return false;
     }
 
-    if (!parser_check(state, TOKEN_EQ, "Expected '=' after var"))
-        return false;
-
-    if (!parser_expr(state, &value))
-        return false;
+    value = NULL;
+    if (parser_match(state, TOKEN_EQ)) {
+        if (!parser_expr(state, &value))
+            return false;
+    }
 
     if (!parser_check(state, TOKEN_SEMI, "Expected ';' after var"))
         return false;
@@ -660,15 +643,60 @@ parser_decl_proc(struct parser *state, struct decl **decl)
 }
 
 static bool
+parser_decl_struct(struct parser *state, struct decl **decl)
+{
+    struct symbol *sym, *field_sym;
+    struct type *field_type;
+    struct struct_field *copy, fields[64];
+    size_t fields_count;
+
+    if (!parser_check_sym(state, &sym, "Expected structure name"))
+        return false;
+
+    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after structure."))
+        return false;
+
+    fields_count = 0;
+    do {
+        if (!parser_check_sym(state, &field_sym, "Expected field name"))
+            return false;
+
+        if (!parser_check(state, TOKEN_COLON, "Expected ':' after field name"))
+            return false;
+
+        field_type = NULL;
+        if (!parser_type(state, &field_type))
+            return false;
+
+        assert(fields_count < 64 && "too many fields!");
+        fields[fields_count].name = field_sym;
+        fields[fields_count].type = field_type;
+        fields[fields_count].offset = fields_count;
+        fields_count++;
+
+        if (!parser_check(state, TOKEN_SEMI, "Expected ';' after field"))
+            return false;
+    } while (!parser_match(state, TOKEN_RBRACE));
+
+    copy = malloc(fields_count * sizeof(struct struct_field));
+    memcpy(copy, fields, fields_count * sizeof(struct struct_field));
+
+    *decl = decl_make_struct(sym, copy, fields_count);
+    return true;
+}
+
+static bool
 parser_decl(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
 
-    if (!parser_check_sym(state, &sym, "Expected proc decl"))
+    if (!parser_check_sym(state, &sym, "Expected declaration"))
         return false;
 
     if (sym == sym_proc) {
         return parser_decl_proc(state, decl);
+    } else if (sym == sym_struct) {
+        return parser_decl_struct(state, decl);
     }
 
     parser_error(state, "Unknown declaration type");
