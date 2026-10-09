@@ -59,6 +59,12 @@ struct stmt_while {
     struct stmt *body;
 };
 
+static inline void
+stmt_set_source(struct stmt *stmt, struct span source)
+{
+    stmt->source = source;
+}
+
 struct stmt *stmt_make_var(struct symbol *sym, struct type *type,
                            struct expr *value);
 

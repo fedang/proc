@@ -48,6 +48,18 @@ struct decl_type {
     struct type *type;
 };
 
+static inline void
+decl_set_source(struct decl *decl, struct span source)
+{
+    decl->source = source;
+}
+
+static inline void
+decl_set_attr(struct decl *decl, struct attr *attr)
+{
+    decl->attr = attr;
+}
+
 struct decl *decl_make_proc(struct symbol *sym, struct type *out,
                             struct proc_arg *args, size_t args_count,
                             struct stmt *body);

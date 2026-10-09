@@ -139,6 +139,12 @@ expr_is_lvalue(struct expr *expr)
         || expr->tag == EXPR_ACCESS;
 }
 
+static inline void
+expr_set_source(struct expr *expr, struct span source)
+{
+    expr->source = source;
+}
+
 struct expr *expr_make_literal(enum literal_tag literal, intptr_t value);
 
 struct expr *expr_make_ident(struct symbol *sym);

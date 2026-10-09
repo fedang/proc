@@ -297,11 +297,14 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     struct symbol *sym;
     struct expr *op;
     const char *string;
+    struct span start;
+
+    start = parser_curr(state)->source;
 
     if (parser_match(state, TOKEN_INT)) {
         value = strtol(parser_prev(state)->source.start, NULL, 10);
         *expr = expr_make_literal(LIT_INTEGER, value);
-        return true;
+        goto done;
     }
 
     if (parser_match(state, TOKEN_STRING)) {
@@ -309,20 +312,22 @@ parser_expr_simple(struct parser *state, struct expr **expr)
             return false;
 
         *expr = expr_make_literal(LIT_STRING, (intptr_t)string);
-        return true;
+        goto done;
     }
 
     if (parser_match_sym(state, &sym)) {
         // TODO: Check for disallowed keywords?
         *expr = expr_make_ident(sym);
-        return true;
+        goto done;
     }
 
     if (parser_match(state, TOKEN_LPAREN)) {
         if (!parser_expr_prec(state, expr, 0))
             return false;
 
-        return parser_check(state, TOKEN_RPAREN, "Expected ')' after expr");
+        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after expr"))
+            return false;
+        goto done;
     }
 
     if (parser_match(state, TOKEN_MINUS)) {
@@ -330,7 +335,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
             return false;
 
         *expr = expr_make_unop(op, UNOP_NEG);
-        return true;
+        goto done;
     }
 
     if (parser_match(state, TOKEN_NOT)) {
@@ -338,7 +343,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
             return false;
 
         *expr = expr_make_unop(op, UNOP_NOT);
-        return true;
+        goto done;
     }
 
     if (parser_match(state, TOKEN_STAR)) {
@@ -346,7 +351,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
             return false;
 
         *expr = expr_make_unop(op, UNOP_DEREF);
-        return true;
+        goto done;
     }
 
     if (parser_match(state, TOKEN_AND)) {
@@ -354,11 +359,15 @@ parser_expr_simple(struct parser *state, struct expr **expr)
             return false;
 
         *expr = expr_make_unop(op, UNOP_ADDROF);
-        return true;
+        goto done;
     }
 
     parser_error(state, "Expected expression");
     return false;
+
+done:
+    expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
+    return true;
 }
 
 static inline unsigned
@@ -444,6 +453,9 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
     enum token_tag op_tag;
     struct symbol *field;
     unsigned prec, count, i;
+    struct span start;
+
+    start = parser_curr(state)->source;
 
     if (!parser_expr_simple(state, expr))
         return false;
@@ -477,6 +489,8 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
             for (i = 0; i < count; i++) {
                 ((struct expr_call *)*expr)->args[i] = args[i];
             }
+
+            expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
             continue;
         }
 
@@ -488,6 +502,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
                 return false;
 
             *expr = expr_make_index(*expr, rhs);
+            expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
             continue;
         }
 
@@ -496,6 +511,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
                 return false;
 
             *expr = expr_make_access(*expr, field);
+            expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
             continue;
         }
 
@@ -510,6 +526,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
             return false;
 
         *expr = expr_make_binop(*expr, rhs, parser_token_binop(op_tag));
+        expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
     }
 
     return true;
@@ -531,21 +548,22 @@ parser_stmt_block(struct parser *state, struct stmt **stmt)
 {
     struct stmt *tmp[64];
     unsigned n;
+    struct span start;
 
-    n = 0;
+    start = parser_prev(state)->source;
 
-    while (!parser_eof(state)) {
+    for (n = 0; !parser_eof(state); n++) {
         if (parser_match(state, TOKEN_RBRACE))
             break;
 
         assert(n < 64 && "too many stmts!");
-
-        if (!parser_stmt(state, &tmp[n++]))
+        if (!parser_stmt(state, &tmp[n]))
             return false;
     }
 
     *stmt = stmt_make_block(n);
     memcpy(((struct stmt_block *)*stmt)->items, tmp, n * sizeof(struct stmt *));
+    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -555,6 +573,9 @@ parser_stmt_var(struct parser *state, struct stmt **stmt)
     struct symbol *name;
     struct type *type;
     struct expr *value;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     if (!parser_check_sym(state, &name, "Expected var name"))
         return false;
@@ -575,6 +596,7 @@ parser_stmt_var(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_var(name, type, value);
+    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -582,6 +604,9 @@ static bool
 parser_stmt_return(struct parser *state, struct stmt **stmt)
 {
     struct expr *value;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     value = NULL;
     if (parser_same_line(state) && parser_curr(state)->tag != TOKEN_SEMI && parser_curr(state)->tag != TOKEN_RBRACE) {
@@ -593,6 +618,7 @@ parser_stmt_return(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_return(value);
+    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -602,6 +628,9 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
     struct symbol *sym;
     struct expr *cond;
     struct stmt *t_branch, *f_branch;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     if (!parser_expr(state, &cond))
         return false;
@@ -624,6 +653,7 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
     }
 
     *stmt = stmt_make_if(cond, t_branch, f_branch);
+    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -632,6 +662,9 @@ parser_stmt_while(struct parser *state, struct stmt **stmt)
 {
     struct expr *cond;
     struct stmt *body;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     if (!parser_expr(state, &cond))
         return false;
@@ -643,6 +676,7 @@ parser_stmt_while(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_while(cond, body);
+    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -651,6 +685,9 @@ parser_stmt(struct parser *state, struct stmt **stmt)
 {
     struct symbol *sym;
     struct expr *expr;
+    struct span start;
+
+    start = parser_curr(state)->source;
 
     if (parser_match(state, TOKEN_LBRACE)) {
         return parser_stmt_block(state, stmt);
@@ -683,7 +720,7 @@ parser_stmt(struct parser *state, struct stmt **stmt)
                 return false;
 
             *stmt = stmt_make_break();
-            return true;
+            goto done;
         }
 
         if (sym == sym_continue) {
@@ -692,7 +729,7 @@ parser_stmt(struct parser *state, struct stmt **stmt)
                 return false;
 
             *stmt = stmt_make_continue();
-            return true;
+            goto done;
         }
     }
 
@@ -703,6 +740,9 @@ parser_stmt(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_expr(expr);
+
+done:
+    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -717,6 +757,9 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     struct stmt *body;
     struct proc_arg *args, **tail, *tmp;
     size_t args_count;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     if (!parser_check_sym(state, &sym, "Expected procedure name"))
         return false;
@@ -769,6 +812,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     }
 
     *decl = decl_make_proc(sym, out, args, args_count, body);
+    decl_set_source(*decl, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -779,6 +823,9 @@ parser_decl_struct(struct parser *state, struct decl **decl)
     struct type *field_type;
     struct struct_field *copy, fields[64];
     size_t fields_count;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     if (!parser_check_sym(state, &sym, "Expected structure name"))
         return false;
@@ -812,6 +859,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
     memcpy(copy, fields, fields_count * sizeof(struct struct_field));
 
     *decl = decl_make_struct(sym, copy, fields_count);
+    decl_set_source(*decl, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -820,6 +868,9 @@ parser_decl_type(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
     struct type *type;
+    struct span start;
+
+    start = parser_prev(state)->source;
 
     if (!parser_check_sym(state, &sym, "Expected type name"))
         return false;
@@ -834,6 +885,7 @@ parser_decl_type(struct parser *state, struct decl **decl)
         return false;
 
     *decl = decl_make_type(sym, type);
+    decl_set_source(*decl, span_merge(start, parser_prev(state)->source));
     return true;
 }
 
@@ -845,15 +897,14 @@ parser_decl(struct parser *state, struct decl **decl)
     if (!parser_check_sym(state, &sym, "Expected declaration"))
         return false;
 
-    if (sym == sym_proc) {
+    if (sym == sym_proc)
         return parser_decl_proc(state, decl);
-    }
-    if (sym == sym_struct) {
+
+    if (sym == sym_struct)
         return parser_decl_struct(state, decl);
-    }
-    if (sym == sym_type) {
+
+    if (sym == sym_type)
         return parser_decl_type(state, decl);
-    }
 
     parser_error(state, "Unknown declaration type");
     return false;
