@@ -681,20 +681,6 @@ irgen_stmt_expr(struct irgen *state, struct stmt_expr *stmt)
 }
 
 static void
-irgen_stmt_return(struct irgen *state, struct stmt_return *stmt)
-{
-    struct irval val;
-
-    if (stmt->expr) {
-        val = irgen_expr(state, stmt->expr);
-        irgen_emit_ret(state, stmt->expr->type, val);
-    } else {
-        val = IRVAL_INT(0);
-        irgen_emit_ret(state, type_get_void(NULL), val);
-    }
-}
-
-static void
 irgen_stmt_block(struct irgen *state, struct stmt_block *stmt)
 {
     size_t i, locals;
@@ -714,6 +700,34 @@ irgen_stmt_block(struct irgen *state, struct stmt_block *stmt)
     state->locals_count = locals;
 }
 
+static void
+irgen_stmt_return(struct irgen *state, struct stmt_return *stmt)
+{
+    struct irval val;
+
+    if (stmt->expr) {
+        val = irgen_expr(state, stmt->expr);
+        irgen_emit_ret(state, stmt->expr->type, val);
+    } else {
+        val = IRVAL_INT(0);
+        irgen_emit_ret(state, type_get_void(NULL), val);
+    }
+}
+
+/*
+ * IR structure
+ *
+ *      ...
+ *      br i1 %cond, label %t_label, label %f_label
+ * t_label:
+ *      ...
+ *      br label %merge_label
+ * f_label:
+ *      ...
+ *      br label %merge_label
+ *  merge_label:
+ *      ...
+ */
 static void
 irgen_stmt_if(struct irgen *state, struct stmt_if *stmt)
 {
@@ -746,6 +760,63 @@ irgen_stmt_if(struct irgen *state, struct stmt_if *stmt)
     irgen_emit_block(state, merge_label);
 }
 
+/*
+ * IR structure
+ *
+ *      ...
+ *      br label %cond_label
+ * cond_label:
+ *      ...
+ *      br i1 %cond, label %body_label, label %exit_label
+ * body_label:
+ *      ...
+ *      br label %cond_label
+ * exit_label:
+ *      ...
+ */
+static void
+irgen_stmt_while(struct irgen *state, struct stmt_while *stmt)
+{
+    struct irval cond;
+    unsigned cond_label, body_label, exit_label;
+    unsigned saved_cond, saved_exit;
+
+    cond_label = irgen_fresh_label(state);
+    body_label = irgen_fresh_label(state);
+    exit_label = irgen_fresh_label(state);
+
+    irgen_emit_br(state, cond_label);
+    irgen_emit_block(state, cond_label);
+    cond = irgen_expr(state, stmt->cond);
+    irgen_emit_condbr(state, cond, body_label, exit_label);
+
+    saved_cond = state->loop_cond;
+    saved_exit = state->loop_exit;
+    state->loop_cond = cond_label;
+    state->loop_exit = exit_label;
+
+    irgen_emit_block(state, body_label);
+    irgen_stmt(state, stmt->body);
+    irgen_emit_br(state, cond_label);
+
+    state->loop_cond = saved_cond;
+    state->loop_exit = saved_exit;
+
+    irgen_emit_block(state, exit_label);
+}
+
+static void
+irgen_stmt_continue(struct irgen *state, struct stmt *stmt)
+{
+    irgen_emit_br(state, state->loop_cond);
+}
+
+static void
+irgen_stmt_break(struct irgen *state, struct stmt *stmt)
+{
+    irgen_emit_br(state, state->loop_exit);
+}
+
 void
 irgen_stmt(struct irgen *state, struct stmt *stmt)
 {
@@ -768,6 +839,18 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
 
         case STMT_RETURN:
             irgen_stmt_return(state, (struct stmt_return *)stmt);
+            break;
+
+        case STMT_WHILE:
+            irgen_stmt_while(state, (struct stmt_while *)stmt);
+            break;
+
+        case STMT_CONTINUE:
+            irgen_stmt_continue(state, (struct stmt *)stmt);
+            break;
+
+        case STMT_BREAK:
+            irgen_stmt_break(state, (struct stmt *)stmt);
             break;
 
         default:

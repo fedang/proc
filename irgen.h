@@ -42,6 +42,9 @@ struct irgen {
     bool terminated;
     jmp_buf recovery;
 
+    unsigned loop_cond;
+    unsigned loop_exit;
+
     struct irvar locals[256];
     unsigned locals_count;
     struct irvar globals[256];

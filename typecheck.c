@@ -26,6 +26,7 @@ typecheck_init(struct typecheck *tychk)
 {
     tychk->pass = TYCHK_FIRST_PASS;
     tychk->ret_type = NULL;
+    tychk->loop_depth = 0;
     tychk->locals_count = 0;
     tychk->globals_count = 0;
     tychk->types_count = 0;
@@ -510,6 +511,25 @@ typecheck_stmt_return(struct typecheck *tychk, struct stmt_return *stmt)
 }
 
 static bool
+typecheck_stmt_while(struct typecheck *tychk, struct stmt_while *stmt)
+{
+    if (!typecheck_expr(tychk, stmt->cond))
+        return false;
+
+    if (!typecheck_cmp(tychk, stmt->cond->type, type_get_bool(NULL))) {
+        printf("While condition is not of type bool\n");
+        return false;
+    }
+
+    tychk->loop_depth++;
+    if (!typecheck_stmt(tychk, stmt->body))
+        return false;
+
+    tychk->loop_depth--;
+    return true;
+}
+
+static bool
 typecheck_stmt(struct typecheck *tychk, struct stmt *stmt)
 {
     switch (stmt->tag) {
@@ -527,6 +547,17 @@ typecheck_stmt(struct typecheck *tychk, struct stmt *stmt)
 
         case STMT_RETURN:
             return typecheck_stmt_return(tychk, (struct stmt_return *)stmt);
+
+        case STMT_WHILE:
+            return typecheck_stmt_while(tychk, (struct stmt_while *)stmt);
+
+        case STMT_BREAK:
+        case STMT_CONTINUE:
+            if (tychk->loop_depth == 0) {
+                printf("Cannot break/continue outside of a loop\n");
+                return false;
+            }
+            return true;
 
         default:
             unreachable();
@@ -601,6 +632,7 @@ typecheck_decl_proc(struct typecheck *tychk, struct decl_proc *decl)
             typecheck_local_push(tychk, ptr->sym, ptr->type);
         }
 
+        tychk->loop_depth = 0;
         tychk->ret_type = decl->out;
         ok = typecheck_stmt(tychk, decl->body);
         typecheck_local_pop(tychk, 0);

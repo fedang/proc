@@ -11,7 +11,11 @@ proc main(argc: int, argv: **u8): int {
     y[0] = 99
     print32(y[0])
 
-    puts("Hello World")
+    var i = 0
+    while i < 5 {
+        puts("Hello World")
+        i += 1
+    }
 
     structural()
     print32(x / 2)
@@ -34,4 +38,10 @@ struct ABC {
     a: int
     b: bool
     c: u8
+}
+
+proc cond() {
+    if 1 == 1 {
+    } else {
+    }
 }

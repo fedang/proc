@@ -13,6 +13,9 @@ enum stmt_tag {
     STMT_BLOCK,
     STMT_IF,
     STMT_RETURN,
+    STMT_WHILE,
+    STMT_CONTINUE,
+    STMT_BREAK,
 };
 
 struct stmt {
@@ -50,6 +53,12 @@ struct stmt_return {
     struct expr *expr;
 };
 
+struct stmt_while {
+    struct stmt stmt;
+    struct expr *cond;
+    struct stmt *body;
+};
+
 struct stmt *stmt_make_var(struct symbol *sym, struct type *type,
                            struct expr *value);
 
@@ -61,5 +70,11 @@ struct stmt *stmt_make_if(struct expr *cond, struct stmt *b_true,
                           struct stmt *b_false);
 
 struct stmt *stmt_make_return(struct expr *expr);
+
+struct stmt *stmt_make_while(struct expr *cond, struct stmt *body);
+
+struct stmt *stmt_make_continue(void);
+
+struct stmt *stmt_make_break(void);
 
 #endif

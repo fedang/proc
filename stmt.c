@@ -67,3 +67,26 @@ stmt_make_return(struct expr *expr)
     stmt->expr = expr;
     return &stmt->stmt;
 }
+
+struct stmt *
+stmt_make_while(struct expr *cond, struct stmt *body)
+{
+    struct stmt_while *stmt;
+
+    stmt = stmt_make(sizeof(struct stmt_while), STMT_WHILE);
+    stmt->cond = cond;
+    stmt->body = body;
+    return &stmt->stmt;
+}
+
+struct stmt *
+stmt_make_continue(void)
+{
+    return stmt_make(sizeof(struct stmt), STMT_CONTINUE);
+}
+
+struct stmt *
+stmt_make_break(void)
+{
+    return stmt_make(sizeof(struct stmt), STMT_BREAK);
+}

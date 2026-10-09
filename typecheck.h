@@ -13,6 +13,7 @@ struct named {
 
 struct typecheck {
     int pass;
+    unsigned loop_depth;
     struct type *ret_type;
     struct named locals[256];
     unsigned locals_count;

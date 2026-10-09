@@ -10,6 +10,9 @@ static struct symbol *sym_var;
 static struct symbol *sym_if;
 static struct symbol *sym_else;
 static struct symbol *sym_return;
+static struct symbol *sym_while;
+static struct symbol *sym_break;
+static struct symbol *sym_continue;
 static struct symbol *sym_proc;
 static struct symbol *sym_struct;
 static struct symbol *sym_type;
@@ -30,6 +33,9 @@ parser_init(struct parser *state, struct token *tokens)
     sym_if = symbol_make("if");
     sym_else = symbol_make("else");
     sym_return = symbol_make("return");
+    sym_while = symbol_make("while");
+    sym_break = symbol_make("break");
+    sym_continue = symbol_make("continue");
     sym_proc = symbol_make("proc");
     sym_struct = symbol_make("struct");
     sym_type = symbol_make("type");
@@ -622,6 +628,25 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
 }
 
 static bool
+parser_stmt_while(struct parser *state, struct stmt **stmt)
+{
+    struct expr *cond;
+    struct stmt *body;
+
+    if (!parser_expr(state, &cond))
+        return false;
+
+    if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after while condition"))
+        return false;
+
+    if (!parser_stmt_block(state, &body))
+        return false;
+
+    *stmt = stmt_make_while(cond, body);
+    return true;
+}
+
+static bool
 parser_stmt(struct parser *state, struct stmt **stmt)
 {
     struct symbol *sym;
@@ -645,6 +670,29 @@ parser_stmt(struct parser *state, struct stmt **stmt)
         if (sym == sym_var) {
             parser_advance(state);
             return parser_stmt_var(state, stmt);
+        }
+
+        if (sym == sym_while) {
+            parser_advance(state);
+            return parser_stmt_while(state, stmt);
+        }
+
+        if (sym == sym_break) {
+            parser_advance(state);
+            if (!parser_check_end(state, "Expected newline or ';' after break"))
+                return false;
+
+            *stmt = stmt_make_break();
+            return true;
+        }
+
+        if (sym == sym_continue) {
+            parser_advance(state);
+            if (!parser_check_end(state, "Expected newline or ';' after continue"))
+                return false;
+
+            *stmt = stmt_make_continue();
+            return true;
         }
     }
 
