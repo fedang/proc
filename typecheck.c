@@ -111,7 +111,7 @@ typecheck_resolve(struct typecheck *tychk, struct type **type)
         for (i = 0; i < tychk->types_count; i++) {
             if (tychk->types[i].sym == t->named) {
                 *type = tychk->types[i].type;
-                return true;
+                return typecheck_resolve(tychk, type);
             }
         }
 
@@ -164,8 +164,10 @@ typecheck_expr_ident(struct typecheck *tychk, struct expr_ident *expr)
     struct type *type;
 
     type = typecheck_lookup(tychk, expr->sym);
-    if (!type)
+    if (!type) {
+        printf("Undefined variable '%s'\n", expr->sym->str);
         return false;
+    }
 
     expr->expr.type = type;
     return true;
@@ -177,12 +179,16 @@ typecheck_expr_binop(struct typecheck *tychk, struct expr_binop *expr)
     if (!typecheck_expr(tychk, expr->op_lhs) || !typecheck_expr(tychk, expr->op_rhs))
         return false;
 
-    if (!typecheck_cmp(tychk, expr->op_lhs->type, expr->op_rhs->type))
+    if (!typecheck_cmp(tychk, expr->op_lhs->type, expr->op_rhs->type)) {
+        printf("Binop operands have different types\n");
         return false;
+    }
 
     if (expr->binop >= BINOP_SET && expr->binop <= BINOP_MOD_SET) {
-        if (!expr_is_lvalue(expr->op_lhs))
+        if (!expr_is_lvalue(expr->op_lhs)) {
+            printf("Binop left operand is not an lvalue\n");
             return false;
+        }
     }
 
     switch (expr->binop) {
@@ -209,8 +215,10 @@ static bool
 typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
 {
     if (expr->unop == UNOP_ADDROF) {
-        if (!expr_is_lvalue(expr->op))
+        if (!expr_is_lvalue(expr->op)) {
+            printf("Unop operand is not an lvalue\n");
             return false;
+        }
     }
 
     if (!typecheck_expr(tychk, expr->op))
@@ -218,8 +226,10 @@ typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
 
     switch (expr->unop) {
         case UNOP_DEREF:
-            if (expr->op->type->tag != TYPE_PTR)
+            if (expr->op->type->tag != TYPE_PTR) {
+                printf("Only pointer types can be dereferenced\n");
                 return false;
+            }
 
             expr->expr.type = expr->op->type->pointer;
             break;
@@ -229,15 +239,19 @@ typecheck_expr_unop(struct typecheck *tychk, struct expr_unop *expr)
             break;
 
         case UNOP_NOT:
-            if (expr->op->type->tag != TYPE_BOOL)
+            if (expr->op->type->tag != TYPE_BOOL) {
+                printf("Only bool values can be negated\n");
                 return false;
+            }
 
             expr->expr.type = type_get_bool(NULL);
             break;
 
         case UNOP_NEG:
-            if (expr->op->type->tag != TYPE_INT && expr->op->type->tag != TYPE_UINT)
+            if (expr->op->type->tag != TYPE_INT && expr->op->type->tag != TYPE_UINT) {
+                printf("Only integers can be negated\n");
                 return false;
+            }
 
             expr->expr.type = expr->op->type;
             break;
@@ -272,15 +286,19 @@ typecheck_expr_call(struct typecheck *tychk, struct expr_call *expr)
         return false;
 
     proc = expr->op->type;
-    if (proc->tag != TYPE_PROC || proc->proc.args_count != expr->args_count)
+    if (proc->tag != TYPE_PROC || proc->proc.args_count != expr->args_count) {
+        printf("Call target is not a proc\n");
         return false;
+    }
 
     for (i = 0; i < expr->args_count; i++) {
         if (!typecheck_expr(tychk, expr->args[i]))
             return false;
 
-        if (!typecheck_cmp(tychk, proc->proc.args[i], expr->args[i]->type))
+        if (!typecheck_cmp(tychk, proc->proc.args[i], expr->args[i]->type)) {
+            printf("Call argument does not match proc\n");
             return false;
+        }
     }
 
     expr->expr.type = proc->proc.out;
@@ -306,6 +324,7 @@ typecheck_expr_index(struct typecheck *tychk, struct expr_index *expr)
         return true;
     }
 
+    printf("Invalid type used for indexing\n");
     return false;
 }
 
@@ -327,8 +346,10 @@ typecheck_expr_access(struct typecheck *tychk, struct expr_access *expr)
         type = type->pointer;
     }
 
-    if (type->tag != TYPE_STRUCT)
+    if (type->tag != TYPE_STRUCT) {
+        printf("Tried to access a field from a non-struct type\n");
         return false;
+    }
 
     for (i = 0; i < type->strukt.fields_count; i++) {
         if (type->strukt.fields[i].name == expr->field) {
@@ -441,8 +462,10 @@ typecheck_stmt_if(struct typecheck *tychk, struct stmt_if *stmt)
     if (!typecheck_expr(tychk, stmt->cond))
         return false;
 
-    if (!typecheck_cmp(tychk, stmt->cond->type, type_get_bool(NULL)))
+    if (!typecheck_cmp(tychk, stmt->cond->type, type_get_bool(NULL))) {
+        printf("If condition is not of type bool\n");
         return false;
+    }
 
     if (!typecheck_stmt(tychk, stmt->b_true))
         return false;
@@ -456,13 +479,22 @@ typecheck_stmt_if(struct typecheck *tychk, struct stmt_if *stmt)
 static bool
 typecheck_stmt_return(struct typecheck *tychk, struct stmt_return *stmt)
 {
-    if (!stmt->expr)
-        return typecheck_cmp(tychk, tychk->ret_type, type_get_void(NULL));
+    if (!stmt->expr) {
+        if (!typecheck_cmp(tychk, tychk->ret_type, type_get_void(NULL))) {
+            printf("Expected return value\n");
+            return false;
+        }
+    } else {
+        if (!typecheck_expr(tychk, stmt->expr))
+            return false;
 
-    if (!typecheck_expr(tychk, stmt->expr))
-        return false;
+        if (!typecheck_cmp(tychk, stmt->expr->type, tychk->ret_type)) {
+            printf("Return value type does not match\n");
+            return false;
+        }
+    }
 
-    return typecheck_cmp(tychk, stmt->expr->type, tychk->ret_type);
+    return true;
 }
 
 static bool
@@ -577,9 +609,7 @@ typecheck_decl_struct(struct typecheck *tychk, struct decl_struct *decl)
                                decl->fields, decl->fields_count);
 
         typecheck_type_push(tychk, decl->sym, type);
-    }
-
-    if (tychk->pass == TYCHK_SECOND_PASS) {
+    } else if (tychk->pass == TYCHK_SECOND_PASS) {
         for (i = 0; i < decl->fields_count; i++) {
             if (!typecheck_resolve(tychk, &decl->fields[i].type)) {
                 ok = false;
@@ -600,7 +630,28 @@ typecheck_decl_struct(struct typecheck *tychk, struct decl_struct *decl)
                 }
             }
         }
-        return ok;
+    }
+
+    return ok;
+}
+
+static bool
+typecheck_decl_type(struct typecheck *tychk, struct decl_type *decl)
+{
+    size_t i;
+
+    if (tychk->pass == TYCHK_FIRST_PASS) {
+        typecheck_type_push(tychk, decl->sym, decl->type);
+    } else if (tychk->pass == TYCHK_SECOND_PASS) {
+        if (!typecheck_resolve(tychk, &decl->type))
+            return false;
+
+        for (i = 0; i < tychk->types_count; i++) {
+            if (tychk->types[i].sym == decl->sym) {
+                tychk->types[i].type = decl->type;
+                break;
+            }
+        }
     }
 
     return true;
@@ -615,6 +666,9 @@ typecheck_decl(struct typecheck *tychk, struct decl *decl)
 
         case DECL_STRUCT:
             return typecheck_decl_struct(tychk, (struct decl_struct *)decl);
+
+        case DECL_TYPE:
+            return typecheck_decl_type(tychk, (struct decl_type *)decl);
 
         default:
             unreachable();

@@ -39,3 +39,14 @@ decl_make_struct(struct symbol *sym, struct struct_field *fields,
     decl->fields_count = fields_count;
     return &decl->decl;
 }
+
+struct decl *
+decl_make_type(struct symbol *sym, struct type *type)
+{
+    struct decl_type *decl;
+
+    decl = decl_make(sizeof(struct decl_type), DECL_TYPE);
+    decl->sym = sym;
+    decl->type = type;
+    return &decl->decl;
+}

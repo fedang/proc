@@ -13,10 +13,12 @@ proc main(argc: int, argv: **u8): int {
 }
 
 proc structural() {
-    var s : ABC;
+    var s : ABC_s;
     s.a = 10;
     print32(s.a);
 }
+
+type ABC_s = ABC;
 
 proc print32(_: int);
 

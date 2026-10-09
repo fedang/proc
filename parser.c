@@ -12,6 +12,7 @@ static struct symbol *sym_else;
 static struct symbol *sym_return;
 static struct symbol *sym_proc;
 static struct symbol *sym_struct;
+static struct symbol *sym_type;
 
 void
 parser_init(struct parser *state, struct token *tokens)
@@ -31,6 +32,7 @@ parser_init(struct parser *state, struct token *tokens)
     sym_return = symbol_make("return");
     sym_proc = symbol_make("proc");
     sym_struct = symbol_make("struct");
+    sym_type = symbol_make("type");
 }
 
 static inline struct token *
@@ -686,6 +688,28 @@ parser_decl_struct(struct parser *state, struct decl **decl)
 }
 
 static bool
+parser_decl_type(struct parser *state, struct decl **decl)
+{
+    struct symbol *sym;
+    struct type *type;
+
+    if (!parser_check_sym(state, &sym, "Expected type name"))
+        return false;
+
+    if (!parser_check(state, TOKEN_EQ, "Expected '=' after name"))
+        return false;
+
+    if (!parser_type(state, &type))
+        return false;
+
+    if (!parser_check(state, TOKEN_SEMI, "Expected ';' after type"))
+        return false;
+
+    *decl = decl_make_type(sym, type);
+    return true;
+}
+
+static bool
 parser_decl(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
@@ -695,8 +719,12 @@ parser_decl(struct parser *state, struct decl **decl)
 
     if (sym == sym_proc) {
         return parser_decl_proc(state, decl);
-    } else if (sym == sym_struct) {
+    }
+    if (sym == sym_struct) {
         return parser_decl_struct(state, decl);
+    }
+    if (sym == sym_type) {
+        return parser_decl_type(state, decl);
     }
 
     parser_error(state, "Unknown declaration type");
