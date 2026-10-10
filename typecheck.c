@@ -12,7 +12,7 @@
 #define TYCHK_THIRD_PASS    2
 
 #define TYCHK_ERROR(state, span, ...) \
-    report_error((state)->src, (span), __VA_ARGS__)
+    report_error((state)->src, &(span), __VA_ARGS__)
 
 static void
 typecheck_type_push(struct typecheck *state, struct symbol *sym,

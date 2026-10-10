@@ -7,8 +7,10 @@
 #include "parser.h"
 #include "typecheck.h"
 #include "irgen.h"
+#include "report.h"
 
-int main(int argc, char **argv)
+int
+main(int argc, char **argv)
 {
     struct source src;
     struct lexer lexer;
@@ -45,7 +47,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Parsed %zu declarations\n", decls_count);
+    report_info(&src, NULL, "Parsed %zu declarations\n", decls_count);
 
     out = fopen("test.ll", "wb");
     if (!out) {
@@ -60,7 +62,7 @@ int main(int argc, char **argv)
     }
 
     fclose(out);
-    system("clang test.ll test.c -o test");
+    system("clang test.ll test.c -O1 -o test -Wno-override-module");
 
     return 0;
 }

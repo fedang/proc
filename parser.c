@@ -81,7 +81,7 @@ parser_match(struct parser *state, enum token_tag tag)
 static void
 parser_error(struct parser *state, const char *msg)
 {
-    report_error(state->src, parser_curr(state)->span, "%s", msg);
+    report_error(state->src, &parser_curr(state)->span, "%s", msg);
 
     state->error = true;
     state->perfect = false;
@@ -100,7 +100,8 @@ parser_check(struct parser *state, enum token_tag tag, const char *msg)
 static inline bool
 parser_same_line(struct parser *state)
 {
-    return parser_curr(state)->span.start_line == parser_prev(state)->span.end_line;
+    return parser_curr(state)->span.start_line
+        == parser_prev(state)->span.end_line;
 }
 
 static bool
