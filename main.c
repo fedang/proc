@@ -8,50 +8,16 @@
 #include "typecheck.h"
 #include "irgen.h"
 
-static bool
-file_read(const char *path, char **src, size_t *src_len)
-{
-    FILE *file;
-    size_t fsize;
-
-    file = fopen(path, "rb");
-    if (!file)
-        return false;
-
-    fseek(file, 0, SEEK_END);
-    fsize = ftell(file);
-
-    if (fsize < 0) {
-        fclose(file);
-        return false;
-    }
-
-    rewind(file);
-
-    *src = malloc(fsize + 1);
-    if (fread(*src, fsize, 1, file) != 1) {
-        free(*src);
-        fclose(file);
-        return false;
-    }
-
-    fclose(file);
-
-    (*src)[fsize] = 0;
-    *src_len = fsize;
-    return true;
-}
-
 int main(int argc, char **argv)
 {
+    struct source src;
     struct lexer lexer;
     struct parser parser;
     struct typecheck tychk;
     struct irgen irgen;
     struct token *tokens;
     struct decl **decls;
-    size_t src_len, decls_count;
-    char *src;
+    size_t decls_count;
     FILE *out;
 
     if (argc != 2) {
@@ -59,21 +25,21 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (!file_read(argv[1], &src, &src_len)) {
+    if (!source_open(&src, argv[1])) {
         printf("Failed to read input file %s\n", argv[1]);
         return 1;
     }
 
-    lexer_init(&lexer, src, src_len);
+    lexer_init(&lexer, &src);
     lexer_tokenize(&lexer, &tokens);
 
-    parser_init(&parser, tokens);
+    parser_init(&parser, &src, tokens);
     if (!parser_module(&parser, &decls, &decls_count)) {
         printf("Failed to parse file\n");
         return 1;
     }
 
-    typecheck_init(&tychk);
+    typecheck_init(&tychk, &src);
     if (!typecheck_module(&tychk, decls, decls_count)) {
         printf("Failed to typecheck file\n");
         return 1;

@@ -19,7 +19,7 @@ enum stmt_tag {
 };
 
 struct stmt {
-    struct span source;
+    struct span span;
     enum stmt_tag tag;
 };
 
@@ -60,9 +60,9 @@ struct stmt_while {
 };
 
 static inline void
-stmt_set_source(struct stmt *stmt, struct span source)
+stmt_set_span(struct stmt *stmt, struct span span)
 {
-    stmt->source = source;
+    stmt->span = span;
 }
 
 struct stmt *stmt_make_var(struct symbol *sym, struct type *type,

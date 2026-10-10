@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include "parser.h"
+#include "report.h"
 
 static struct symbol *sym_let;
 static struct symbol *sym_var;
@@ -18,8 +19,9 @@ static struct symbol *sym_struct;
 static struct symbol *sym_type;
 
 void
-parser_init(struct parser *state, struct token *tokens)
+parser_init(struct parser *state, struct source *src, struct token *tokens)
 {
+    state->src = src;
     state->tokens = tokens;
     state->curr = 0;
     state->error = false;
@@ -79,8 +81,7 @@ parser_match(struct parser *state, enum token_tag tag)
 static void
 parser_error(struct parser *state, const char *msg)
 {
-    printf("Error at line %u: %s\n",
-           parser_curr(state)->source.start_line, msg);
+    report_error(state->src, parser_curr(state)->span, "%s", msg);
 
     state->error = true;
     state->perfect = false;
@@ -99,7 +100,7 @@ parser_check(struct parser *state, enum token_tag tag, const char *msg)
 static inline bool
 parser_same_line(struct parser *state)
 {
-    return parser_curr(state)->source.start_line == parser_prev(state)->source.end_line;
+    return parser_curr(state)->span.start_line == parser_prev(state)->span.end_line;
 }
 
 static bool
@@ -117,7 +118,7 @@ parser_check_end(struct parser *state, const char *msg)
     /*
      * Implicit newline termination
      */
-    if (parser_curr(state)->source.start_line > parser_prev(state)->source.end_line)
+    if (parser_curr(state)->span.start_line > parser_prev(state)->span.end_line)
         return true;
 
     parser_error(state, msg);
@@ -133,8 +134,8 @@ parser_peek_sym(struct parser *state, struct symbol **sym)
         return false;
 
     token = parser_curr(state);
-    *sym = symbol_intern(token->source.start,
-                         token->source.end - token->source.start);
+    *sym = symbol_intern(token->span.start,
+                         token->span.end - token->span.start);
     return true;
 }
 
@@ -221,7 +222,7 @@ parser_type(struct parser *state, struct type **type)
             return false;
         }
 
-        count = strtoull(parser_curr(state)->source.start, NULL, 10);
+        count = strtoull(parser_curr(state)->span.start, NULL, 10);
         parser_advance(state);
 
         if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after array size"))
@@ -246,7 +247,7 @@ parser_escape_string(struct parser *state, const char **string)
     size_t i, j, len;
     char c, *buf;
 
-    span = parser_prev(state)->source;
+    span = parser_prev(state)->span;
     len = (span.end - span.start) - 2;
     buf = malloc(len + 1);
 
@@ -299,10 +300,10 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     const char *string;
     struct span start;
 
-    start = parser_curr(state)->source;
+    start = parser_curr(state)->span;
 
     if (parser_match(state, TOKEN_INT)) {
-        value = strtol(parser_prev(state)->source.start, NULL, 10);
+        value = strtol(parser_prev(state)->span.start, NULL, 10);
         *expr = expr_make_literal(LIT_INTEGER, value);
         goto done;
     }
@@ -366,7 +367,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     return false;
 
 done:
-    expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
+    expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -455,7 +456,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
     unsigned prec, count, i;
     struct span start;
 
-    start = parser_curr(state)->source;
+    start = parser_curr(state)->span;
 
     if (!parser_expr_simple(state, expr))
         return false;
@@ -490,7 +491,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
                 ((struct expr_call *)*expr)->args[i] = args[i];
             }
 
-            expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
+            expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
             continue;
         }
 
@@ -502,7 +503,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
                 return false;
 
             *expr = expr_make_index(*expr, rhs);
-            expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
+            expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
             continue;
         }
 
@@ -511,7 +512,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
                 return false;
 
             *expr = expr_make_access(*expr, field);
-            expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
+            expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
             continue;
         }
 
@@ -526,7 +527,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
             return false;
 
         *expr = expr_make_binop(*expr, rhs, parser_token_binop(op_tag));
-        expr_set_source(*expr, span_merge(start, parser_prev(state)->source));
+        expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
     }
 
     return true;
@@ -550,7 +551,7 @@ parser_stmt_block(struct parser *state, struct stmt **stmt)
     unsigned n;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     for (n = 0; !parser_eof(state); n++) {
         if (parser_match(state, TOKEN_RBRACE))
@@ -563,7 +564,7 @@ parser_stmt_block(struct parser *state, struct stmt **stmt)
 
     *stmt = stmt_make_block(n);
     memcpy(((struct stmt_block *)*stmt)->items, tmp, n * sizeof(struct stmt *));
-    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
+    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -575,7 +576,7 @@ parser_stmt_var(struct parser *state, struct stmt **stmt)
     struct expr *value;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     if (!parser_check_sym(state, &name, "Expected var name"))
         return false;
@@ -596,7 +597,7 @@ parser_stmt_var(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_var(name, type, value);
-    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
+    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -606,7 +607,7 @@ parser_stmt_return(struct parser *state, struct stmt **stmt)
     struct expr *value;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     value = NULL;
     if (parser_same_line(state) && parser_curr(state)->tag != TOKEN_SEMI && parser_curr(state)->tag != TOKEN_RBRACE) {
@@ -618,7 +619,7 @@ parser_stmt_return(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_return(value);
-    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
+    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -630,7 +631,7 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
     struct stmt *t_branch, *f_branch;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     if (!parser_expr(state, &cond))
         return false;
@@ -653,7 +654,7 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
     }
 
     *stmt = stmt_make_if(cond, t_branch, f_branch);
-    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
+    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -664,7 +665,7 @@ parser_stmt_while(struct parser *state, struct stmt **stmt)
     struct stmt *body;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     if (!parser_expr(state, &cond))
         return false;
@@ -676,7 +677,7 @@ parser_stmt_while(struct parser *state, struct stmt **stmt)
         return false;
 
     *stmt = stmt_make_while(cond, body);
-    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
+    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -687,7 +688,7 @@ parser_stmt(struct parser *state, struct stmt **stmt)
     struct expr *expr;
     struct span start;
 
-    start = parser_curr(state)->source;
+    start = parser_curr(state)->span;
 
     if (parser_match(state, TOKEN_LBRACE)) {
         return parser_stmt_block(state, stmt);
@@ -742,7 +743,7 @@ parser_stmt(struct parser *state, struct stmt **stmt)
     *stmt = stmt_make_expr(expr);
 
 done:
-    stmt_set_source(*stmt, span_merge(start, parser_prev(state)->source));
+    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -759,7 +760,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     size_t args_count;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     if (!parser_check_sym(state, &sym, "Expected procedure name"))
         return false;
@@ -812,7 +813,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     }
 
     *decl = decl_make_proc(sym, out, args, args_count, body);
-    decl_set_source(*decl, span_merge(start, parser_prev(state)->source));
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -825,7 +826,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
     size_t fields_count;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     if (!parser_check_sym(state, &sym, "Expected structure name"))
         return false;
@@ -859,7 +860,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
     memcpy(copy, fields, fields_count * sizeof(struct struct_field));
 
     *decl = decl_make_struct(sym, copy, fields_count);
-    decl_set_source(*decl, span_merge(start, parser_prev(state)->source));
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -870,7 +871,7 @@ parser_decl_type(struct parser *state, struct decl **decl)
     struct type *type;
     struct span start;
 
-    start = parser_prev(state)->source;
+    start = parser_prev(state)->span;
 
     if (!parser_check_sym(state, &sym, "Expected type name"))
         return false;
@@ -885,7 +886,7 @@ parser_decl_type(struct parser *state, struct decl **decl)
         return false;
 
     *decl = decl_make_type(sym, type);
-    decl_set_source(*decl, span_merge(start, parser_prev(state)->source));
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
 }
 
@@ -894,19 +895,24 @@ parser_decl(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
 
-    if (!parser_check_sym(state, &sym, "Expected declaration"))
-        return false;
+    if (parser_peek_sym(state, &sym)) {
+        if (sym == sym_proc) {
+            parser_advance(state);
+            return parser_decl_proc(state, decl);
+        }
 
-    if (sym == sym_proc)
-        return parser_decl_proc(state, decl);
+        if (sym == sym_struct) {
+            parser_advance(state);
+            return parser_decl_struct(state, decl);
+        }
 
-    if (sym == sym_struct)
-        return parser_decl_struct(state, decl);
+        if (sym == sym_type) {
+            parser_advance(state);
+            return parser_decl_type(state, decl);
+        }
+    }
 
-    if (sym == sym_type)
-        return parser_decl_type(state, decl);
-
-    parser_error(state, "Unknown declaration type");
+    parser_error(state, "Expected declaration");
     return false;
 }
 

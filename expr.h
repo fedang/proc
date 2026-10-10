@@ -69,7 +69,7 @@ enum unop_tag {
 };
 
 struct expr {
-    struct span source;
+    struct span span;
     struct type *type;
     enum expr_tag tag;
 };
@@ -140,9 +140,9 @@ expr_is_lvalue(struct expr *expr)
 }
 
 static inline void
-expr_set_source(struct expr *expr, struct span source)
+expr_set_span(struct expr *expr, struct span span)
 {
-    expr->source = source;
+    expr->span = span;
 }
 
 struct expr *expr_make_literal(enum literal_tag literal, intptr_t value);

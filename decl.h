@@ -21,7 +21,7 @@ enum decl_tag {
 };
 
 struct decl {
-    struct span source;
+    struct span span;
     enum decl_tag tag;
     struct attr *attr;
 };
@@ -49,9 +49,9 @@ struct decl_type {
 };
 
 static inline void
-decl_set_source(struct decl *decl, struct span source)
+decl_set_span(struct decl *decl, struct span span)
 {
-    decl->source = source;
+    decl->span = span;
 }
 
 static inline void

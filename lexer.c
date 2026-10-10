@@ -6,10 +6,9 @@
 #include "lexer.h"
 
 void
-lexer_init(struct lexer *state, const char *str, size_t size)
+lexer_init(struct lexer *state, struct source *src)
 {
-    state->str = str;
-    state->size = size;
+    state->src = src;
     state->curr = 0;
     state->start = 0;
     state->line = 1;
@@ -23,25 +22,25 @@ lexer_init(struct lexer *state, const char *str, size_t size)
 static inline bool
 lexer_eof(struct lexer *state)
 {
-    return state->curr >= state->size;
+    return state->curr >= state->src->len;
 }
 
 static inline char
 lexer_curr(struct lexer *state)
 {
-    return lexer_eof(state) ? '\0' : state->str[state->curr];
+    return lexer_eof(state) ? '\0' : state->src->str[state->curr];
 }
 
 static inline char
 lexer_peek(struct lexer *state)
 {
-    return lexer_eof(state) ? '\0' : state->str[state->curr + 1];
+    return lexer_eof(state) ? '\0' : state->src->str[state->curr + 1];
 }
 
 static inline char
 lexer_advance(struct lexer *state)
 {
-    return lexer_eof(state) ? '\0' : state->str[state->curr++];
+    return lexer_eof(state) ? '\0' : state->src->str[state->curr++];
 }
 
 static void
@@ -59,10 +58,10 @@ lexer_push(struct lexer *state, enum token_tag tag)
     }
 
     token = &state->tokens[state->tokens_count++];
-    token->source.start = &state->str[state->start];
-    token->source.end = &state->str[state->curr];
-    token->source.start_line = state->start_line;
-    token->source.end_line = state->line;
+    token->span.start = &state->src->str[state->start];
+    token->span.end = &state->src->str[state->curr];
+    token->span.start_line = state->start_line;
+    token->span.end_line = state->line;
     token->tag = tag;
 }
 

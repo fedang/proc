@@ -69,7 +69,7 @@ enum token_tag {
 };
 
 struct token {
-    struct span source;
+    struct span span;
     enum token_tag tag;
 };
 

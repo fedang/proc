@@ -5,10 +5,14 @@
 #define unreachable() assert(!"unreachable")
 
 #include "typecheck.h"
+#include "report.h"
 
 #define TYCHK_FIRST_PASS    0
 #define TYCHK_SECOND_PASS   1
 #define TYCHK_THIRD_PASS    2
+
+#define TYCHK_ERROR(state, span, ...) \
+    report_error((state)->src, (span), __VA_ARGS__)
 
 static void
 typecheck_type_push(struct typecheck *state, struct symbol *sym,
@@ -22,8 +26,9 @@ typecheck_type_push(struct typecheck *state, struct symbol *sym,
 }
 
 void
-typecheck_init(struct typecheck *state)
+typecheck_init(struct typecheck *state, struct source *src)
 {
+    state->src = src;
     state->pass = TYCHK_FIRST_PASS;
     state->ret_type = NULL;
     state->loop_depth = 0;
@@ -178,7 +183,8 @@ typecheck_expr_ident(struct typecheck *state, struct expr_ident *expr)
 
     type = typecheck_lookup(state, expr->sym);
     if (!type) {
-        printf("Undefined variable '%s'\n", expr->sym->str);
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Undefined variable '%s'\n", expr->sym->str);
         return false;
     }
 
@@ -193,13 +199,15 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
         return false;
 
     if (!typecheck_cmp(state, expr->op_lhs->type, expr->op_rhs->type)) {
-        printf("Binop operands have different types\n");
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Binop operands have different types\n");
         return false;
     }
 
     if (expr->binop >= BINOP_SET && expr->binop <= BINOP_MOD_SET) {
         if (!expr_is_lvalue(expr->op_lhs)) {
-            printf("Binop left operand is not an lvalue\n");
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Binop left operand is not an lvalue\n");
             return false;
         }
     }
@@ -208,7 +216,8 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
         case BINOP_BOOL_OR:
         case BINOP_BOOL_AND:
             if (!typecheck_cmp(state, expr->op_lhs->type, type_get_bool(NULL))) {
-                printf("Expected bool operands for and/or\n");
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Expected bool operands for and/or\n");
                 return false;
             }
             /* fall through */
@@ -235,7 +244,8 @@ typecheck_expr_unop(struct typecheck *state, struct expr_unop *expr)
 {
     if (expr->unop == UNOP_ADDROF) {
         if (!expr_is_lvalue(expr->op)) {
-            printf("Unop operand is not an lvalue\n");
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Unop operand is not an lvalue\n");
             return false;
         }
     }
@@ -246,7 +256,8 @@ typecheck_expr_unop(struct typecheck *state, struct expr_unop *expr)
     switch (expr->unop) {
         case UNOP_DEREF:
             if (expr->op->type->tag != TYPE_PTR) {
-                printf("Only pointer types can be dereferenced\n");
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Only pointer types can be dereferenced\n");
                 return false;
             }
 
@@ -259,7 +270,8 @@ typecheck_expr_unop(struct typecheck *state, struct expr_unop *expr)
 
         case UNOP_NOT:
             if (expr->op->type->tag != TYPE_BOOL) {
-                printf("Only bool values can be negated\n");
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Only bool values can be negated\n");
                 return false;
             }
 
@@ -268,7 +280,8 @@ typecheck_expr_unop(struct typecheck *state, struct expr_unop *expr)
 
         case UNOP_NEG:
             if (expr->op->type->tag != TYPE_INT && expr->op->type->tag != TYPE_UINT) {
-                printf("Only integers can be negated\n");
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Only integers can be negated\n");
                 return false;
             }
 
@@ -293,7 +306,8 @@ typecheck_expr_call(struct typecheck *state, struct expr_call *expr)
 
     proc = expr->op->type;
     if (proc->tag != TYPE_PROC || proc->proc.args_count != expr->args_count) {
-        printf("Call target is not a proc\n");
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Call target is not a proc\n");
         return false;
     }
 
@@ -302,7 +316,8 @@ typecheck_expr_call(struct typecheck *state, struct expr_call *expr)
             return false;
 
         if (!typecheck_cmp(state, proc->proc.args[i], expr->args[i]->type)) {
-            printf("Call argument does not match proc\n");
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Call argument does not match proc\n");
             return false;
         }
     }
@@ -318,7 +333,8 @@ typecheck_expr_index(struct typecheck *state, struct expr_index *expr)
         return false;
 
     if (expr->index->type->tag != TYPE_INT && expr->index->type->tag != TYPE_UINT) {
-        printf("Invalid index type\n");
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Invalid index type\n");
         return false;
     }
 
@@ -330,7 +346,8 @@ typecheck_expr_index(struct typecheck *state, struct expr_index *expr)
         return true;
     }
 
-    printf("Invalid type used for indexing\n");
+    TYCHK_ERROR(state, expr->expr.span,
+                "Invalid type used for indexing\n");
     return false;
 }
 
@@ -353,7 +370,8 @@ typecheck_expr_access(struct typecheck *state, struct expr_access *expr)
     }
 
     if (type->tag != TYPE_STRUCT) {
-        printf("Tried to access a field from a non-struct type\n");
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Tried to access a field from a non-struct type\n");
         return false;
     }
 
@@ -365,7 +383,8 @@ typecheck_expr_access(struct typecheck *state, struct expr_access *expr)
         }
     }
 
-    printf("Found no field named '%s'\n", expr->field->str);
+    TYCHK_ERROR(state, expr->expr.span,
+                "Found no field named '%s'\n", expr->field->str);
     return false;
 }
 
@@ -419,13 +438,15 @@ typecheck_stmt_var(struct typecheck *state, struct stmt_var *stmt)
         if (!stmt->type) {
             stmt->type = stmt->value->type;
         } else if (!typecheck_cmp(state, stmt->type, stmt->value->type)) {
-            printf("Type mismatch in variable assignment\n");
+            TYCHK_ERROR(state, stmt->stmt.span,
+                        "Type mismatch in variable assignment\n");
             return false;
         }
     }
 
     if (!stmt->type) {
-        printf("Cannot infer type for variable '%s'\n", stmt->sym->str);
+        TYCHK_ERROR(state, stmt->stmt.span,
+                    "Cannot infer type for variable '%s'\n", stmt->sym->str);
         return false;
     }
 
@@ -466,7 +487,8 @@ typecheck_stmt_if(struct typecheck *state, struct stmt_if *stmt)
         return false;
 
     if (!typecheck_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
-        printf("If condition is not of type bool\n");
+        TYCHK_ERROR(state, stmt->stmt.span,
+                    "If condition is not of type bool\n");
         return false;
     }
 
@@ -484,7 +506,8 @@ typecheck_stmt_return(struct typecheck *state, struct stmt_return *stmt)
 {
     if (!stmt->expr) {
         if (!typecheck_cmp(state, state->ret_type, type_get_void(NULL))) {
-            printf("Expected return value\n");
+            TYCHK_ERROR(state, stmt->stmt.span,
+                        "Expected return value\n");
             return false;
         }
     } else {
@@ -492,7 +515,8 @@ typecheck_stmt_return(struct typecheck *state, struct stmt_return *stmt)
             return false;
 
         if (!typecheck_cmp(state, stmt->expr->type, state->ret_type)) {
-            printf("Return value type does not match\n");
+            TYCHK_ERROR(state, stmt->stmt.span,
+                        "Return value type does not match\n");
             return false;
         }
     }
@@ -507,7 +531,8 @@ typecheck_stmt_while(struct typecheck *state, struct stmt_while *stmt)
         return false;
 
     if (!typecheck_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
-        printf("While condition is not of type bool\n");
+        TYCHK_ERROR(state, stmt->stmt.span,
+                    "While condition is not of type bool\n");
         return false;
     }
 
@@ -544,7 +569,8 @@ typecheck_stmt(struct typecheck *state, struct stmt *stmt)
         case STMT_BREAK:
         case STMT_CONTINUE:
             if (state->loop_depth == 0) {
-                printf("Cannot break/continue outside of a loop\n");
+                TYCHK_ERROR(state, stmt->span,
+                            "Cannot break/continue outside of a loop\n");
                 return false;
             }
             return true;
@@ -571,7 +597,8 @@ typecheck_decl_proc(struct typecheck *state, struct decl_proc *decl)
         }
 
         if (typecheck_lookup(state, decl->sym) != NULL) {
-            printf("Invalid redefinition of symbol '%s'\n", decl->sym->str);
+            TYCHK_ERROR(state, decl->decl.span,
+                        "Invalid redefinition of symbol '%s'\n", decl->sym->str);
             return false;
         }
 

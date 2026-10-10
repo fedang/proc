@@ -5,6 +5,7 @@
 
 #include "type.h"
 #include "decl.h"
+#include "source.h"
 
 struct named {
     struct symbol *sym;
@@ -12,6 +13,7 @@ struct named {
 };
 
 struct typecheck {
+    struct source *src;
     int pass;
     unsigned loop_depth;
     struct type *ret_type;
@@ -23,8 +25,9 @@ struct typecheck {
     unsigned types_count;
 };
 
-void typecheck_init(struct typecheck *tychk);
+void typecheck_init(struct typecheck *state, struct source *src);
 
-bool typecheck_module(struct typecheck *tychk, struct decl **decls, size_t decls_count);
+bool typecheck_module(struct typecheck *state, struct decl **decls,
+                      size_t decls_count);
 
 #endif

@@ -4,10 +4,10 @@
 #include <stddef.h>
 
 #include "token.h"
+#include "source.h"
 
 struct lexer {
-    const char *str;
-    size_t size;
+    struct source *src;
     size_t curr;
     size_t start;
     unsigned line;
@@ -18,7 +18,7 @@ struct lexer {
     size_t tokens_max;
 };
 
-void lexer_init(struct lexer *state, const char *str, size_t size);
+void lexer_init(struct lexer *state, struct source *src);
 
 void lexer_tokenize(struct lexer *state, struct token **tokens);
 
