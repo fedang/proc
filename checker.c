@@ -472,6 +472,15 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
 
         case BINOP_EQ:
         case BINOP_NOTEQ:
+            if (!type_is_scalar(expr->op_lhs->type)
+                    && expr->op_lhs->type->tag != TYPE_BOOL) {
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Invalid operand types for equality\n");
+                return false;
+            }
+            expr->expr.type = type_get_bool(NULL);
+            break;
+
         case BINOP_GT:
         case BINOP_GTEQ:
         case BINOP_LT:
