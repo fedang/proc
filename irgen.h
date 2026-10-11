@@ -35,13 +35,14 @@ struct irvar {
 };
 
 struct irgen {
+    struct source *src;
     FILE *out;
     unsigned regs;
     unsigned labels;
-    unsigned in_block;
-    bool terminated;
     jmp_buf recovery;
 
+    bool terminated;
+    unsigned in_block;
     unsigned loop_cond;
     unsigned loop_exit;
 
@@ -53,7 +54,7 @@ struct irgen {
     unsigned strings_count;
 };
 
-void irgen_init(struct irgen *state, FILE *out);
+void irgen_init(struct irgen *state, struct source *src, FILE *out);
 
 bool irgen_module(struct irgen *state, struct decl **decls, size_t decls_count);
 

@@ -55,7 +55,7 @@ main(int argc, char **argv)
         return 1;
     }
 
-    irgen_init(&irgen, out);
+    irgen_init(&irgen, &src, out);
     if (!irgen_module(&irgen, decls, decls_count)) {
         report_error(&src, NULL, "Failed to generate IR\n");
         return 1;

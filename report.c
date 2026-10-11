@@ -11,7 +11,7 @@
 #define TERM_BOLD   "\033[1m"
 #define TERM_RED    "\033[1;31m"
 #define TERM_MAGENTA "\033[1;35m"
-#define TERM_CYAN "\033[1;32m"
+#define TERM_CYAN "\033[1;36m"
 
 static void
 report_source_span(const struct source *src, const struct span *span,

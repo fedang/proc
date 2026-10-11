@@ -28,6 +28,7 @@ struct stmt_var {
     struct symbol *sym;
     struct type *type;
     struct expr *value;
+    unsigned slot;
 };
 
 struct stmt_expr {

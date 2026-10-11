@@ -11,9 +11,11 @@ proc main(argc: int, argv: **u8): int {
     y[0] = 99
     print32(y[0])
 
+    var s: int
     var i = 0
     while i < 5 {
-        puts("Hello World")
+        var s = "Hello World"
+        puts(s)
         i += 1
     }
 
@@ -40,15 +42,15 @@ struct ABC {
     c: u8
 }
 
-proc cond() {
-    if (1 == 1) && (1>2) {
-    1+(1>1
-
-    )
-    } else {
-    }
-
-    if (1 == 1) + (1>2) {
-    } else {
-    }
-}
+//proc cond() {
+//    if (1 == 1) && (1>2) {
+//    1+(1>1
+//
+//    )
+//    } else {
+//    }
+//
+//    if (1 == 1) + (1>2) {
+//    } else {
+//    }
+//}

@@ -1,9 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include <assert.h>
-#define unreachable() assert(!"unreachable")
-
 #include "typecheck.h"
 #include "report.h"
 

@@ -2,9 +2,7 @@
 #include <string.h>
 
 #include "irgen.h"
-
-#include <assert.h>
-#define unreachable() assert(!"unreachable")
+#include "report.h"
 
 static void
 irval_sprintf(struct irval val, char buf[static 32])
@@ -32,9 +30,10 @@ irval_sprintf(struct irval val, char buf[static 32])
 }
 
 void
-irgen_init(struct irgen *state, FILE *out)
+irgen_init(struct irgen *state, struct source *src, FILE *out)
 {
     memset(state, 0, sizeof(struct irgen));
+    state->src = src;
     state->out = out;
 }
 
@@ -179,7 +178,8 @@ irgen_emit_gep(struct irgen *state, struct type *type, struct irval ptr,
                unsigned n, ...)
 {
     char buf[32];
-    struct irval val, out;
+    struct irval idx, out;
+    struct type *idx_type;
     unsigned i;
     va_list args;
 
@@ -192,10 +192,17 @@ irgen_emit_gep(struct irgen *state, struct type *type, struct irval ptr,
     fprintf(state->out, ", ptr %s", buf);
 
     for (i = 0; i < n; i++) {
-        val = va_arg(args, struct irval);
+        idx = va_arg(args, struct irval);
+        idx_type = va_arg(args, struct type *);
 
-        irval_sprintf(val, buf);
-        fprintf(state->out, ", i32 %s", buf);
+        fprintf(state->out, ", ");
+        if (idx_type)
+            irgen_type(state, idx_type);
+        else
+            fprintf(state->out, "i32");
+
+        irval_sprintf(idx, buf);
+        fprintf(state->out, " %s", buf);
     }
 
     fputc('\n', state->out);
@@ -321,7 +328,8 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
                     return state->globals[i].val;
             }
 
-            printf("Undefined variable '%s'\n", ident->sym->str);
+            report_error(state->src, &expr->span, "Undefined variable '%s'\n",
+                         ident->sym->str);
             longjmp(state->recovery, 1);
 
         case EXPR_UNOP:
@@ -333,41 +341,51 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
 
         case EXPR_INDEX:
             index = (struct expr_index *)expr;
-            ptr = irgen_expr_lvalue(state, index->op);
-            idx = irgen_expr(state, index->index);
 
             /*
-             * Pointers must be loaded beforehand
+             * Array operands must lvalues, while pointers can by anything
              */
-            if (index->op->type->tag == TYPE_PTR) {
-                ptr = irgen_emit_load(state, index->op->type, ptr);
-                return irgen_emit_gep(state, index->expr.type, ptr, 1, idx);
+            if (index->op->type->tag == TYPE_ARRAY) {
+                ptr = irgen_expr_lvalue(state, index->op);
+                idx = irgen_expr(state, index->index);
+                return irgen_emit_gep(state, index->op->type, ptr, 2,
+                                      NULL, IRVAL_INT(0),
+                                      idx, index->index->type);
             }
 
-            return irgen_emit_gep(state, index->op->type, ptr,
-                                  2, IRVAL_INT(0), idx);
+            ptr = irgen_expr(state, index->op);
+            idx = irgen_expr(state, index->index);
+            return irgen_emit_gep(state, index->expr.type, ptr, 1,
+                                  idx, index->index->type);
 
         case EXPR_ACCESS:
             access = (struct expr_access *)expr;
-            ptr = irgen_expr_lvalue(state, access->op);
-
-            /*
-             * Auto-dereference struct pointers
-             */
             type = access->op->type;
-            while (type->tag == TYPE_PTR) {
-                ptr = irgen_emit_load(state, type, ptr);
+
+            if (type->tag == TYPE_PTR) {
+                ptr = irgen_expr(state, access->op);
                 type = type->pointer;
+
+                /*
+                 * Auto-dereference struct pointers
+                 */
+                while (type->tag == TYPE_PTR) {
+                    ptr = irgen_emit_load(state, type, ptr);
+                    type = type->pointer;
+                }
+            } else {
+                ptr = irgen_expr_lvalue(state, access->op);
             }
 
-            return irgen_emit_gep(state, type, ptr,
-                                  2, IRVAL_INT(0), IRVAL_INT(access->offset));
+            return irgen_emit_gep(state, type, ptr, 2,
+                                  IRVAL_INT(0), NULL,
+                                  IRVAL_INT(access->offset), NULL);
 
         default:
             break;
     }
 
-    printf("Invalid lvalue\n");
+    report_error(state->src, &expr->span, "Invalid lvalue expression\n");
     longjmp(state->recovery, 1);
 }
 
@@ -646,7 +664,7 @@ irgen_stmt_var(struct irgen *state, struct stmt_var *stmt)
 {
     struct irval slot, val;
 
-    slot = irgen_emit_simple0(state, "alloca", stmt->type);
+    slot = IRVAL_REG(stmt->slot);
 
     assert(state->locals_count < 256 && "too many locals!");
     state->locals[state->locals_count].sym = stmt->sym;
@@ -844,6 +862,51 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
 }
 
 /*
+ * Hoist local vars to the first IR block for mem2reg
+ */
+static void
+irgen_emit_vars(struct irgen *state, struct stmt *stmt)
+{
+    struct stmt_var *var;
+    struct stmt_block *block;
+    size_t i;
+
+    if (!stmt)
+        return;
+
+    switch (stmt->tag) {
+        case STMT_VAR:
+            var = (struct stmt_var *)stmt;
+            var->slot = irgen_emit_simple0(state, "alloca", var->type).reg;
+            break;
+
+        case STMT_BLOCK:
+            block = (struct stmt_block *)stmt;
+            for (i = 0; i < block->items_count; i++)
+                irgen_emit_vars(state, block->items[i]);
+            break;
+
+        case STMT_IF:
+            irgen_emit_vars(state, ((struct stmt_if *)stmt)->b_true);
+            irgen_emit_vars(state, ((struct stmt_if *)stmt)->b_false);
+            break;
+
+        case STMT_WHILE:
+            irgen_emit_vars(state, ((struct stmt_while *)stmt)->body);
+            break;
+
+        case STMT_EXPR:
+        case STMT_RETURN:
+        case STMT_CONTINUE:
+        case STMT_BREAK:
+            break;
+
+        default:
+            unreachable();
+    }
+}
+
+/*
  * Declarations
  */
 static void
@@ -901,6 +964,8 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
         state->locals_count++;
     }
 
+    irgen_emit_vars(state, decl->body);
+
     irgen_stmt(state, decl->body);
 
     if (!state->terminated) {
@@ -952,13 +1017,11 @@ irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
     struct symbol *sym;
     size_t i, j, len;
     uint8_t c;
-    bool ok = true;
+
+    if (setjmp(state->recovery) != 0)
+        return false;
 
     fprintf(state->out, "target triple = \"x86_64-pc-linux-gnu\"\n");
-
-    if (setjmp(state->recovery) != 0) {
-        ok = false;
-    }
 
     for (i = 0; i < decls_count; i++) {
         if (decls[i]->tag == DECL_STRUCT) {
@@ -996,5 +1059,5 @@ irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
         fprintf(state->out, "\\00\", align 1\n");
     }
 
-    return ok;
+    return true;
 }
