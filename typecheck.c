@@ -232,6 +232,11 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
             break;
 
         default:
+            if (expr->op_lhs->type->tag != TYPE_INT && expr->op_lhs->type->tag != TYPE_UINT) {
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Expected integer operand for binops\n");
+                return false;
+            }
             expr->expr.type = expr->op_lhs->type;
             break;
     }

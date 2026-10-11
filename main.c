@@ -28,7 +28,7 @@ main(int argc, char **argv)
     }
 
     if (!source_open(&src, argv[1])) {
-        printf("Failed to read input file %s\n", argv[1]);
+        report_error(&src, NULL, "Failed to read input file %s\n", argv[1]);
         return 1;
     }
 
@@ -37,13 +37,13 @@ main(int argc, char **argv)
 
     parser_init(&parser, &src, tokens);
     if (!parser_module(&parser, &decls, &decls_count)) {
-        printf("Failed to parse file\n");
+        report_error(&src, NULL, "Failed to parse file\n");
         return 1;
     }
 
     typecheck_init(&tychk, &src);
     if (!typecheck_module(&tychk, decls, decls_count)) {
-        printf("Failed to typecheck file\n");
+        report_error(&src, NULL, "Failed to typecheck file\n");
         return 1;
     }
 
@@ -51,13 +51,13 @@ main(int argc, char **argv)
 
     out = fopen("test.ll", "wb");
     if (!out) {
-        printf("Failed to open output file\n");
+        report_error(&src, NULL, "Failed to open output file\n");
         return 1;
     }
 
     irgen_init(&irgen, out);
     if (!irgen_module(&irgen, decls, decls_count)) {
-        printf("Failed to generate IR\n");
+        report_error(&src, NULL, "Failed to generate IR\n");
         return 1;
     }
 

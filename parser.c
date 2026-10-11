@@ -81,7 +81,7 @@ parser_match(struct parser *state, enum token_tag tag)
 static void
 parser_error(struct parser *state, const char *msg)
 {
-    report_error(state->src, &parser_curr(state)->span, "%s", msg);
+    report_error(state->src, &parser_curr(state)->span, "%s\n", msg);
 
     state->error = true;
     state->perfect = false;
