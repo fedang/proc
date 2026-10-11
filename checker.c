@@ -620,7 +620,14 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         if (!type)
             return false;
 
-        expr->args[0]->type = type;
+        if (expr->name == symbol_size_of) {
+            expr->macro.tag = MACRO_SIZEOF;
+            expr->macro.value = type_sizeof(type);
+        } else {
+            expr->macro.tag = MACRO_ALIGNOF;
+            expr->macro.value = type_alignof(type);
+        }
+
         expr->expr.type = type_get_uint(NULL, 64);
         return true;
     }
@@ -645,6 +652,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             return false;
         }
 
+        expr->macro.tag = MACRO_CAST;
         expr->expr.type = type;
         return true;
     }

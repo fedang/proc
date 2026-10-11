@@ -210,6 +210,26 @@ irgen_emit_gep(struct irgen *state, struct type *type, struct irval ptr,
 }
 
 static struct irval
+irgen_emit_conv(struct irgen *state, const char *instr, struct irval val,
+                struct type *src, struct type *dst)
+{
+    char buf[32];
+    struct irval out;
+
+    out = IRVAL_REG(irgen_fresh_reg(state));
+    irval_sprintf(val, buf);
+
+    fprintf(state->out, "\t%%%u = %s ", out.reg, instr);
+    irgen_type(state, src);
+
+    fprintf(state->out, " %s to ", buf);
+    irgen_type(state, dst);
+
+    fputc('\n', state->out);
+    return out;
+}
+
+static struct irval
 irgen_emit_load(struct irgen *state, struct type *type, struct irval slot)
 {
     struct irval out;
@@ -622,10 +642,61 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
     return out;
 }
 
+static const char *
+irgen_cast_instr(const struct type *src, const struct type *dst)
+{
+    size_t src_bits, dst_bits;
+    bool src_ptr, dst_ptr;
+
+    src_ptr = src->tag == TYPE_PTR;
+    dst_ptr = dst->tag == TYPE_PTR;
+    if (src_ptr && dst_ptr)
+        return NULL;
+
+    if (src_ptr)
+        return "ptrtoint";
+
+    if (dst_ptr)
+        return "inttoptr";
+
+    src_bits = type_integer_bits(src);
+    dst_bits = type_integer_bits(dst);
+
+    if (src_bits == dst_bits)
+        return NULL;
+
+    if (dst_bits < src_bits)
+        return "trunc";
+
+    return src->tag == TYPE_INT ? "sext" : "zext";
+}
+
 static struct irval
 irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
 {
-    unreachable();
+    struct expr *arg;
+    struct irval val;
+    const char *instr;
+
+    switch (expr->macro.tag) {
+        case MACRO_EXPR:
+            return irgen_expr(state, expr->macro.expr);
+
+        case MACRO_SIZEOF:
+        case MACRO_ALIGNOF:
+            return IRVAL_INT(expr->macro.value);
+
+        case MACRO_CAST:
+            arg = expr->args[1];
+            val = irgen_expr(state, arg);
+            instr = irgen_cast_instr(arg->type, expr->expr.type);
+            return instr
+                 ? irgen_emit_conv(state, instr, val, arg->type, expr->expr.type)
+                 : val;
+
+        default:
+            unreachable();
+    }
 }
 
 struct irval

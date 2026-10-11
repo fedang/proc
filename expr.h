@@ -68,6 +68,23 @@ enum unop_tag {
     UNOP_NOT,
 };
 
+enum macro_tag {
+    MACRO_INVALID,
+    MACRO_EXPR,
+    // Builtins
+    MACRO_SIZEOF,
+    MACRO_ALIGNOF,
+    MACRO_CAST,
+};
+
+struct macro {
+    enum macro_tag tag;
+    union {
+        struct expr *expr;
+        int64_t value;
+    };
+};
+
 struct expr {
     struct span span;
     struct type *type;
@@ -125,6 +142,7 @@ struct expr_macro {
     struct expr expr;
     struct symbol *name;
     struct stmt *body;
+    struct macro macro;
     size_t args_count;
     struct expr *args[];
 };

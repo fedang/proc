@@ -10,6 +10,10 @@ proc main(argc: int, argv: **u8): int {
     puts("sizeof is")
     print32(@cast(int, @size_of(int)))
 
+    var func = &test_print
+    //func()
+    (*func)()
+
     var y : int[4]
     y[0] = 99
     print32(y[0])
@@ -25,6 +29,10 @@ proc main(argc: int, argv: **u8): int {
     structural()
     print32(x / 2)
     return 0
+}
+
+proc test_print() {
+    puts("Test print!")
 }
 
 proc structural() {
