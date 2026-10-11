@@ -5,7 +5,7 @@
 
 #include "lexer.h"
 #include "parser.h"
-#include "typecheck.h"
+#include "checker.h"
 #include "irgen.h"
 #include "report.h"
 
@@ -15,7 +15,7 @@ main(int argc, char **argv)
     struct source src;
     struct lexer lexer;
     struct parser parser;
-    struct typecheck tychk;
+    struct checker tychk;
     struct irgen irgen;
     struct token *tokens;
     struct decl **decls;
@@ -32,18 +32,20 @@ main(int argc, char **argv)
         return 1;
     }
 
+    symbol_init();
+
     lexer_init(&lexer, &src);
     lexer_tokenize(&lexer, &tokens);
 
     parser_init(&parser, &src, tokens);
     if (!parser_module(&parser, &decls, &decls_count)) {
-        report_error(&src, NULL, "Failed to parse file\n");
+        report_info(&src, NULL, "Failed to parse source file\n");
         return 1;
     }
 
-    typecheck_init(&tychk, &src);
-    if (!typecheck_module(&tychk, decls, decls_count)) {
-        report_error(&src, NULL, "Failed to typecheck file\n");
+    checker_init(&tychk, &src);
+    if (!checker_module(&tychk, decls, decls_count)) {
+        report_info(&src, NULL, "Failed semantic analysis\n");
         return 1;
     }
 
@@ -51,18 +53,22 @@ main(int argc, char **argv)
 
     out = fopen("test.ll", "wb");
     if (!out) {
-        report_error(&src, NULL, "Failed to open output file\n");
+        report_info(&src, NULL, "Failed to open output file\n");
         return 1;
     }
 
     irgen_init(&irgen, &src, out);
     if (!irgen_module(&irgen, decls, decls_count)) {
-        report_error(&src, NULL, "Failed to generate IR\n");
+        report_info(&src, NULL, "Failed to generate IR\n");
         return 1;
     }
 
     fclose(out);
-    system("clang test.ll test.c -O1 -o test -Wno-override-module");
+
+    if (system("clang test.ll test.c -O1 -o test -Wno-override-module")) {
+        report_info(&src, NULL, "Failed to compile IR\n");
+        return 1;
+    }
 
     return 0;
 }

@@ -10,6 +10,11 @@ static struct symbol sym_pool[MAX_SYMBOLS];
 
 static size_t sym_count;
 
+#define X(sym) \
+    struct symbol *symbol_ ## sym;
+SYMBOL_LIST(X)
+#undef X
+
 struct symbol *
 symbol_intern(const char *str, size_t len)
 {
@@ -40,4 +45,14 @@ struct symbol *
 symbol_make(const char *str)
 {
     return symbol_intern(str, strlen(str));
+}
+
+void
+symbol_init(void)
+{
+
+#define X(sym) \
+    symbol_ ## sym = symbol_make(#sym);
+    SYMBOL_LIST(X)
+#undef X
 }

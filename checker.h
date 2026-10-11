@@ -1,5 +1,5 @@
-#ifndef _TYPECHECK_H
-#define _TYPECHECK_H
+#ifndef _CHECKER_H
+#define _CHECKER_H
 
 #include <stddef.h>
 
@@ -12,7 +12,7 @@ struct named {
     struct type *type;
 };
 
-struct typecheck {
+struct checker {
     struct source *src;
     int pass;
     unsigned loop_depth;
@@ -25,9 +25,9 @@ struct typecheck {
     unsigned types_count;
 };
 
-void typecheck_init(struct typecheck *state, struct source *src);
+void checker_init(struct checker *state, struct source *src);
 
-bool typecheck_module(struct typecheck *state, struct decl **decls,
+bool checker_module(struct checker *state, struct decl **decls,
                       size_t decls_count);
 
 #endif

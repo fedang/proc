@@ -6,18 +6,6 @@
 #include "parser.h"
 #include "report.h"
 
-static struct symbol *sym_let;
-static struct symbol *sym_var;
-static struct symbol *sym_if;
-static struct symbol *sym_else;
-static struct symbol *sym_return;
-static struct symbol *sym_while;
-static struct symbol *sym_break;
-static struct symbol *sym_continue;
-static struct symbol *sym_proc;
-static struct symbol *sym_struct;
-static struct symbol *sym_type;
-
 void
 parser_init(struct parser *state, struct source *src, struct token *tokens)
 {
@@ -26,21 +14,6 @@ parser_init(struct parser *state, struct source *src, struct token *tokens)
     state->curr = 0;
     state->error = false;
     state->perfect = true;
-
-    /*
-     * Intern keyword symbols
-     */
-    sym_let = symbol_make("let");
-    sym_var = symbol_make("var");
-    sym_if = symbol_make("if");
-    sym_else = symbol_make("else");
-    sym_return = symbol_make("return");
-    sym_while = symbol_make("while");
-    sym_break = symbol_make("break");
-    sym_continue = symbol_make("continue");
-    sym_proc = symbol_make("proc");
-    sym_struct = symbol_make("struct");
-    sym_type = symbol_make("type");
 }
 
 static inline struct token *
@@ -170,7 +143,7 @@ parser_sync(struct parser *state)
 
     while (!parser_eof(state)) {
         if (parser_peek_sym(state, &sym)) {
-            if (sym == sym_proc)
+            if (sym == symbol_proc)
                 return;
         }
 
@@ -640,7 +613,7 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
         return false;
 
     f_branch = NULL;
-    if (parser_peek_sym(state, &sym) && sym == sym_else) {
+    if (parser_peek_sym(state, &sym) && sym == symbol_else) {
         parser_advance(state);
 
         if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after else"))
@@ -692,27 +665,27 @@ parser_stmt(struct parser *state, struct stmt **stmt)
     }
 
     if (parser_peek_sym(state, &sym)) {
-        if (sym == sym_return) {
+        if (sym == symbol_return) {
             parser_advance(state);
             return parser_stmt_return(state, stmt);
         }
 
-        if (sym == sym_if) {
+        if (sym == symbol_if) {
             parser_advance(state);
             return parser_stmt_if(state, stmt);
         }
 
-        if (sym == sym_var) {
+        if (sym == symbol_var) {
             parser_advance(state);
             return parser_stmt_var(state, stmt);
         }
 
-        if (sym == sym_while) {
+        if (sym == symbol_while) {
             parser_advance(state);
             return parser_stmt_while(state, stmt);
         }
 
-        if (sym == sym_break) {
+        if (sym == symbol_break) {
             parser_advance(state);
             if (!parser_check_end(state, "Expected newline or ';' after break"))
                 return false;
@@ -721,7 +694,7 @@ parser_stmt(struct parser *state, struct stmt **stmt)
             goto done;
         }
 
-        if (sym == sym_continue) {
+        if (sym == symbol_continue) {
             parser_advance(state);
             if (!parser_check_end(state, "Expected newline or ';' after continue"))
                 return false;
@@ -893,17 +866,17 @@ parser_decl(struct parser *state, struct decl **decl)
     struct symbol *sym;
 
     if (parser_peek_sym(state, &sym)) {
-        if (sym == sym_proc) {
+        if (sym == symbol_proc) {
             parser_advance(state);
             return parser_decl_proc(state, decl);
         }
 
-        if (sym == sym_struct) {
+        if (sym == symbol_struct) {
             parser_advance(state);
             return parser_decl_struct(state, decl);
         }
 
-        if (sym == sym_type) {
+        if (sym == symbol_type) {
             parser_advance(state);
             return parser_decl_type(state, decl);
         }
