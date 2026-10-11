@@ -175,6 +175,11 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
                     return true;
 
                 case BINOP_MOD:
+                    if (rhs == 0) {
+                        TYCHK_ERROR(state, expr->span,
+                                    "Modulo by zero in constant expression\n");
+                        return false;
+                    }
                     *out = lhs % rhs;
                     return true;
 
@@ -458,6 +463,9 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
 static bool
 checker_expr_unop(struct checker *state, struct expr_unop *expr)
 {
+    if (!checker_expr(state, expr->op))
+        return false;
+
     if (expr->unop == UNOP_ADDROF) {
         if (!expr_is_lvalue(expr->op)) {
             TYCHK_ERROR(state, expr->expr.span,
@@ -465,9 +473,6 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
             return false;
         }
     }
-
-    if (!checker_expr(state, expr->op))
-        return false;
 
     switch (expr->unop) {
         case UNOP_DEREF:
@@ -828,6 +833,8 @@ checker_stmt_return(struct checker *state, struct stmt_return *stmt)
 static bool
 checker_stmt_while(struct checker *state, struct stmt_while *stmt)
 {
+    bool ok;
+
     if (!checker_expr(state, stmt->cond))
         return false;
 
@@ -838,11 +845,9 @@ checker_stmt_while(struct checker *state, struct stmt_while *stmt)
     }
 
     state->loop_depth++;
-    if (!checker_stmt(state, stmt->body))
-        return false;
-
+    ok = checker_stmt(state, stmt->body);
     state->loop_depth--;
-    return true;
+    return ok;
 }
 
 static bool
@@ -978,6 +983,7 @@ checker_decl_struct(struct checker *state, struct decl_struct *decl)
             }
         }
 
+        type = NULL;
         for (i = 0; i < state->types_count; i++) {
             if (state->types[i].sym == decl->sym) {
                 type = state->types[i].type;

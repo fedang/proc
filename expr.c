@@ -116,3 +116,34 @@ expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
     expr->args_count = args_count;
     return &expr->expr;
 }
+
+bool
+expr_is_lvalue(const struct expr *expr)
+{
+    const struct expr_access *access;
+    const struct expr_macro *macro;
+
+    switch (expr->tag) {
+        case EXPR_IDENT:
+        case EXPR_INDEX:
+            return true;
+
+        case EXPR_ACCESS:
+            access = (const struct expr_access *)expr;
+            if (access->op->type && access->op->type->tag == TYPE_PTR)
+                return true;
+            return expr_is_lvalue(access->op);
+
+        case EXPR_UNOP:
+            return ((const struct expr_unop *)expr)->unop == UNOP_DEREF;
+
+        case EXPR_MACRO:
+            macro = (const struct expr_macro *)expr;
+            if (macro->macro.tag == MACRO_EXPR)
+                return expr_is_lvalue(macro->macro.expr);
+            /* fall through */
+
+        default:
+            return false;
+    }
+}

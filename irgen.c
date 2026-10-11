@@ -329,6 +329,7 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
     struct expr_unop *unop;
     struct expr_index *index;
     struct expr_access *access;
+    struct expr_macro *macro;
     struct irval ptr, idx;
     struct type *type;
     size_t i;
@@ -400,12 +401,18 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
                                   IRVAL_INT(0), NULL,
                                   IRVAL_INT(access->offset), NULL);
 
-        default:
+        case EXPR_MACRO:
+            macro = (struct expr_macro *)expr;
+            if (macro->macro.tag == MACRO_EXPR)
+                return irgen_expr_lvalue(state, macro->macro.expr);
             break;
+
+        default:
+            report_error(state->src, &expr->span, "Invalid lvalue expression\n");
+            longjmp(state->recovery, 1);
     }
 
-    report_error(state->src, &expr->span, "Invalid lvalue expression\n");
-    longjmp(state->recovery, 1);
+    unreachable();
 }
 
 static struct irval

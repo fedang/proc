@@ -147,17 +147,6 @@ struct expr_macro {
     struct expr *args[];
 };
 
-static inline bool
-expr_is_lvalue(struct expr *expr)
-{
-    if (expr->tag == EXPR_UNOP)
-        return ((struct expr_unop *)expr)->unop == UNOP_DEREF;
-
-    return expr->tag == EXPR_IDENT
-        || expr->tag == EXPR_INDEX
-        || expr->tag == EXPR_ACCESS;
-}
-
 static inline void
 expr_set_span(struct expr *expr, struct span span)
 {
@@ -181,5 +170,7 @@ struct expr *expr_make_access(struct expr *op, struct symbol *field);
 
 struct expr *expr_make_macro(struct symbol *name, struct stmt *body,
                              size_t args_count);
+
+bool expr_is_lvalue(const struct expr *expr);
 
 #endif
