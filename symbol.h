@@ -17,6 +17,7 @@
     X(type) \
     X(size_of) \
     X(align_of) \
+    X(type_of) \
     X(cast)
 
 struct symbol {

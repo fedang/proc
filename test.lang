@@ -1,4 +1,9 @@
 proc main(argc: int, argv: **u8): int {
+    var arr: int[@size_of(int) * 4 / 2]
+
+    print32(@cast(int, @size_of(@type_of(arr))))
+
+
     var x : int = 10
     x *= 1 + 2
     if x == 10 {
@@ -20,7 +25,6 @@ proc main(argc: int, argv: **u8): int {
     1 + 1
     (1
     +1)
-
 
     var y : int[4]
     y[0] = 99

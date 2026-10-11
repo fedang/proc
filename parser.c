@@ -147,7 +147,7 @@ parser_sync(struct parser *state)
 
     while (!parser_eof(state)) {
         if (parser_peek_sym(state, &sym)) {
-            if (sym == symbol_proc)
+            if (sym == symbol_proc || sym == symbol_struct || sym == symbol_type)
                 return;
         }
 

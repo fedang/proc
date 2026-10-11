@@ -60,7 +60,6 @@ static inline bool
 type_is_scalar(const struct type *type)
 {
     return type_is_integer(type)
-        || type->tag == TYPE_BOOL
         || type->tag == TYPE_PTR;
 }
 

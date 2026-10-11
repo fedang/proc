@@ -107,6 +107,8 @@ static bool checker_resolve(struct checker *state, struct type **type);
 
 static struct type *checker_eval_raw(struct checker *state, struct expr *expr);
 
+static bool checker_expr(struct checker *state, struct expr *expr);
+
 static bool checker_expr_macro(struct checker *state, struct expr_macro *expr);
 
 static bool
@@ -246,6 +248,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
     struct expr_ident *ident;
     struct expr_unop *unop;
     struct expr_index *index;
+    struct expr_macro *macro;
     int64_t count;
     size_t i;
 
@@ -299,6 +302,27 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             return type_get_array(NULL, type, count);
+        }
+
+        case EXPR_MACRO: {
+            macro = (struct expr_macro *)expr;
+            if (macro->name == symbol_type_of) {
+                if (macro->body || macro->args_count != 1) {
+                    TYCHK_ERROR(state, expr->span,
+                                "Expected 1 argument and no block\n");
+                    return NULL;
+                }
+
+                if (!checker_expr(state, macro->args[0]))
+                    return NULL;
+
+                return macro->args[0]->type;
+            }
+
+            TYCHK_ERROR(state, expr->span,
+                        "Macro '@%s' cannot be used as a type\n",
+                        macro->name->str);
+            return NULL;
         }
 
         default:
@@ -357,8 +381,6 @@ checker_cmp(struct checker *state, struct type *t1, struct type *t2)
 {
     return t1 == t2;
 }
-
-static bool checker_expr(struct checker *state, struct expr *expr);
 
 static bool
 checker_expr_literal(struct checker *state, struct expr_literal *expr)
@@ -684,6 +706,13 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         expr->macro.tag = MACRO_CAST;
         expr->expr.type = type;
         return true;
+    }
+
+    if (expr->name == symbol_type_of) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "'@%s' produces a type and cannot be used as a value\n",
+                    expr->name->str);
+        return false;
     }
 
     TYCHK_ERROR(state, expr->expr.span,
