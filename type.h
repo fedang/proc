@@ -49,6 +49,10 @@ struct type {
     };
 };
 
+size_t type_sizeof(const struct type *type);
+
+size_t type_alignof(const struct type *type);
+
 static inline bool
 type_is_integer(const struct type *type)
 {
@@ -77,6 +81,12 @@ type_integer_bits(const struct type *type)
         : sizeof(int) * 8;
 }
 
+static inline bool
+type_is_zst(const struct type *type)
+{
+    return type_sizeof(type) == 0;
+}
+
 struct type *type_make_raw(struct expr *raw);
 
 struct type *type_get_bool(struct attr *attr);
@@ -96,9 +106,5 @@ struct type *type_get_struct(struct attr *attr, struct symbol *name,
 
 struct type *type_get_proc(struct attr *attr, struct type *out,
                            struct type **args, size_t args_count);
-
-size_t type_sizeof(struct type *type);
-
-size_t type_alignof(struct type *type);
 
 #endif

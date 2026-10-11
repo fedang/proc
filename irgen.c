@@ -55,7 +55,7 @@ irgen_fresh_label(struct irgen *state)
 /*
  * Types
  */
-void
+static void
 irgen_type(struct irgen *state, struct type *type)
 {
     size_t i;
@@ -73,7 +73,7 @@ irgen_type(struct irgen *state, struct type *type)
             break;
 
         case TYPE_VOID:
-            fprintf(state->out, "void");
+            fprintf(state->out, "{}");
             break;
 
         case TYPE_PTR:
@@ -107,6 +107,18 @@ irgen_type(struct irgen *state, struct type *type)
 
         default:
             unreachable();
+    }
+}
+
+static void
+irgen_type_ret(struct irgen *state, struct type *type)
+{
+    assert(type && "expected valid type");
+
+    if (type_is_zst(type)) {
+        fprintf(state->out, "void");
+    } else {
+        irgen_type(state, type);
     }
 }
 
@@ -235,6 +247,9 @@ irgen_emit_load(struct irgen *state, struct type *type, struct irval slot)
     struct irval out;
     char buf[32];
 
+    if (type_is_zst(type))
+        return IRVAL_INT(0);
+
     out = IRVAL_REG(irgen_fresh_reg(state));
     fprintf(state->out, "\t%%%u = load ", out.reg);
     irgen_type(state, type);
@@ -249,6 +264,9 @@ irgen_emit_store(struct irgen *state, struct type *type, struct irval slot,
                  struct irval val)
 {
     char buf1[32], buf2[32];
+
+    if (type_is_zst(type))
+        return;
 
     fprintf(state->out, "\tstore ");
     irgen_type(state, type);
@@ -267,9 +285,9 @@ irgen_emit_ret(struct irgen *state, struct type *type, struct irval val)
         return;
 
     fprintf(state->out, "\tret ");
-    irgen_type(state, type);
+    irgen_type_ret(state, type);
 
-    if (!type || type->tag != TYPE_VOID) {
+    if (type && !type_is_zst(type)) {
         irval_sprintf(val, buf);
         fprintf(state->out, " %s", buf);
     }
@@ -616,7 +634,7 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
 {
     struct irval func, out, vals[expr->args_count];
     char buf[32];
-    unsigned i;
+    unsigned i, k;
 
     func = irgen_expr(state, expr->op);
     irval_sprintf(func, buf);
@@ -625,24 +643,28 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
         vals[i] = irgen_expr(state, expr->args[i]);
     }
 
-    if (expr->expr.type->tag == TYPE_VOID) {
-        out = IRVAL_REG(0);
+    if (type_is_zst(expr->expr.type)) {
+        out = IRVAL_INT(0);
         fprintf(state->out, "\tcall ");
     } else {
         out = IRVAL_REG(irgen_fresh_reg(state));
         fprintf(state->out, "\t%%%u = call ", out.reg);
     }
 
-    irgen_type(state, expr->expr.type);
+    irgen_type_ret(state, expr->expr.type);
     fprintf(state->out, " %s(", buf);
 
-    for (i = 0; i < expr->args_count; i++) {
-        if (i != 0)
+    for (i = 0, k = 0; i < expr->args_count; i++) {
+        if (type_is_zst(expr->args[i]->type))
+            continue;
+
+        if (k != 0)
             fprintf(state->out, ", ");
 
         irval_sprintf(vals[i], buf);
         irgen_type(state, expr->args[i]->type);
         fprintf(state->out, " %s", buf);
+        k++;
     }
 
     fprintf(state->out, ")\n");
@@ -1000,20 +1022,25 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 {
     struct proc_arg *ptr;
     struct irval slot;
-    unsigned reg;
+    unsigned reg, k;
 
     /*
      * External declaration
      */
     if (!decl->body) {
         fprintf(state->out, "\ndeclare ");
-        irgen_type(state, decl->out);
+        irgen_type_ret(state, decl->out);
         fprintf(state->out, " @%s(", decl->sym->str);
 
-        for (ptr = decl->args; ptr; ptr = ptr->next) {
-            irgen_type(state, ptr->type);
-            if (ptr->next)
+        for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
+            if (type_is_zst(ptr->type))
+                continue;
+
+            if (k != 0)
                 fprintf(state->out, ", ");
+
+            irgen_type(state, ptr->type);
+            k++;
         }
 
         fprintf(state->out, ")\n");
@@ -1025,14 +1052,19 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
     state->locals_count = 0;
 
     fprintf(state->out, "\ndefine ");
-    irgen_type(state, decl->out);
+    irgen_type_ret(state, decl->out);
     fprintf(state->out, " @%s(", decl->sym->str);
 
-    for (ptr = decl->args; ptr; ptr = ptr->next) {
+    for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
+        if (type_is_zst(ptr->type))
+            continue;
+
+        if (k != 0)
+            fprintf(state->out, ", ");
+
         irgen_type(state, ptr->type);
         fprintf(state->out, " %%%u", irgen_fresh_reg(state));
-        if (ptr->next)
-            fprintf(state->out, ", ");
+        k++;
     }
 
     fprintf(state->out, ") {\n");
@@ -1042,7 +1074,8 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 
     for (ptr = decl->args; ptr; ptr = ptr->next) {
         slot = irgen_emit_simple0(state, "alloca", ptr->type);
-        irgen_emit_store(state, ptr->type, slot, IRVAL_REG(reg++));
+        if (!type_is_zst(ptr->type))
+            irgen_emit_store(state, ptr->type, slot, IRVAL_REG(reg++));
 
         assert(state->locals_count < 256 && "too many locals!");
         state->locals[state->locals_count].sym = ptr->sym;
@@ -1055,7 +1088,7 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
     irgen_stmt(state, decl->body);
 
     if (!state->terminated) {
-        if (decl->out && decl->out->tag == TYPE_VOID) {
+        if (decl->out && type_is_zst(decl->out)) {
             fprintf(state->out, "\tret void\n");
         } else {
             fprintf(state->out, "\tunreachable\n");

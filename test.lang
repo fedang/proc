@@ -1,8 +1,29 @@
+struct zst {
+    x: void
+}
+
+proc zsp(a: zst, b: void): zst {
+    var x: zst = a
+    var y = &x
+    return x
+}
+
+proc zero_test() {
+    var zero: zst
+    var v: void
+
+    puts("sizeof zst is:")
+    print32(@cast(int, @size_of(@type_of(zero))))
+
+    zsp(zero, v)
+}
+
 proc main(argc: int, argv: **u8): int {
     var arr: int[@size_of(int) * 4 / 2]
 
     print32(@cast(int, @size_of(@type_of(arr))))
 
+    zero_test()
 
     var x : int = 10
     x *= 1 + 2

@@ -230,7 +230,7 @@ type_get_proc(struct attr *attr, struct type *out,
     ((x) + (y) - 1) & ~((y) - 1)
 
 size_t
-type_sizeof(struct type *type)
+type_sizeof(const struct type *type)
 {
     size_t i, size, align;
 
@@ -268,7 +268,7 @@ type_sizeof(struct type *type)
 }
 
 size_t
-type_alignof(struct type *type)
+type_alignof(const struct type *type)
 {
     size_t i, align, max;
 
