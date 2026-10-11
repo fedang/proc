@@ -10,7 +10,11 @@ source_open(struct source *src, const char *path)
 {
     char *buf;
     FILE *file;
-    size_t fsize;
+    long fsize;
+
+    src->path = path;
+    src->str = NULL;
+    src->len = 0;
 
     file = fopen(path, "rb");
     if (!file)
@@ -36,7 +40,6 @@ source_open(struct source *src, const char *path)
     fclose(file);
     buf[fsize] = 0;
 
-    src->path = path;
     src->str = buf;
     src->len = fsize;
     return true;

@@ -52,6 +52,7 @@ parser_curr(struct parser *state)
 static inline struct token *
 parser_prev(struct parser *state)
 {
+    assert(state->curr > 0 && "parser_prev of the first token!");
     return &state->tokens[state->curr - 1];
 }
 

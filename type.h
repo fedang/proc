@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 enum type_tag {
     TYPE_INVALID,
@@ -46,6 +47,20 @@ struct type {
         } proc;
     };
 };
+
+static inline bool
+type_is_integer(const struct type *type)
+{
+    return type->tag == TYPE_INT
+        || type->tag == TYPE_UINT;
+}
+
+static inline bool
+type_is_scalar(const struct type *type)
+{
+    return type_is_integer(type)
+        || type->tag == TYPE_PTR;
+}
 
 struct type *type_get_named(struct attr *attr, struct symbol *sym);
 

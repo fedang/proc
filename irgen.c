@@ -67,11 +67,7 @@ irgen_type(struct irgen *state, struct type *type)
 {
     size_t i;
 
-    if (!type) {
-        printf("No type detected during irgen!\n");
-        fprintf(state->out, "i32");
-        return;
-    }
+    assert(type && "expected valid type");
 
     switch (type->tag) {
         case TYPE_INT:
@@ -404,6 +400,10 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
     struct irval lhs, rhs, tmp;
     unsigned block_lhs, block_rhs, rhs_label, merge_label;
     const char *instr;
+    bool unsigned_op;
+
+    unsigned_op = expr->op_lhs->type->tag == TYPE_UINT
+               || expr->op_lhs->type->tag == TYPE_PTR;
 
     /*
      * Select the correct IR instruction
@@ -424,19 +424,19 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
             break;
 
         case BINOP_GT:
-            instr = "icmp sgt";
+            instr = unsigned_op ? "icmp ugt": "icmp sgt";
             break;
 
         case BINOP_GTEQ:
-            instr = "icmp sge";
+            instr = unsigned_op ? "icmp uge": "icmp sge";
             break;
 
         case BINOP_LT:
-            instr = "icmp slt";
+            instr = unsigned_op ? "icmp ult": "icmp slt";
             break;
 
         case BINOP_LTEQ:
-            instr = "icmp sle";
+            instr = unsigned_op ? "icmp ule": "icmp sle";
             break;
 
         case BINOP_OR:
@@ -461,7 +461,7 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
 
         case BINOP_SHR:
         case BINOP_SHR_SET:
-            instr = "ashr";
+            instr = unsigned_op ? "lshr": "ashr";
             break;
 
         case BINOP_ADD:
@@ -481,12 +481,12 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
 
         case BINOP_DIV:
         case BINOP_DIV_SET:
-            instr = "sdiv";
+            instr = unsigned_op ? "udiv": "sdiv";
             break;
 
         case BINOP_MOD:
         case BINOP_MOD_SET:
-            instr = "srem";
+            instr = unsigned_op ? "urem": "srem";
             break;
 
         default:

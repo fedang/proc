@@ -213,14 +213,19 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
     }
 
     switch (expr->binop) {
+        case BINOP_SET:
+            expr->expr.type = expr->op_lhs->type;
+            break;
+
         case BINOP_BOOL_OR:
         case BINOP_BOOL_AND:
-            if (!typecheck_cmp(state, expr->op_lhs->type, type_get_bool(NULL))) {
+            if (expr->op_lhs->type->tag != TYPE_BOOL) {
                 TYCHK_ERROR(state, expr->expr.span,
                             "Expected bool operands for and/or\n");
                 return false;
             }
-            /* fall through */
+            expr->expr.type = type_get_bool(NULL);
+            break;
 
         case BINOP_EQ:
         case BINOP_NOTEQ:
@@ -228,13 +233,18 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
         case BINOP_GTEQ:
         case BINOP_LT:
         case BINOP_LTEQ:
+            if (!type_is_scalar(expr->op_lhs->type)) {
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Invalid operand types for comparison\n");
+                return false;
+            }
             expr->expr.type = type_get_bool(NULL);
             break;
 
         default:
-            if (expr->op_lhs->type->tag != TYPE_INT && expr->op_lhs->type->tag != TYPE_UINT) {
+            if (!type_is_integer(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Expected integer operand for binops\n");
+                            "Expected integer operands for arithmetic/bitwise operator\n");
                 return false;
             }
             expr->expr.type = expr->op_lhs->type;
