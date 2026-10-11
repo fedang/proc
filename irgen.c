@@ -34,14 +34,8 @@ irval_sprintf(struct irval val, char buf[static 32])
 void
 irgen_init(struct irgen *state, FILE *out)
 {
+    memset(state, 0, sizeof(struct irgen));
     state->out = out;
-    state->regs = 0;
-    state->labels = 0;
-    state->in_block = 0;
-    state->terminated = false;
-    state->locals_count = 0;
-    state->globals_count = 0;
-    state->strings_count = 0;
 }
 
 static inline unsigned
@@ -618,7 +612,7 @@ irgen_expr(struct irgen *state, struct expr *expr)
 
     if (expr_is_lvalue(expr)) {
         ptr = irgen_expr_lvalue(state, expr);
-        return ptr.tag == IRVAL_GLOBAL
+        return expr->type->tag == TYPE_PROC
              ? ptr
              : irgen_emit_load(state, expr->type, ptr);
     }

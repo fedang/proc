@@ -49,7 +49,6 @@ struct irgen {
     unsigned locals_count;
     struct irvar globals[256];
     unsigned globals_count;
-
     const char *strings[256];
     unsigned strings_count;
 };

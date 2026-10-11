@@ -213,10 +213,6 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
     }
 
     switch (expr->binop) {
-        case BINOP_SET:
-            expr->expr.type = expr->op_lhs->type;
-            break;
-
         case BINOP_BOOL_OR:
         case BINOP_BOOL_AND:
             if (expr->op_lhs->type->tag != TYPE_BOOL) {
@@ -241,6 +237,9 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
             expr->expr.type = type_get_bool(NULL);
             break;
 
+        case BINOP_SET:
+            break;
+
         default:
             if (!type_is_integer(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
@@ -249,6 +248,10 @@ typecheck_expr_binop(struct typecheck *state, struct expr_binop *expr)
             }
             expr->expr.type = expr->op_lhs->type;
             break;
+    }
+
+    if (expr->binop >= BINOP_SET && expr->binop <= BINOP_MOD_SET) {
+            expr->expr.type = type_get_void(NULL);
     }
 
     return true;
