@@ -7,7 +7,7 @@
 
 enum type_tag {
     TYPE_INVALID,
-    TYPE_NAMED,
+    TYPE_RAW,
     TYPE_BOOL,
     TYPE_VOID,
     TYPE_INT,
@@ -28,7 +28,7 @@ struct type {
     struct attr *attr;
     enum type_tag tag;
     union {
-        struct symbol *named;
+        struct expr *raw;
         size_t bit_size;
         struct type *pointer;
         struct {
@@ -62,7 +62,7 @@ type_is_scalar(const struct type *type)
         || type->tag == TYPE_PTR;
 }
 
-struct type *type_get_named(struct attr *attr, struct symbol *sym);
+struct type *type_make_raw(struct expr *raw);
 
 struct type *type_get_bool(struct attr *attr);
 

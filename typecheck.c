@@ -101,25 +101,95 @@ typecheck_lookup(struct typecheck *state, struct symbol *sym)
 }
 
 static bool
+typecheck_resolve(struct typecheck *state, struct type **type);
+
+static struct type *
+typecheck_eval_raw(struct typecheck *state, struct expr *expr)
+{
+    struct type *inner;
+    struct expr_ident *ident;
+    struct expr_unop *unop;
+    struct expr_index *idx;
+    struct expr_literal *lit;
+    size_t i;
+
+    switch (expr->tag) {
+        case EXPR_IDENT: {
+            ident = (struct expr_ident *)expr;
+
+            for (i = 0; i < state->types_count; i++) {
+                if (state->types[i].sym == ident->sym) {
+                    inner = state->types[i].type;
+
+                    if (!typecheck_resolve(state, &inner))
+                        return NULL;
+
+                    return inner;
+                }
+            }
+
+            TYCHK_ERROR(state, expr->span,
+                        "Unknown type '%s'\n", ident->sym->str);
+            return NULL;
+        }
+
+        case EXPR_UNOP: {
+            unop = (struct expr_unop *)expr;
+            if (unop->unop != UNOP_DEREF) {
+                TYCHK_ERROR(state, expr->span,
+                            "Invalid unary operator in type\n");
+                return NULL;
+            }
+
+            inner = typecheck_eval_raw(state, unop->op);
+            if (!inner)
+                return NULL;
+
+            return type_get_ptr(NULL, inner);
+        }
+
+        case EXPR_INDEX: {
+            idx = (struct expr_index *)expr;
+            lit = (struct expr_literal *)idx->index;
+
+            if (idx->index->tag != EXPR_LITERAL || lit->literal != LIT_INTEGER) {
+                TYCHK_ERROR(state, expr->span,
+                            "Expected integer literal for array size\n");
+                return NULL;
+            }
+
+            inner = typecheck_eval_raw(state, idx->op);
+            if (!inner)
+                return NULL;
+
+            return type_get_array(NULL, inner, lit->integer);
+        }
+
+        default:
+            printf("Invalid type expression\n");
+            return NULL;
+    }
+}
+
+static bool
 typecheck_resolve(struct typecheck *state, struct type **type)
 {
     size_t i;
-    struct type *t = *type;
+    struct type *eval, *t;
     bool ok = true;
 
-    if (!type)
+    if (!type || !*type)
         return true;
 
-    if (t->tag == TYPE_NAMED) {
-        for (i = 0; i < state->types_count; i++) {
-            if (state->types[i].sym == t->named) {
-                *type = state->types[i].type;
-                return typecheck_resolve(state, type);
-            }
-        }
+    t = *type;
 
-        printf("Unknown type '%s'\n", t->named->str);
-        return false;
+    if (t->tag == TYPE_RAW) {
+        eval = typecheck_eval_raw(state, t->raw);
+        if (!eval)
+            return false;
+
+        *type = eval;
+        return true;
     }
 
     if (t->tag == TYPE_PTR) {
@@ -140,10 +210,9 @@ typecheck_resolve(struct typecheck *state, struct type **type)
                 ok = false;
             }
         }
-        return ok;
     }
 
-    return true;
+    return ok;
 }
 
 static bool

@@ -309,6 +309,10 @@ lexer_next(struct lexer *state)
             lexer_push(state, TOKEN_HASH);
             break;
 
+        case '@':
+            lexer_push(state, TOKEN_AT);
+            break;
+
         default:
             // TODO: Unknown char error
             lexer_push(state, TOKEN_INVALID);

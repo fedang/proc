@@ -62,22 +62,14 @@ type_get_simple(struct attr *attr, enum type_tag tag)
 }
 
 struct type *
-type_get_named(struct attr *attr, struct symbol *sym)
+type_make_raw(struct expr *raw)
 {
     struct type *type;
-    size_t i;
 
-    for (i = 0; i < type_count; i++) {
-        type = &type_pool[i];
-
-        if (type->tag == TYPE_NAMED && type->attr == attr
-            && type->named == sym) {
-            return type;
-        }
-    }
-
-    type = type_get_fresh(attr, TYPE_NAMED);
-    type->named = sym;
+    type = malloc(sizeof(struct type));
+    type->attr = NULL;
+    type->tag = TYPE_RAW;
+    type->raw = raw;
     return type;
 }
 

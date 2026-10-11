@@ -27,6 +27,7 @@ enum token_tag {
     TOKEN_COMMA,
     TOKEN_DOT,
     TOKEN_HASH,
+    TOKEN_AT,
 
     /*
      * Operators

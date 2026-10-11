@@ -181,67 +181,28 @@ parser_sync(struct parser *state)
 /*
  * Types
  */
-
-#define MATCH_TYPE(x, ...) \
-    do { \
-        if (sym == (x)) { \
-            *type = __VA_ARGS__; \
-            return true; \
-        } \
-    } while (false)
+static bool parser_expr_prec(struct parser *state, struct expr **expr,
+                             unsigned base_prec);
 
 static bool
 parser_type(struct parser *state, struct type **type)
 {
-    struct symbol *sym;
-    struct type *pointer;
-    size_t count;
+    struct expr *expr;
 
-    if (parser_match(state, TOKEN_STAR)) {
-        if (!parser_type(state, &pointer))
-            return false;
+    /*
+     * Parse types as expressions at precedence 12 (prefix & postfix)
+     */
+    if (!parser_expr_prec(state, &expr, 12))
+        return false;
 
-        *type = type_get_ptr(NULL, pointer);
-        return true;
-    }
-
-    if (parser_match(state, TOKEN_LPAREN)) {
-        if (!parser_type(state, type))
-            return false;
-
-        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after type"))
-            return false;
-    } else {
-        if (!parser_check_sym(state, &sym, "Expected type name"))
-            return false;
-
-        *type = type_get_named(NULL, sym);
-    }
-
-    while (parser_match(state, TOKEN_LBRACK)) {
-        if (parser_curr(state)->tag != TOKEN_INT) {
-            parser_error(state, "Expected integer for array size");
-            return false;
-        }
-
-        count = strtoull(parser_curr(state)->span.start, NULL, 10);
-        parser_advance(state);
-
-        if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after array size"))
-            return false;
-
-        *type = type_get_array(NULL, *type, count);
-    }
-
+    *type = type_make_raw(expr);
     return true;
 }
+
 
 /*
  * Expressions
  */
-static bool parser_expr_prec(struct parser *state, struct expr **expr,
-                             unsigned base_prec);
-
 static bool
 parser_escape_string(struct parser *state, const char **string)
 {
@@ -363,6 +324,10 @@ parser_expr_simple(struct parser *state, struct expr **expr)
 
         *expr = expr_make_unop(op, UNOP_ADDROF);
         goto done;
+    }
+
+    if (parser_match(state, TOKEN_AT)) {
+
     }
 
     parser_error(state, "Expected expression");
