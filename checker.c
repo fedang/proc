@@ -12,8 +12,7 @@
     report_error((state)->src, &(span), __VA_ARGS__)
 
 static void
-checker_type_push(struct checker *state, struct symbol *sym,
-                    struct type *type)
+checker_type_push(struct checker *state, struct symbol *sym, struct type *type)
 {
     assert(state->types_count < 256 && "too many types!");
 
@@ -61,9 +60,7 @@ checker_local_push(struct checker *state, struct symbol *sym,
 static void
 checker_local_pop(struct checker *state, unsigned n)
 {
-    assert(n <= state->locals_count && "locals overflow");
-
-    // TODO: Cleanup memory?
+    // XXX
     state->locals_count = n;
 }
 
@@ -76,6 +73,32 @@ checker_global_push(struct checker *state, struct symbol *sym,
     state->globals[state->globals_count].sym = sym;
     state->globals[state->globals_count].type = type;
     state->globals_count++;
+}
+
+static struct named *
+checker_type_find(struct checker *state, struct symbol *sym)
+{
+    size_t i;
+
+    for (i = 0; i < state->types_count; i++) {
+        if (state->types[i].sym == sym)
+            return &state->types[i];
+    }
+
+    return NULL;
+}
+
+static struct type *
+checker_global_find(struct checker *state, struct symbol *sym)
+{
+    size_t i;
+
+    for (i = 0; i < state->globals_count; i++) {
+        if (state->globals[i].sym == sym)
+            return state->globals[i].type;
+    }
+
+    return NULL;
 }
 
 static struct type *
@@ -92,12 +115,7 @@ checker_lookup(struct checker *state, struct symbol *sym)
             return state->locals[i - 1].type;
     }
 
-    for (i = 0; i < state->globals_count; i++) {
-        if (state->globals[i].sym == sym)
-            return state->globals[i].type;
-    }
-
-    return NULL;
+    return checker_global_find(state, sym);
 }
 
 /*
@@ -249,6 +267,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
     struct expr_unop *unop;
     struct expr_index *index;
     struct expr_macro *macro;
+    struct named *named;
     int64_t count;
     size_t i;
 
@@ -257,12 +276,10 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             ident = (struct expr_ident *)expr;
 
             for (i = 0; i < state->types_count; i++) {
-                if (state->types[i].sym == ident->sym) {
-                    if (!checker_resolve(state, &state->types[i].type))
-                        return NULL;
-
-                    return state->types[i].type;
-                }
+                named = checker_type_find(state, ident->sym);
+                if (!named || !checker_resolve(state, &named->type))
+                    return NULL;
+                return named->type;
             }
 
             TYCHK_ERROR(state, expr->span,
@@ -361,7 +378,12 @@ checker_resolve(struct checker *state, struct type **type)
         return checker_resolve(state, &t->array.item);
     }
 
-    if (t->tag == TYPE_PROC) {
+    if (t->tag == TYPE_STRUCT) {
+        for (i = 0; i < t->strukt.fields_count; i++) {
+            if (!checker_resolve(state, &t->strukt.fields[i].type))
+                ok = false;
+        }
+    } else if (t->tag == TYPE_PROC) {
         if (!checker_resolve(state, &t->proc.out)) {
             ok = false;
         }
@@ -919,15 +941,14 @@ static bool
 checker_decl_proc(struct checker *state, struct decl_proc *decl)
 {
     struct type *proc;
-    struct type **args;
+    struct type *args[32];
     struct proc_arg *ptr;
     size_t i;
     bool ok = true;
 
     if (state->pass == TYCHK_FIRST_PASS) {
-        args = malloc(decl->args_count * sizeof(struct type *));
-
         for (i = 0, ptr = decl->args; ptr != NULL; ptr = ptr->next) {
+            assert(i < 32 && "too many parameters");
             args[i++] = ptr->type;
         }
 
