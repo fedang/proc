@@ -11,6 +11,10 @@
 #define TYCHK_ERROR(state, span, ...) \
     report_error((state)->src, &(span), __VA_ARGS__)
 
+static struct symbol *sym_sizeof;
+static struct symbol *sym_alignof;
+static struct symbol *sym_cast;
+
 static void
 typecheck_type_push(struct typecheck *state, struct symbol *sym,
                     struct type *type)
@@ -32,6 +36,10 @@ typecheck_init(struct typecheck *state, struct source *src)
     state->locals_count = 0;
     state->globals_count = 0;
     state->types_count = 0;
+
+    sym_sizeof = symbol_make("size_of");
+    sym_alignof = symbol_make("align_of");
+    sym_cast = symbol_make("cast");
 
     typecheck_type_push(state, symbol_make("i8"), type_get_int(NULL, 8));
     typecheck_type_push(state, symbol_make("i16"), type_get_int(NULL, 16));
@@ -100,17 +108,146 @@ typecheck_lookup(struct typecheck *state, struct symbol *sym)
     return NULL;
 }
 
+static bool typecheck_resolve(struct typecheck *state, struct type **type);
+
+static struct type *typecheck_eval_raw(struct typecheck *state, struct expr *expr);
+
 static bool
-typecheck_resolve(struct typecheck *state, struct type **type);
+typecheck_eval_const(struct typecheck *state, struct expr *expr, int64_t *out)
+{
+    struct expr_literal *lit;
+    struct expr_unop *unop;
+    struct expr_binop *binop;
+    struct expr_macro *macro;
+    struct type *type;
+    int64_t lhs, rhs;
+
+    switch (expr->tag) {
+        case EXPR_LITERAL: {
+            lit = (struct expr_literal *)expr;
+            if (lit->literal != LIT_INTEGER) {
+                TYCHK_ERROR(state, expr->span,
+                        "Expected integer literal in constant expression\n");
+                return false;
+            }
+
+            *out = lit->integer;
+            return true;
+        }
+
+        case EXPR_UNOP: {
+            unop = (struct expr_unop *)expr;
+            if (!typecheck_eval_const(state, unop->op, out))
+                return false;
+
+            if (unop->unop == UNOP_NEG) {
+                *out *= -1;
+                return true;
+            }
+
+            TYCHK_ERROR(state, expr->span,
+                        "Invalid unary operator in constant expression\n");
+            return false;
+        }
+
+        case EXPR_BINOP: {
+            binop = (struct expr_binop *)expr;
+            if (!typecheck_eval_const(state, binop->op_lhs, &lhs) ||
+                !typecheck_eval_const(state, binop->op_rhs, &rhs))
+                return false;
+
+            switch (binop->binop) {
+                case BINOP_ADD:
+                    *out = lhs + rhs;
+                    return true;
+
+                case BINOP_SUB:
+                    *out = lhs - rhs;
+                    return true;
+
+                case BINOP_MUL:
+                    *out = lhs * rhs;
+                    return true;
+
+                case BINOP_DIV:
+                    if (rhs == 0) {
+                        TYCHK_ERROR(state, expr->span,
+                                    "Division by zero in constant expression\n");
+                        return false;
+                    }
+                    *out = lhs / rhs;
+                    return true;
+
+                case BINOP_MOD:
+                    *out = lhs % rhs;
+                    return true;
+
+                case BINOP_SHL:
+                    *out = lhs << rhs;
+                    return true;
+
+                case BINOP_SHR:
+                    *out = lhs >> rhs;
+                    return true;
+
+                case BINOP_OR:
+                    *out = lhs | rhs;
+                    return true;
+
+                case BINOP_AND:
+                    *out = lhs & rhs;
+                    return true;
+
+                case BINOP_XOR:
+                    *out = lhs ^ rhs;
+                    return true;
+
+                default:
+                    TYCHK_ERROR(state, expr->span,
+                                "Operator not allowed in constant expression\n");
+                    return false;
+            }
+        }
+
+        case EXPR_MACRO: {
+            macro = (struct expr_macro *)expr;
+
+            if (macro->name == sym_sizeof || macro->name == sym_alignof) {
+                if (macro->body || macro->args_count != 1) {
+                    TYCHK_ERROR(state, expr->span, "Expected 1 type argument and no body\n");
+                    return false;
+                }
+
+                type = typecheck_eval_raw(state, macro->args[0]);
+                if (!type)
+                    return false;
+
+                *out = macro->name == sym_sizeof
+                    ? type_sizeof(type)
+                    : type_alignof(type);
+                return true;
+            }
+
+            TYCHK_ERROR(state, expr->span,
+                        "Macro '@%s' cannot be evaluated at compile time\n", macro->name->str);
+            return false;
+        }
+
+        default:
+            TYCHK_ERROR(state, expr->span,
+                        "Expression is not a compile-time constant\n");
+            return false;
+    }
+}
 
 static struct type *
 typecheck_eval_raw(struct typecheck *state, struct expr *expr)
 {
-    struct type *inner;
+    struct type *type;
     struct expr_ident *ident;
     struct expr_unop *unop;
-    struct expr_index *idx;
-    struct expr_literal *lit;
+    struct expr_index *index;
+    int64_t count;
     size_t i;
 
     switch (expr->tag) {
@@ -119,12 +256,12 @@ typecheck_eval_raw(struct typecheck *state, struct expr *expr)
 
             for (i = 0; i < state->types_count; i++) {
                 if (state->types[i].sym == ident->sym) {
-                    inner = state->types[i].type;
+                    type = state->types[i].type;
 
-                    if (!typecheck_resolve(state, &inner))
+                    if (!typecheck_resolve(state, &type))
                         return NULL;
 
-                    return inner;
+                    return type;
                 }
             }
 
@@ -141,32 +278,35 @@ typecheck_eval_raw(struct typecheck *state, struct expr *expr)
                 return NULL;
             }
 
-            inner = typecheck_eval_raw(state, unop->op);
-            if (!inner)
+            type = typecheck_eval_raw(state, unop->op);
+            if (!type)
                 return NULL;
 
-            return type_get_ptr(NULL, inner);
+            return type_get_ptr(NULL, type);
         }
 
         case EXPR_INDEX: {
-            idx = (struct expr_index *)expr;
-            lit = (struct expr_literal *)idx->index;
+            index = (struct expr_index *)expr;
 
-            if (idx->index->tag != EXPR_LITERAL || lit->literal != LIT_INTEGER) {
-                TYCHK_ERROR(state, expr->span,
-                            "Expected integer literal for array size\n");
+            type = typecheck_eval_raw(state, index->op);
+            if (!type)
+                return NULL;
+
+            if (!typecheck_eval_const(state, index->index, &count))
+                return NULL;
+
+            if (count <= 0) {
+                TYCHK_ERROR(state, index->index->span,
+                            "Array size must be greater than 0\n");
                 return NULL;
             }
 
-            inner = typecheck_eval_raw(state, idx->op);
-            if (!inner)
-                return NULL;
-
-            return type_get_array(NULL, inner, lit->integer);
+            return type_get_array(NULL, type, count);
         }
 
         default:
-            printf("Invalid type expression\n");
+            TYCHK_ERROR(state, expr->span,
+                        "Invalid type expression\n");
             return NULL;
     }
 }
@@ -473,6 +613,56 @@ typecheck_expr_access(struct typecheck *state, struct expr_access *expr)
 }
 
 static bool
+typecheck_expr_macro(struct typecheck *state, struct expr_macro *expr)
+{
+    struct type *type;
+
+    if (expr->name == sym_sizeof || expr->name == sym_alignof) {
+        if (expr->body || expr->args_count != 1) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Expected 1 argument and no block\n");
+            return false;
+        }
+
+        type = typecheck_eval_raw(state, expr->args[0]);
+        if (!type)
+            return false;
+
+        expr->args[0]->type = type;
+        expr->expr.type = type_get_uint(NULL, 64);
+        return true;
+    }
+
+    if (expr->name == sym_cast) {
+        if (expr->body || expr->args_count != 2) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Expected 2 arguments: @cast(type, expr)\n");
+            return false;
+        }
+
+        if (!typecheck_expr(state, expr->args[1]))
+            return false;
+
+        type = typecheck_eval_raw(state, expr->args[0]);
+        if (!type)
+            return false;
+
+        if (!type_is_scalar(expr->args[1]->type) || !type_is_scalar(type)) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Cast can only be used with scalar types\n");
+            return false;
+        }
+
+        expr->expr.type = type;
+        return true;
+    }
+
+    TYCHK_ERROR(state, expr->expr.span,
+                "Unknown builtin macro '@%s'\n", expr->name->str);
+    return false;
+}
+
+static bool
 typecheck_expr(struct typecheck *state, struct expr *expr)
 {
     switch (expr->tag) {
@@ -496,6 +686,9 @@ typecheck_expr(struct typecheck *state, struct expr *expr)
 
         case EXPR_ACCESS:
             return typecheck_expr_access(state, (struct expr_access *)expr);
+
+        case EXPR_MACRO:
+            return typecheck_expr_macro(state, (struct expr_macro *)expr);
 
         default:
             unreachable();

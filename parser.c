@@ -254,13 +254,17 @@ parser_escape_string(struct parser *state, const char **string)
     return true;
 }
 
+static bool parser_stmt_block(struct parser *state, struct stmt **stmt);
+
 static bool
 parser_expr_simple(struct parser *state, struct expr **expr)
 {
     int64_t value;
     struct symbol *sym;
-    struct expr *op;
+    struct expr *op, *args[32];
     const char *string;
+    struct stmt *body;
+    size_t count, i;
     struct span start;
 
     start = parser_curr(state)->span;
@@ -327,7 +331,32 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match(state, TOKEN_AT)) {
+        if (!parser_check_sym(state, &sym, "Expected macro name after '@'"))
+            return false;
 
+        count = 0;
+        if (parser_match(state, TOKEN_LPAREN)) {
+            if (parser_curr(state)->tag != TOKEN_RPAREN) {
+                do {
+                    assert(count < 32 && "too many args");
+                    if (!parser_expr_prec(state, &args[count++], 0)) {
+                        return false;
+                    }
+                } while (parser_match(state, TOKEN_COMMA));
+            }
+
+            if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after macro arguments"))
+                return false;
+        }
+
+        body = NULL;
+        // TODO: Parse optional macro body
+
+        *expr = expr_make_macro(sym, body, count);
+        for (i = 0; i < count; i++) {
+            ((struct expr_macro *)*expr)->args[i] = args[i];
+        }
+        goto done;
     }
 
     parser_error(state, "Expected expression");

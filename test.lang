@@ -7,6 +7,9 @@ proc main(argc: int, argv: **u8): int {
         print32(2)
     }
 
+    puts("sizeof is")
+    print32(@cast(int, @size_of(int)))
+
     var y : int[4]
     y[0] = 99
     print32(y[0])

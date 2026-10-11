@@ -82,19 +82,6 @@ expr_make_call(struct expr *op, size_t args_count)
 }
 
 struct expr *
-expr_make_builtin(struct symbol *name, size_t args_count)
-{
-    struct expr_builtin *expr;
-    size_t size;
-
-    size = sizeof(struct expr_builtin) + args_count * sizeof(struct expr *);
-    expr = expr_make(size, EXPR_BUILTIN);
-    expr->name = name;
-    expr->args_count = args_count;
-    return &expr->expr;
-}
-
-struct expr *
 expr_make_index(struct expr *op, struct expr *index)
 {
     struct expr_index *expr;
@@ -113,5 +100,19 @@ expr_make_access(struct expr *op, struct symbol *field)
     expr = expr_make(sizeof(struct expr_access), EXPR_ACCESS);
     expr->op = op;
     expr->field = field;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
+{
+    struct expr_macro *expr;
+    size_t size;
+
+    size = sizeof(struct expr_macro) + args_count * sizeof(struct expr *);
+    expr = expr_make(size, EXPR_MACRO);
+    expr->name = name;
+    expr->body = body;
+    expr->args_count = args_count;
     return &expr->expr;
 }

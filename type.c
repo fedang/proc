@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include "type.h"
+#include "report.h"
 
 #define MAX_TYPES 4096
 
@@ -222,4 +223,78 @@ type_get_proc(struct attr *attr, struct type *out,
         type->proc.args = NULL;
     }
     return type;
+}
+
+#define ROUND_UP(x, y) \
+    ((x) + (y) - 1) & ~((y) - 1)
+
+size_t
+type_sizeof(struct type *type)
+{
+    size_t i, size, align;
+
+    switch (type->tag) {
+        case TYPE_VOID:
+            return 0;
+
+        case TYPE_BOOL:
+            return 1;
+
+        case TYPE_INT:
+        case TYPE_UINT:
+            return type_integer_bits(type) / 8;
+
+        case TYPE_PTR:
+        case TYPE_PROC:
+            return sizeof(void *);
+
+        case TYPE_ARRAY:
+            return type->array.count * type_sizeof(type->array.item);
+
+        case TYPE_STRUCT:
+            for (i = 0, size = 0; i < type->strukt.fields_count; i++) {
+                align = type_alignof(type->strukt.fields[i].type);
+                size = ROUND_UP(size, align);
+                size += type_sizeof(type->strukt.fields[i].type);
+            }
+
+            align = type_alignof(type);
+            return ROUND_UP(size, align);
+
+        default:
+            unreachable();
+    }
+}
+
+size_t
+type_alignof(struct type *type)
+{
+    size_t i, align, max;
+
+    switch (type->tag) {
+        case TYPE_BOOL:
+            return 1;
+
+        case TYPE_INT:
+        case TYPE_UINT:
+            return type_integer_bits(type) / 8;
+
+        case TYPE_PTR:
+        case TYPE_PROC:
+            return sizeof(void *);
+
+        case TYPE_ARRAY:
+            return type_alignof(type->array.item);
+
+        case TYPE_STRUCT:
+            for (i = 0, max = 1; i < type->strukt.fields_count; i++) {
+                align = type_alignof(type->strukt.fields[i].type);
+                if (align > max)
+                    max = align;
+            }
+            return max;
+
+        default:
+            unreachable();
+    }
 }

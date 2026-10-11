@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 enum type_tag {
     TYPE_INVALID,
@@ -59,7 +60,22 @@ static inline bool
 type_is_scalar(const struct type *type)
 {
     return type_is_integer(type)
+        || type->tag == TYPE_BOOL
         || type->tag == TYPE_PTR;
+}
+
+static inline size_t
+type_integer_bits(const struct type *type)
+{
+    if (type->tag == TYPE_BOOL)
+        return 1;
+    if (type->tag == TYPE_PTR)
+        return sizeof(void *) * 8;
+
+    assert(type_is_integer(type));
+    return type->bit_size
+        ? type->bit_size
+        : sizeof(int) * 8;
 }
 
 struct type *type_make_raw(struct expr *raw);
@@ -81,5 +97,9 @@ struct type *type_get_struct(struct attr *attr, struct symbol *name,
 
 struct type *type_get_proc(struct attr *attr, struct type *out,
                            struct type **args, size_t args_count);
+
+size_t type_sizeof(struct type *type);
+
+size_t type_alignof(struct type *type);
 
 #endif

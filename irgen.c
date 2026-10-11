@@ -65,8 +65,7 @@ irgen_type(struct irgen *state, struct type *type)
     switch (type->tag) {
         case TYPE_INT:
         case TYPE_UINT:
-            fprintf(state->out, "i%zu",
-                    type->bit_size ? type->bit_size : sizeof(int) * 8);
+            fprintf(state->out, "i%zu", type_integer_bits(type));
             break;
 
         case TYPE_BOOL:
@@ -623,6 +622,12 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
     return out;
 }
 
+static struct irval
+irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
+{
+    unreachable();
+}
+
 struct irval
 irgen_expr(struct irgen *state, struct expr *expr)
 {
@@ -647,6 +652,9 @@ irgen_expr(struct irgen *state, struct expr *expr)
 
         case EXPR_CALL:
             return irgen_expr_call(state, (struct expr_call *)expr);
+
+        case EXPR_MACRO:
+            return irgen_expr_macro(state, (struct expr_macro *)expr);
 
         default:
             unreachable();
