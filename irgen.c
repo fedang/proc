@@ -349,7 +349,7 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
                 ptr = irgen_expr_lvalue(state, index->op);
                 idx = irgen_expr(state, index->index);
                 return irgen_emit_gep(state, index->op->type, ptr, 2,
-                                      NULL, IRVAL_INT(0),
+                                      IRVAL_INT(0), NULL,
                                       idx, index->index->type);
             }
 

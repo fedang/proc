@@ -334,7 +334,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match(state, TOKEN_MINUS)) {
-        if (!parser_expr_prec(state, &op, 13))
+        if (!parser_expr_prec(state, &op, 12))
             return false;
 
         *expr = expr_make_unop(op, UNOP_NEG);
@@ -342,7 +342,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match(state, TOKEN_NOT)) {
-        if (!parser_expr_prec(state, &op, 13))
+        if (!parser_expr_prec(state, &op, 12))
             return false;
 
         *expr = expr_make_unop(op, UNOP_NOT);
@@ -350,7 +350,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match(state, TOKEN_STAR)) {
-        if (!parser_expr_prec(state, &op, 13))
+        if (!parser_expr_prec(state, &op, 12))
             return false;
 
         *expr = expr_make_unop(op, UNOP_DEREF);
@@ -358,7 +358,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match(state, TOKEN_AND)) {
-        if (!parser_expr_prec(state, &op, 13))
+        if (!parser_expr_prec(state, &op, 12))
             return false;
 
         *expr = expr_make_unop(op, UNOP_ADDROF);
@@ -379,6 +379,7 @@ parser_token_prec(enum token_tag tag)
     static const int prec_table[TOKEN_EOF] = {
         [TOKEN_EQ] = 1,
         [TOKEN_ANDEQ] = 1,
+        [TOKEN_OREQ] = 1,
         [TOKEN_XOREQ] = 1,
         [TOKEN_SHLEQ] = 1,
         [TOKEN_SHREQ] = 1,
@@ -405,9 +406,9 @@ parser_token_prec(enum token_tag tag)
         [TOKEN_STAR] = 11,
         [TOKEN_SLASH] = 11,
         [TOKEN_PERC] = 11,
-        [TOKEN_LPAREN] = 12,
-        [TOKEN_LBRACK] = 12,
-        [TOKEN_DOT] = 12,
+        [TOKEN_LPAREN] = 13,
+        [TOKEN_LBRACK] = 13,
+        [TOKEN_DOT] = 13,
     };
     return prec_table[tag];
 }
