@@ -235,6 +235,7 @@ type_sizeof(struct type *type)
 
     switch (type->tag) {
         case TYPE_VOID:
+        case TYPE_PROC:
             return 0;
 
         case TYPE_BOOL:
@@ -245,7 +246,6 @@ type_sizeof(struct type *type)
             return type_integer_bits(type) / 8;
 
         case TYPE_PTR:
-        case TYPE_PROC:
             return sizeof(void *);
 
         case TYPE_ARRAY:
@@ -272,6 +272,7 @@ type_alignof(struct type *type)
     size_t i, align, max;
 
     switch (type->tag) {
+        case TYPE_VOID:
         case TYPE_BOOL:
             return 1;
 
@@ -280,7 +281,6 @@ type_alignof(struct type *type)
             return type_integer_bits(type) / 8;
 
         case TYPE_PTR:
-        case TYPE_PROC:
             return sizeof(void *);
 
         case TYPE_ARRAY:

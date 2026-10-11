@@ -10,9 +10,9 @@ proc main(argc: int, argv: **u8): int {
     puts("sizeof is")
     print32(@cast(int, @size_of(int)))
 
-    var func = &test_print
-    //func()
-    (*func)()
+    var func = &test_print;
+
+    func()
 
     var y : int[4]
     y[0] = 99

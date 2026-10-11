@@ -100,9 +100,14 @@ checker_lookup(struct checker *state, struct symbol *sym)
     return NULL;
 }
 
+/*
+ * Compile time evaluation
+ */
 static bool checker_resolve(struct checker *state, struct type **type);
 
 static struct type *checker_eval_raw(struct checker *state, struct expr *expr);
+
+static bool checker_expr_macro(struct checker *state, struct expr_macro *expr);
 
 static bool
 checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
@@ -111,7 +116,6 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
     struct expr_unop *unop;
     struct expr_binop *binop;
     struct expr_macro *macro;
-    struct type *type;
     int64_t lhs, rhs;
 
     switch (expr->tag) {
@@ -203,26 +207,24 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 
         case EXPR_MACRO: {
             macro = (struct expr_macro *)expr;
+            if (!checker_expr_macro(state, macro))
+                return false;
 
-            if (macro->name == symbol_size_of || macro->name == symbol_align_of) {
-                if (macro->body || macro->args_count != 1) {
-                    TYCHK_ERROR(state, expr->span, "Expected 1 type argument and no body\n");
+            switch (macro->macro.tag) {
+                case MACRO_SIZEOF:
+                case MACRO_ALIGNOF:
+                    *out = macro->macro.value;
+                    return true;
+
+                case MACRO_EXPR:
+                    return checker_eval_const(state, macro->macro.expr, out);
+
+                default:
+                    TYCHK_ERROR(state, expr->span,
+                                "Macro '@%s' cannot be evaluated at compile time\n",
+                                macro->name->str);
                     return false;
-                }
-
-                type = checker_eval_raw(state, macro->args[0]);
-                if (!type)
-                    return false;
-
-                *out = macro->name == symbol_size_of
-                    ? type_sizeof(type)
-                    : type_alignof(type);
-                return true;
             }
-
-            TYCHK_ERROR(state, expr->span,
-                        "Macro '@%s' cannot be evaluated at compile time\n", macro->name->str);
-            return false;
         }
 
         default:
@@ -248,12 +250,10 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             for (i = 0; i < state->types_count; i++) {
                 if (state->types[i].sym == ident->sym) {
-                    type = state->types[i].type;
-
-                    if (!checker_resolve(state, &type))
+                    if (!checker_resolve(state, &state->types[i].type))
                         return NULL;
 
-                    return type;
+                    return state->types[i].type;
                 }
             }
 
@@ -521,9 +521,24 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
         return false;
 
     proc = expr->op->type;
-    if (proc->tag != TYPE_PROC || proc->proc.args_count != expr->args_count) {
+
+    /*
+     * Allow one level of automatic pointer dereference for proc pointers
+     */
+    if (proc->tag == TYPE_PTR && proc->pointer->tag == TYPE_PROC) {
+        proc = proc->pointer;
+    }
+
+    if (proc->tag != TYPE_PROC) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Call target is not a proc\n");
+        return false;
+    }
+
+    if (proc->proc.args_count != expr->args_count) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Call argument count does not match (expected %d, got %d)\n",
+                    proc->proc.args_count, expr->args_count);
         return false;
     }
 
@@ -533,7 +548,7 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
 
         if (!checker_cmp(state, proc->proc.args[i], expr->args[i]->type)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Call argument does not match proc\n");
+                        "Call argument type does not match proc\n");
             return false;
         }
     }
@@ -609,6 +624,9 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
 {
     struct type *type;
 
+    if (expr->macro.tag != MACRO_INVALID)
+        return true;
+
     if (expr->name == symbol_size_of || expr->name == symbol_align_of) {
         if (expr->body || expr->args_count != 1) {
             TYCHK_ERROR(state, expr->expr.span,
@@ -619,6 +637,12 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         type = checker_eval_raw(state, expr->args[0]);
         if (!type)
             return false;
+
+        if (type->tag == TYPE_PROC) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Expected a sized type\n");
+            return false;
+        }
 
         if (expr->name == symbol_size_of) {
             expr->macro.tag = MACRO_SIZEOF;
