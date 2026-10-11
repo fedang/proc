@@ -14,6 +14,8 @@ struct parser {
     size_t curr;
     bool error;
     bool perfect;
+    bool parens;
+    bool no_block;
 };
 
 void parser_init(struct parser *state, struct source *src, struct token *tokens);

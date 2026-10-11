@@ -14,6 +14,8 @@ parser_init(struct parser *state, struct source *src, struct token *tokens)
     state->curr = 0;
     state->error = false;
     state->perfect = true;
+    state->parens = false;
+    state->no_block = false;
 }
 
 static inline struct token *
@@ -140,6 +142,8 @@ parser_sync(struct parser *state)
     struct symbol *sym;
 
     state->error = false;
+    state->parens = false;
+    state->no_block = false;
 
     while (!parser_eof(state)) {
         if (parser_peek_sym(state, &sym)) {
@@ -238,6 +242,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     const char *string;
     struct stmt *body;
     size_t count, i;
+    bool saved_parens, saved_noblock;
     struct span start;
 
     start = parser_curr(state)->span;
@@ -263,12 +268,22 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match(state, TOKEN_LPAREN)) {
+        saved_parens = state->parens;
+        saved_noblock = state->no_block;
+        state->parens = true;
+        state->no_block = false;
+
         if (!parser_expr_prec(state, expr, 0))
             return false;
 
         if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after expr"))
             return false;
-        goto done;
+
+        state->parens = saved_parens;
+        state->no_block = saved_noblock;
+
+        // Do not merge the span containing parenthesis
+        return true;
     }
 
     if (parser_match(state, TOKEN_MINUS)) {
@@ -309,6 +324,11 @@ parser_expr_simple(struct parser *state, struct expr **expr)
 
         count = 0;
         if (parser_match(state, TOKEN_LPAREN)) {
+            saved_parens = state->parens;
+            saved_noblock = state->no_block;
+            state->parens = true;
+            state->no_block = false;
+
             if (parser_curr(state)->tag != TOKEN_RPAREN) {
                 do {
                     assert(count < 32 && "too many args");
@@ -320,10 +340,16 @@ parser_expr_simple(struct parser *state, struct expr **expr)
 
             if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after macro arguments"))
                 return false;
+
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
         }
 
         body = NULL;
-        // TODO: Parse optional macro body
+        if (!state->no_block && parser_match(state, TOKEN_LBRACE)) {
+            if (!parser_stmt_block(state, &body))
+                return false;
+        }
 
         *expr = expr_make_macro(sym, body, count);
         for (i = 0; i < count; i++) {
@@ -424,6 +450,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
     enum token_tag op_tag;
     struct symbol *field;
     unsigned prec, count, i;
+    bool saved_parens, saved_noblock;
     struct span start;
 
     start = parser_curr(state)->span;
@@ -432,6 +459,9 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
         return false;
 
     while (true) {
+        if (!state->parens && !parser_same_line(state))
+            break;
+
         op_tag = parser_curr(state)->tag;
         prec = parser_token_prec(op_tag);
 
@@ -444,6 +474,11 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
          * Special cases
          */
         if (op_tag == TOKEN_LPAREN) {
+            saved_parens = state->parens;
+            saved_noblock = state->no_block;
+            state->parens = true;
+            state->no_block = false;
+
             count = 0;
             if (parser_curr(state)->tag != TOKEN_RPAREN) {
                 do {
@@ -456,6 +491,9 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
             if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after arguments"))
                 return false;
 
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
+
             *expr = expr_make_call(*expr, count);
             for (i = 0; i < count; i++) {
                 ((struct expr_call *)*expr)->args[i] = args[i];
@@ -466,11 +504,19 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
         }
 
         if (op_tag == TOKEN_LBRACK) {
+            saved_parens = state->parens;
+            saved_noblock = state->no_block;
+            state->parens = true;
+            state->no_block = false;
+
             if (!parser_expr_prec(state, &rhs, 0))
                 return false;
 
             if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after index"))
                 return false;
+
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
 
             *expr = expr_make_index(*expr, rhs);
             expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
@@ -509,6 +555,17 @@ parser_expr(struct parser *state, struct expr **expr)
     return parser_expr_prec(state, expr, 0);
 }
 
+static bool
+parser_expr_strict(struct parser *state, struct expr **expr)
+{
+    bool ok, saved = state->no_block;
+
+    state->no_block = true;
+    ok = parser_expr_prec(state, expr, 0);
+    state->no_block = saved;
+    return ok;
+}
+
 /*
  * Statements
  */
@@ -519,9 +576,15 @@ parser_stmt_block(struct parser *state, struct stmt **stmt)
 {
     struct stmt *tmp[64];
     unsigned n;
+    bool saved_parens, saved_noblock;
     struct span start;
 
     start = parser_prev(state)->span;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = false;
+    state->no_block = false;
 
     for (n = 0; !parser_eof(state); n++) {
         if (parser_match(state, TOKEN_RBRACE))
@@ -531,6 +594,9 @@ parser_stmt_block(struct parser *state, struct stmt **stmt)
         if (!parser_stmt(state, &tmp[n]))
             return false;
     }
+
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
 
     *stmt = stmt_make_block(n);
     memcpy(((struct stmt_block *)*stmt)->items, tmp, n * sizeof(struct stmt *));
@@ -603,7 +669,7 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
 
     start = parser_prev(state)->span;
 
-    if (!parser_expr(state, &cond))
+    if (!parser_expr_strict(state, &cond))
         return false;
 
     if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after if condition"))
@@ -637,7 +703,7 @@ parser_stmt_while(struct parser *state, struct stmt **stmt)
 
     start = parser_prev(state)->span;
 
-    if (!parser_expr(state, &cond))
+    if (!parser_expr_strict(state, &cond))
         return false;
 
     if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after while condition"))

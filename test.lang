@@ -14,6 +14,14 @@ proc main(argc: int, argv: **u8): int {
 
     func()
 
+    //if (@sus(x) {}) {
+    //}
+
+    1 + 1
+    (1
+    +1)
+
+
     var y : int[4]
     y[0] = 99
     print32(y[0])
