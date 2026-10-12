@@ -269,25 +269,22 @@ checker_eval_raw(struct checker *state, struct expr *expr)
     struct expr_macro *macro;
     struct named *named;
     int64_t count;
-    size_t i;
 
     switch (expr->tag) {
-        case EXPR_IDENT: {
+        case EXPR_IDENT:
             ident = (struct expr_ident *)expr;
 
-            for (i = 0; i < state->types_count; i++) {
-                named = checker_type_find(state, ident->sym);
-                if (!named || !checker_resolve(state, &named->type))
-                    return NULL;
-                return named->type;
-            }
+            named = checker_type_find(state, ident->sym);
+            if (!named) {
+             TYCHK_ERROR(state, expr->span,
+                         "Unknown type '%s'\n", ident->sym->str);
+                 return NULL;
+             }
+             if (!checker_resolve(state, &named->type))
+                 return NULL;
+             return named->type;
 
-            TYCHK_ERROR(state, expr->span,
-                        "Unknown type '%s'\n", ident->sym->str);
-            return NULL;
-        }
-
-        case EXPR_UNOP: {
+        case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
             if (unop->unop != UNOP_DEREF) {
                 TYCHK_ERROR(state, expr->span,
@@ -300,9 +297,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
 
             return type_get_ptr(NULL, type);
-        }
 
-        case EXPR_INDEX: {
+        case EXPR_INDEX:
             index = (struct expr_index *)expr;
 
             type = checker_eval_raw(state, index->op);
@@ -319,9 +315,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             return type_get_array(NULL, type, count);
-        }
 
-        case EXPR_MACRO: {
+        case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
             if (macro->name == symbol_type_of) {
                 if (macro->body || macro->args_count != 1) {
@@ -340,7 +335,6 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                         "Macro '@%s' cannot be used as a type\n",
                         macro->name->str);
             return NULL;
-        }
 
         default:
             TYCHK_ERROR(state, expr->span,

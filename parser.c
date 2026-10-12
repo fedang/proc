@@ -6,6 +6,8 @@
 #include "parser.h"
 #include "report.h"
 
+// TODO: Improve flag tracking for recovery
+
 void
 parser_init(struct parser *state, struct source *src, struct token *tokens)
 {
@@ -165,12 +167,18 @@ static bool
 parser_type(struct parser *state, struct type **type)
 {
     struct expr *expr;
+    bool saved_noblock;
+
+    saved_noblock = state->no_block;
+    state->no_block = true;
 
     /*
      * Parse types as expressions at precedence 12 (prefix & postfix)
      */
     if (!parser_expr_prec(state, &expr, 12))
         return false;
+
+    state->no_block = saved_noblock;
 
     *type = type_make_raw(expr);
     return true;
