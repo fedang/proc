@@ -175,15 +175,8 @@ type_get_struct(struct attr *attr, struct symbol *name,
 
     type = type_get_fresh(attr, TYPE_STRUCT);
     type->strukt.name = name;
-    type->strukt.fields = NULL;
+    type->strukt.fields = fields;
     type->strukt.fields_count = fields_count;
-
-    if (fields_count > 0) {
-        type->strukt.fields = malloc(fields_count * sizeof(struct struct_field));
-        memcpy(type->strukt.fields, fields, fields_count * sizeof(struct struct_field));
-    } else {
-        type->strukt.fields = NULL;
-    }
     return type;
 }
 
