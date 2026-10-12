@@ -398,6 +398,9 @@ checker_cmp(struct checker *state, struct type *t1, struct type *t2)
     return t1 == t2;
 }
 
+/*
+ * Expressions
+ */
 static bool
 checker_expr_literal(struct checker *state, struct expr_literal *expr)
 {
@@ -778,6 +781,9 @@ checker_expr(struct checker *state, struct expr *expr)
     }
 }
 
+/*
+ * Statements
+ */
 static bool checker_stmt(struct checker *state, struct stmt *stmt);
 
 static bool
@@ -940,6 +946,50 @@ checker_stmt(struct checker *state, struct stmt *stmt)
     }
 }
 
+/*
+ * Return analysis
+ */
+static bool
+checker_proc_returns(struct stmt *stmt)
+{
+    struct stmt_block *block;
+    struct stmt_if *stmt_if;
+    size_t i;
+
+    if (!stmt)
+        return false;
+
+    switch (stmt->tag) {
+        case STMT_RETURN:
+            return true;
+
+        case STMT_BLOCK:
+            block = (struct stmt_block *)stmt;
+            for (i = 0; i < block->items_count; i++) {
+                if (checker_proc_returns(block->items[i]))
+                    return true;
+            }
+            return false;
+
+        case STMT_IF:
+            stmt_if = (struct stmt_if *)stmt;
+            if (!stmt_if->b_false)
+                return false;
+            return checker_proc_returns(stmt_if->b_true)
+                && checker_proc_returns(stmt_if->b_false);
+
+        case STMT_EXPR:
+            // TODO: What if we have return as expressions?
+            return false;
+
+        default:
+            return false;
+    }
+}
+
+/*
+ * Declarations
+ */
 static bool
 checker_decl_proc(struct checker *state, struct decl_proc *decl)
 {
@@ -1012,6 +1062,14 @@ checker_decl_proc(struct checker *state, struct decl_proc *decl)
         state->ret_type = decl->out;
         ok = checker_stmt(state, decl->body);
         checker_local_pop(state, 0);
+
+        if (ok && decl->out->tag != TYPE_VOID
+               && !checker_proc_returns(decl->body)) {
+            TYCHK_ERROR(state, decl->decl.span,
+                        "Procedure '%s' does not return a value on all branches\n",
+                        decl->sym->str);
+            ok = false;
+        }
     }
 
     return ok;

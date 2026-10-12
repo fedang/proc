@@ -8,7 +8,7 @@ proc zsp(a: zst, b: void): zst {
     return x
 }
 
-proc zero_test() {
+proc zero_test() : @type_of(1) {
     var zero: zst
     var v: void
 
@@ -16,6 +16,7 @@ proc zero_test() {
     print32(@cast(int, @size_of(@type_of(zero))))
 
     zsp(zero, v)
+    return 1
 }
 
 proc main(argc: int, argv: **u8): int {
@@ -68,7 +69,7 @@ proc test_print() {
     puts("Test print!")
 }
 
-proc structural() {
+proc structural(): void {
     var s : ABC_s
     s.a = 10
     print32(s.a)
