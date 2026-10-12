@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#define INT_SIZE (sizeof(int))
+#define PTR_SIZE (sizeof(void *))
+
 enum type_tag {
     TYPE_INVALID,
     TYPE_RAW,
@@ -73,12 +76,10 @@ type_integer_bits(const struct type *type)
     if (type->tag == TYPE_BOOL)
         return 1;
     if (type->tag == TYPE_PTR)
-        return sizeof(void *) * 8;
+        return PTR_SIZE * 8;
 
     assert(type_is_integer(type));
-    return type->bit_size
-        ? type->bit_size
-        : sizeof(int) * 8;
+    return type->bit_size;
 }
 
 static inline bool

@@ -30,6 +30,9 @@ type_get_xint(struct attr *attr, size_t bit_size, enum type_tag tag)
     struct type *type;
     size_t i;
 
+    if (bit_size == 0)
+        bit_size = INT_SIZE * 8;
+
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
 
@@ -247,7 +250,7 @@ type_sizeof(const struct type *type)
             return type_integer_bits(type) / 8;
 
         case TYPE_PTR:
-            return sizeof(void *);
+            return PTR_SIZE;
 
         case TYPE_ARRAY:
             return type->array.count * type_sizeof(type->array.item);
@@ -282,7 +285,7 @@ type_alignof(const struct type *type)
             return type_integer_bits(type) / 8;
 
         case TYPE_PTR:
-            return sizeof(void *);
+            return PTR_SIZE;
 
         case TYPE_ARRAY:
             return type_alignof(type->array.item);
