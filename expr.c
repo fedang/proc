@@ -104,6 +104,18 @@ expr_make_access(struct expr *op, struct symbol *field)
 }
 
 struct expr *
+expr_make_array(size_t args_count)
+{
+    struct expr_array *expr;
+    size_t size;
+
+    size = sizeof(struct expr_array) + args_count * sizeof(struct expr *);
+    expr = expr_make(size, EXPR_ARRAY);
+    expr->args_count = args_count;
+    return &expr->expr;
+}
+
+struct expr *
 expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
 {
     struct expr_macro *expr;
@@ -120,13 +132,19 @@ expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
 bool
 expr_is_lvalue(const struct expr *expr)
 {
+    const struct expr_index *index;
     const struct expr_access *access;
     const struct expr_macro *macro;
 
     switch (expr->tag) {
         case EXPR_IDENT:
-        case EXPR_INDEX:
             return true;
+
+        case EXPR_INDEX:
+            index = (const struct expr_index *)expr;
+            if (index->op->type && index->op->type->tag == TYPE_PTR)
+                return true;
+            return expr_is_lvalue(index->op);
 
         case EXPR_ACCESS:
             access = (const struct expr_access *)expr;

@@ -18,6 +18,7 @@ enum expr_tag {
     EXPR_CALL,
     EXPR_INDEX,
     EXPR_ACCESS,
+    EXPR_ARRAY,
     EXPR_MACRO,
 };
 
@@ -138,6 +139,13 @@ struct expr_access {
     unsigned offset;
 };
 
+struct expr_array {
+    struct expr expr;
+    unsigned slot;
+    size_t args_count;
+    struct expr *args[];
+};
+
 struct expr_macro {
     struct expr expr;
     struct symbol *name;
@@ -167,6 +175,8 @@ struct expr *expr_make_call(struct expr *op, size_t args_count);
 struct expr *expr_make_index(struct expr *op, struct expr *index);
 
 struct expr *expr_make_access(struct expr *op, struct symbol *field);
+
+struct expr *expr_make_array(size_t args_count);
 
 struct expr *expr_make_macro(struct symbol *name, struct stmt *body,
                              size_t args_count);

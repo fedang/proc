@@ -672,6 +672,24 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
     return out;
 }
 
+static struct irval
+irgen_expr_index(struct irgen *state, struct expr_index *expr)
+{
+    unreachable();
+}
+
+static struct irval
+irgen_expr_access(struct irgen *state, struct expr_access *expr)
+{
+    unreachable();
+}
+
+static struct irval
+irgen_expr_array(struct irgen *state, struct expr_array *expr)
+{
+    unreachable();
+}
+
 static const char *
 irgen_cast_instr(const struct type *src, const struct type *dst)
 {
@@ -753,6 +771,15 @@ irgen_expr(struct irgen *state, struct expr *expr)
 
         case EXPR_CALL:
             return irgen_expr_call(state, (struct expr_call *)expr);
+
+        case EXPR_INDEX:
+            return irgen_expr_index(state, (struct expr_index *)expr);
+
+        case EXPR_ACCESS:
+            return irgen_expr_access(state, (struct expr_access *)expr);
+
+        case EXPR_ARRAY:
+            return irgen_expr_array(state, (struct expr_array *)expr);
 
         case EXPR_MACRO:
             return irgen_expr_macro(state, (struct expr_macro *)expr);

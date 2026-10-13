@@ -48,7 +48,7 @@ checker_init(struct checker *state, struct source *src)
 
 static void
 checker_local_push(struct checker *state, struct symbol *sym,
-                     struct type *type)
+                   struct type *type)
 {
     assert(state->locals_count < 256 && "too many locals!");
 
@@ -265,7 +265,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
     struct type *type;
     struct expr_ident *ident;
     struct expr_unop *unop;
-    struct expr_index *index;
+    struct expr_array *array;
     struct expr_macro *macro;
     struct named *named;
     int64_t count;
@@ -299,17 +299,34 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             return type_get_ptr(NULL, type);
 
         case EXPR_INDEX:
-            index = (struct expr_index *)expr;
+            // Offer a tip to confused users
+            TYCHK_ERROR(state, expr->span,
+                        "Expected [type, count] for array type\n");
+            return NULL;
 
-            type = checker_eval_raw(state, index->op);
+        case EXPR_ARRAY:
+            array = (struct expr_array *)expr;
+            if (array->args_count != 2) {
+                TYCHK_ERROR(state, expr->span,
+                            "Expected [type, count] for array type\n");
+                return NULL;
+            }
+
+            type = checker_eval_raw(state, array->args[0]);
             if (!type)
                 return NULL;
 
-            if (!checker_eval_const(state, index->index, &count))
+            if (type->tag == TYPE_PROC) {
+                TYCHK_ERROR(state, array->args[0]->span,
+                            "Invalid array element type\n");
+                return NULL;
+            }
+
+            if (!checker_eval_const(state, array->args[1], &count))
                 return NULL;
 
             if (count <= 0) {
-                TYCHK_ERROR(state, index->index->span,
+                TYCHK_ERROR(state, array->args[1]->span,
                             "Array size must be greater than 0\n");
                 return NULL;
             }
@@ -675,6 +692,43 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
 }
 
 static bool
+checker_expr_array(struct checker *state, struct expr_array *expr)
+{
+    struct type *type;
+    size_t i;
+
+    if (expr->args_count == 0) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Empty array literal is not allowed\n");
+        return false;
+    }
+
+    if (!checker_expr(state, expr->args[0]))
+        return false;
+
+    type = expr->args[0]->type;
+    if (type->tag == TYPE_PROC) {
+        TYCHK_ERROR(state, expr->args[0]->span,
+                    "Invalid array element type\n");
+        return false;
+    }
+
+    for (i = 1; i < expr->args_count; i++) {
+        if (!checker_expr(state, expr->args[i]))
+            return false;
+
+        if (!checker_cmp(state, type, expr->args[i]->type)) {
+            TYCHK_ERROR(state, expr->args[i]->span,
+                        "Array literal elements have mismatched types\n");
+            return false;
+        }
+    }
+
+    expr->expr.type = type_get_array(NULL, type, expr->args_count);
+    return true;
+}
+
+static bool
 checker_expr_macro(struct checker *state, struct expr_macro *expr)
 {
     struct type *type;
@@ -772,6 +826,9 @@ checker_expr(struct checker *state, struct expr *expr)
 
         case EXPR_ACCESS:
             return checker_expr_access(state, (struct expr_access *)expr);
+
+        case EXPR_ARRAY:
+            return checker_expr_array(state, (struct expr_array *)expr);
 
         case EXPR_MACRO:
             return checker_expr_macro(state, (struct expr_macro *)expr);

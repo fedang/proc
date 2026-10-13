@@ -294,6 +294,37 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         return true;
     }
 
+    if (parser_match(state, TOKEN_LBRACK)) {
+        saved_parens = state->parens;
+        saved_noblock = state->no_block;
+        state->parens = true;
+        state->no_block = false;
+
+        count = 0;
+        if (!parser_match(state, TOKEN_RBRACK)) {
+            do {
+                if (parser_curr(state)->tag == TOKEN_RBRACK)
+                    break;
+
+                assert(count < 32 && "too many array elements");
+                if (!parser_expr_prec(state, &args[count++], 0))
+                    return false;
+            } while (parser_match(state, TOKEN_COMMA));
+
+            if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after array"))
+                return false;
+        }
+
+        state->parens = saved_parens;
+        state->no_block = saved_noblock;
+
+        *expr = expr_make_array(count);
+        for (i = 0; i < count; i++) {
+            ((struct expr_array *)*expr)->args[i] = args[i];
+        }
+        goto done;
+    }
+
     if (parser_match(state, TOKEN_MINUS)) {
         if (!parser_expr_prec(state, &op, 12))
             return false;
