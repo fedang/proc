@@ -778,7 +778,7 @@ irgen_expr(struct irgen *state, struct expr *expr)
 
     if (expr_is_mem(expr)) {
         ptr = irgen_expr_addr(state, expr);
-        return expr->type->tag == TYPE_PROC
+        return !type_is_sized(expr->type)
              ? ptr
              : irgen_emit_load(state, expr->type, ptr);
     }

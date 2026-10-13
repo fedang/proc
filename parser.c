@@ -910,7 +910,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
         return false;
 
     fields_count = 0;
-    do {
+    while (!parser_match(state, TOKEN_RBRACE)) {
         if (!parser_check_sym(state, &field_sym, "Expected field name"))
             return false;
 
@@ -929,7 +929,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
 
         if (!parser_check_end(state, "Expected newline or ';' after field"))
             return false;
-    } while (!parser_match(state, TOKEN_RBRACE));
+    }
 
     copy = malloc(fields_count * sizeof(struct struct_field));
     memcpy(copy, fields, fields_count * sizeof(struct struct_field));

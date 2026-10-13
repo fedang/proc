@@ -83,9 +83,16 @@ type_integer_bits(const struct type *type)
 }
 
 static inline bool
+type_is_sized(const struct type *type)
+{
+    return type->tag != TYPE_PROC;
+}
+
+static inline bool
 type_is_zst(const struct type *type)
 {
-    return type_sizeof(type) == 0;
+    return type_is_sized(type)
+        && type_sizeof(type) == 0;
 }
 
 struct type *type_make_raw(struct expr *raw);

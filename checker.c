@@ -316,7 +316,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             if (!type)
                 return NULL;
 
-            if (type->tag == TYPE_PROC) {
+            if (!type_is_sized(type)) {
                 TYCHK_ERROR(state, array->args[0]->span,
                             "Invalid array element type\n");
                 return NULL;
@@ -469,6 +469,11 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
         if (!expr_is_lvalue(expr->op_lhs)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Binop left operand is not an lvalue\n");
+            return false;
+        }
+
+        if (!type_is_sized(expr->op_lhs->type)) {
+            TYCHK_ERROR(state, expr->expr.span, "Cannot assign to unsized type\n");
             return false;
         }
     }
@@ -707,7 +712,7 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
         return false;
 
     type = expr->args[0]->type;
-    if (type->tag == TYPE_PROC) {
+    if (!type_is_sized(type)) {
         TYCHK_ERROR(state, expr->args[0]->span,
                     "Invalid array element type\n");
         return false;
@@ -747,7 +752,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         if (!type)
             return false;
 
-        if (type->tag == TYPE_PROC) {
+        if (!type_is_sized(type)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Expected a sized type\n");
             return false;
@@ -870,6 +875,13 @@ checker_stmt_var(struct checker *state, struct stmt_var *stmt)
     if (!stmt->type) {
         TYCHK_ERROR(state, stmt->stmt.span,
                     "Cannot infer type for variable '%s'\n", stmt->sym->str);
+        return false;
+    }
+
+    if (!type_is_sized(stmt->type)) {
+        TYCHK_ERROR(state, stmt->stmt.span,
+                    "Variable '%s' cannot have an unsized type (use a pointer)\n",
+                    stmt->sym->str);
         return false;
     }
 
@@ -1082,10 +1094,16 @@ checker_decl_proc(struct checker *state, struct decl_proc *decl)
     if (state->pass == TYCHK_SECOND_PASS) {
         if (!checker_resolve(state, &decl->out)) {
             ok = false;
+        } else if (!type_is_sized(decl->out)) {
+            TYCHK_ERROR(state, decl->decl.span, "Return type must be a sized type\n");
+            ok = false;
         }
 
         for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
             if (!checker_resolve(state, &ptr->type)) {
+                ok = false;
+            } else if (!type_is_sized(ptr->type)) {
+                TYCHK_ERROR(state, decl->decl.span, "Parameter must be a sized type\n");
                 ok = false;
             }
         }
@@ -1144,9 +1162,17 @@ checker_decl_struct(struct checker *state, struct decl_struct *decl)
                                decl->fields, decl->fields_count);
 
         checker_type_push(state, decl->sym, type);
-    } else if (state->pass == TYCHK_SECOND_PASS) {
+        return true;
+    }
+
+    if (state->pass == TYCHK_SECOND_PASS) {
         for (i = 0; i < decl->fields_count; i++) {
             if (!checker_resolve(state, &decl->fields[i].type)) {
+                ok = false;
+            } else if (!type_is_sized(decl->fields[i].type)) {
+                TYCHK_ERROR(state, decl->decl.span,
+                            "Struct field '%s' must have a sized type\n",
+                            decl->fields[i].name->str);
                 ok = false;
             }
         }

@@ -232,7 +232,6 @@ type_sizeof(const struct type *type)
 
     switch (type->tag) {
         case TYPE_VOID:
-        case TYPE_PROC:
             return 0;
 
         case TYPE_BOOL:

@@ -16,6 +16,20 @@ proc zero_test() : @type_of(1) {
     var zero: zst
     var v: void
 
+    var arr: [void, 12]
+
+    if @size_of(zst) != @size_of(empty) || @size_of(void) != @size_of(empty) {
+        puts("very very weird")
+    } else {
+        puts("0 = 0 !")
+    }
+
+    if @cast(int, @size_of(@type_of(arr))) != 0 {
+        puts("impossible")
+    } else {
+        puts("everything is ok")
+    }
+
     puts("sizeof zst is:")
     print32(@cast(int, @size_of(@type_of(zero))))
 
