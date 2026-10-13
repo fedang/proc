@@ -1,3 +1,13 @@
+//module X {
+//    proc x() {
+//    }
+//}
+//
+//sig Y {
+//}
+
+type X = int
+
 struct zst {
     x: void
     y: [void, 4]

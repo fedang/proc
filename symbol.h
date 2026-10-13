@@ -15,6 +15,8 @@
     X(proc) \
     X(struct) \
     X(type) \
+    X(module) \
+    X(sig) \
     X(size_of) \
     X(align_of) \
     X(type_of) \

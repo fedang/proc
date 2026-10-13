@@ -50,3 +50,29 @@ decl_make_type(struct symbol *sym, struct type *type)
     decl->type = type;
     return &decl->decl;
 }
+
+struct decl *
+decl_make_module(struct symbol *sym, struct type *sig, struct decl **items,
+                 size_t items_count)
+{
+    struct decl_module *decl;
+
+    decl = decl_make(sizeof(struct decl_module), DECL_MODULE);
+    decl->sym = sym;
+    decl->sig = sig;
+    decl->items = items;
+    decl->items_count = items_count;
+    return &decl->decl;
+}
+
+struct decl *
+decl_make_sig(struct symbol *sym, struct decl **items, size_t items_count)
+{
+    struct decl_sig *decl;
+
+    decl = decl_make(sizeof(struct decl_sig), DECL_SIG);
+    decl->sym = sym;
+    decl->items = items;
+    decl->items_count = items_count;
+    return &decl->decl;
+}

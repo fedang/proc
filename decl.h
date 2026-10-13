@@ -18,6 +18,8 @@ enum decl_tag {
     DECL_PROC,
     DECL_STRUCT,
     DECL_TYPE,
+    DECL_MODULE,
+    DECL_SIG,
 };
 
 struct decl {
@@ -48,6 +50,23 @@ struct decl_type {
     struct type *type;
 };
 
+struct decl_module {
+    struct decl decl;
+    struct symbol *sym;
+    struct type *sig;
+    struct decl **items;
+    size_t items_count;
+    bool no_body;
+};
+
+struct decl_sig {
+    struct decl decl;
+    struct symbol *sym;
+    struct decl **items;
+    size_t items_count;
+    bool no_body;
+};
+
 static inline void
 decl_set_span(struct decl *decl, struct span span)
 {
@@ -68,5 +87,11 @@ struct decl *decl_make_struct(struct symbol *sym, struct struct_field *fields,
                               size_t fields_count);
 
 struct decl *decl_make_type(struct symbol *sym, struct type *type);
+
+struct decl *decl_make_module(struct symbol *sym, struct type *sig,
+                              struct decl **items, size_t items_count);
+
+struct decl *decl_make_sig(struct symbol *sym, struct decl **items,
+                           size_t items_count);
 
 #endif

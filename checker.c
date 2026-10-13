@@ -1254,6 +1254,12 @@ checker_decl_type(struct checker *state, struct decl_type *decl)
 {
     size_t i;
 
+    if (!decl->type) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Opaque types not implemented yet\n");
+        return false;
+    }
+
     if (state->pass == TYCHK_FIRST_PASS) {
         checker_type_push(state, decl->sym, decl->type);
     } else if (state->pass == TYCHK_SECOND_PASS) {

@@ -866,6 +866,8 @@ done:
 /*
  * Declarations
  */
+static bool parser_decl(struct parser *state, struct decl **decl);
+
 static bool
 parser_decl_proc(struct parser *state, struct decl **decl)
 {
@@ -992,16 +994,127 @@ parser_decl_type(struct parser *state, struct decl **decl)
     if (!parser_check_sym(state, &sym, "Expected type name"))
         return false;
 
-    if (!parser_check(state, TOKEN_EQ, "Expected '=' after name"))
-        return false;
-
-    if (!parser_type(state, &type))
-        return false;
+    type = NULL;
+    if (parser_match(state, TOKEN_EQ)) {
+        if (!parser_type(state, &type))
+            return false;
+    }
 
     if (!parser_check_end(state, "Expected newline or ';' after declaration"))
         return false;
 
     *decl = decl_make_type(sym, type);
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
+parser_decl_module(struct parser *state, struct decl **decl)
+{
+    struct symbol *sym;
+    struct type *sig;
+    struct decl **copy, *items[64];
+    size_t items_count;
+    bool no_body, saved_parens, saved_noblock;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    if (!parser_check_sym(state, &sym, "Expected module name"))
+        return false;
+
+    // module name [: sig] [ { ... } ]
+
+    sig = NULL;
+    if (parser_match(state, TOKEN_COLON)) {
+        if (!parser_type(state, &sig))
+            return false;
+    }
+
+    items_count = 0;
+    no_body = true;
+    copy = NULL;
+
+    if (parser_match(state, TOKEN_LBRACE)) {
+        no_body = false;
+
+        saved_parens = state->parens;
+        saved_noblock = state->no_block;
+        state->parens = false;
+        state->no_block = false;
+
+        for (; !parser_eof(state); items_count++) {
+            if (parser_match(state, TOKEN_RBRACE))
+                break;
+
+            assert(items_count < 64 && "too many decls!");
+            if (!parser_decl(state, &items[items_count]))
+                return false;
+        }
+
+        state->parens = saved_parens;
+        state->no_block = saved_noblock;
+
+        copy = malloc(items_count * sizeof(struct decl *));
+        memcpy(copy, items, items_count * sizeof(struct decl *));
+    } else {
+        if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+            return false;
+    }
+
+    *decl = decl_make_module(sym, sig, copy, items_count);
+    ((struct decl_module *)*decl)->no_body = no_body;
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
+parser_decl_sig(struct parser *state, struct decl **decl)
+{
+    struct symbol *sym;
+    struct decl **copy, *items[64];
+    size_t items_count;
+    bool no_body, saved_parens, saved_noblock;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    if (!parser_check_sym(state, &sym, "Expected signature name"))
+        return false;
+
+    items_count = 0;
+    no_body = true;
+    copy = NULL;
+
+    if (parser_match(state, TOKEN_LBRACE)) {
+        no_body = false;
+
+        saved_parens = state->parens;
+        saved_noblock = state->no_block;
+        state->parens = false;
+        state->no_block = false;
+
+        for (; !parser_eof(state); items_count++) {
+            if (parser_match(state, TOKEN_RBRACE))
+                break;
+
+            assert(items_count < 64 && "too many decls!");
+            if (!parser_decl(state, &items[items_count]))
+                return false;
+        }
+
+        state->parens = saved_parens;
+        state->no_block = saved_noblock;
+
+        copy = malloc(items_count * sizeof(struct decl *));
+        memcpy(copy, items, items_count * sizeof(struct decl *));
+    } else {
+        if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+            return false;
+    }
+
+    *decl = decl_make_sig(sym, copy, items_count);
+    ((struct decl_sig *)*decl)->no_body = no_body;
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
 }
@@ -1025,6 +1138,16 @@ parser_decl(struct parser *state, struct decl **decl)
         if (sym == symbol_type) {
             parser_advance(state);
             return parser_decl_type(state, decl);
+        }
+
+        if (sym == symbol_module) {
+            parser_advance(state);
+            return parser_decl_module(state, decl);
+        }
+
+        if (sym == symbol_sig) {
+            parser_advance(state);
+            return parser_decl_sig(state, decl);
         }
     }
 
