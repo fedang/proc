@@ -686,7 +686,7 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     for (i = 0; i < type->strukt.fields_count; i++) {
         if (type->strukt.fields[i].name == expr->field) {
             expr->expr.type = type->strukt.fields[i].type;
-            expr->offset = i;
+            expr->index = type->strukt.fields[i].index;
             return true;
         }
     }
@@ -731,6 +731,55 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
 
     expr->expr.type = type_get_array(NULL, type, expr->args_count);
     return true;
+}
+
+static bool
+checker_expr_struct(struct checker *state, struct expr_struct *expr)
+{
+    struct type *type;
+    size_t i, j;
+    bool found, ok;
+
+    type = checker_eval_raw(state, expr->op);
+    if (!type)
+        return false;
+
+    if (type->tag != TYPE_STRUCT) {
+        TYCHK_ERROR(state, expr->op->span, "Expected struct type for literal\n");
+        return false;
+    }
+
+    expr->expr.type = type;
+    ok = true;
+
+    for (i = 0; i < expr->fields_count; i++) {
+        if (!checker_expr(state, expr->fields[i].value))
+            return false;
+
+        found = false;
+        for (j = 0; j < type->strukt.fields_count; j++) {
+            if (type->strukt.fields[j].name == expr->fields[i].field) {
+                if (!checker_cmp(state, type->strukt.fields[j].type,
+                                 expr->fields[i].value->type)) {
+                    TYCHK_ERROR(state, expr->fields[i].value->span,
+                                "Field '%s' type mismatch\n", expr->fields[i].field->str);
+                    ok = false;
+                } else {
+                    found = true;
+                }
+                break;
+            }
+        }
+
+        if (!found) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Struct '%s' has no field named '%s'\n",
+                        type->strukt.name->str, expr->fields[i].field->str);
+            ok = false;
+        }
+    }
+
+    return ok;
 }
 
 static bool
@@ -834,6 +883,9 @@ checker_expr(struct checker *state, struct expr *expr)
 
         case EXPR_ARRAY:
             return checker_expr_array(state, (struct expr_array *)expr);
+
+        case EXPR_STRUCT:
+            return checker_expr_struct(state, (struct expr_struct *)expr);
 
         case EXPR_MACRO:
             return checker_expr_macro(state, (struct expr_macro *)expr);

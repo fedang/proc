@@ -9,6 +9,7 @@
 
 enum irval_tag {
     IRVAL_INVALID,
+    IRVAL_ZERO,
     IRVAL_INT,
     IRVAL_REG,
     IRVAL_GLOBAL,
@@ -24,6 +25,7 @@ struct irval {
     };
 };
 
+#define IRVAL_ZERO() ((struct irval) { IRVAL_ZERO })
 #define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { .ival = (v) } })
 #define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { .reg = (v) } })
 #define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { .global = (v) } })

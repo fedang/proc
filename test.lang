@@ -6,6 +6,8 @@ struct zst {
 struct empty {
 }
 
+struct abc { a:int; b:int; }
+
 proc zsp(a: zst, b: void): zst {
     var x: zst = a
     var y = &x
@@ -83,6 +85,10 @@ proc main(argc: int, argv: **u8): int {
 
     structural()
     print32(x / 2)
+
+    puts("STRUCT TEST")
+    stest()
+
     return 0
 }
 
@@ -114,6 +120,27 @@ struct ABC {
     a: int
     b: bool
     c: u8
+}
+
+struct A {
+    a: int
+    b: int
+}
+
+struct Nested {
+    arr: [A, 2]
+}
+
+proc stest() {
+    var s = Nested {
+        arr = [
+            A { a = 1; b = 2 },
+            A { a = 3; b = 4 }
+        ]
+    }
+
+    print32(s.arr[1].a)
+    print32(A { a = 99; b = 100 }.a)
 }
 
 //proc cond() {

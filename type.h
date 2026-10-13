@@ -25,7 +25,7 @@ enum type_tag {
 struct struct_field {
     struct symbol *name;
     struct type *type;
-    unsigned offset;
+    unsigned index;
 };
 
 struct type {

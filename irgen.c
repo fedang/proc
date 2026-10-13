@@ -34,6 +34,10 @@ static void
 irgen_val(struct irgen *state, struct irval val)
 {
     switch (val.tag) {
+        case IRVAL_ZERO:
+            IR_EMITF(state, "zeroinitializer");
+            break;
+
         case IRVAL_INT:
             IR_EMITF(state, "%ld", val.ival);
             break;
@@ -365,10 +369,12 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
     struct expr_index *index;
     struct expr_access *access;
     struct expr_array *array;
+    struct expr_struct *strukt;
     struct expr_macro *macro;
     struct irval val, ptr, idx;
     struct type *type;
-    size_t i;
+    unsigned field_index;
+    size_t i, j;
 
     switch (expr->tag) {
         case EXPR_IDENT:
@@ -435,7 +441,7 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
 
             return irgen_emit_gep(state, type, ptr, 2,
                                   IRVAL_INT(0), NULL,
-                                  IRVAL_INT(access->offset), NULL);
+                                  IRVAL_INT(access->index), NULL);
 
         case EXPR_ARRAY:
             array = (struct expr_array *)expr;
@@ -450,6 +456,35 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
                                      IRVAL_INT(0), NULL,
                                      IRVAL_INT(i), NULL);
                 irgen_emit_store(state, array->args[i]->type, idx, val);
+            }
+            return ptr;
+
+        case EXPR_STRUCT:
+            strukt = (struct expr_struct *)expr;
+            ptr = IRVAL_REG(strukt->slot);
+
+            /*
+             * Zero initialize the struct, then populate the fields
+             */
+            irgen_emit_store(state, strukt->expr.type, ptr, IRVAL_ZERO());
+
+            for (i = 0; i < strukt->fields_count; i++) {
+                for (j = 0; j < strukt->expr.type->strukt.fields_count; j++) {
+                    if (strukt->expr.type->strukt.fields[j].name
+                            == strukt->fields[i].field) {
+                        field_index = strukt->expr.type->strukt.fields[j].index;
+                        break;
+                    }
+                }
+
+                val = irgen_expr(state, strukt->fields[i].value);
+                if (type_is_zst(strukt->fields[i].value->type))
+                    continue;
+
+                idx = irgen_emit_gep(state, strukt->expr.type, ptr, 2,
+                                     IRVAL_INT(0), NULL,
+                                     IRVAL_INT(field_index), NULL);
+                irgen_emit_store(state, strukt->fields[i].value->type, idx, val);
             }
             return ptr;
 
@@ -711,7 +746,7 @@ irgen_expr_access(struct irgen *state, struct expr_access *expr)
 
     val = irgen_expr(state, expr->op);
     return irgen_emit_extractvalue(state, val, expr->op->type,
-                                   expr->expr.type, expr->offset);
+                                   expr->expr.type, expr->index);
 }
 
 static const char *
@@ -1021,8 +1056,9 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
 static void
 irgen_hoist_expr(struct irgen *state, struct expr *expr)
 {
-    struct expr_array *array;
     struct expr_call *call;
+    struct expr_array *array;
+    struct expr_struct *strukt;
     struct expr_macro *macro;
     size_t i;
 
@@ -1068,6 +1104,13 @@ irgen_hoist_expr(struct irgen *state, struct expr *expr)
             }
             break;
 
+        case EXPR_STRUCT:
+            strukt = (struct expr_struct *)expr;
+            strukt->slot = irgen_emit_simple0(state, "alloca", expr->type).reg;
+            for (i = 0; i < strukt->fields_count; i++) {
+                irgen_hoist_expr(state, strukt->fields[i].value);
+            }
+            break;
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;

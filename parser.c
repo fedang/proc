@@ -91,6 +91,7 @@ parser_check_end(struct parser *state, const char *msg)
     if (parser_eof(state))
         return true;
 
+    // XXX: {a;b;} or {a;b}
     if (parser_curr(state)->tag == TOKEN_RBRACE)
         return true;
 
@@ -439,6 +440,7 @@ parser_token_prec(enum token_tag tag)
         [TOKEN_SLASH] = 11,
         [TOKEN_PERC] = 11,
         [TOKEN_LPAREN] = 13,
+        [TOKEN_LBRACE] = 13,
         [TOKEN_LBRACK] = 13,
         [TOKEN_DOT] = 13,
     };
@@ -483,9 +485,16 @@ parser_token_binop(enum token_tag tag)
 }
 
 static bool
+parser_expr(struct parser *state, struct expr **expr)
+{
+    return parser_expr_prec(state, expr, 0);
+}
+
+static bool
 parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
 {
     struct expr *rhs, *args[32];
+    struct struct_init fields[32];
     enum token_tag op_tag;
     struct symbol *field;
     unsigned prec, count, i;
@@ -505,6 +514,9 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
         prec = parser_token_prec(op_tag);
 
         if (prec < base_prec || prec == 0)
+            break;
+
+        if (op_tag == TOKEN_LBRACE && state->no_block)
             break;
 
         parser_advance(state);
@@ -562,6 +574,41 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
             continue;
         }
 
+        if (op_tag == TOKEN_LBRACE) {
+            saved_parens = state->parens;
+            saved_noblock = state->no_block;
+            state->parens = true;
+            state->no_block = false;
+
+            count = 0;
+            while (!parser_match(state, TOKEN_RBRACE)) {
+                if (!parser_check_sym(state, &field, "Expected field name"))
+                    return false;
+
+                if (!parser_check(state, TOKEN_EQ, "Expected '=' after field name"))
+                    return false;
+
+                if (!parser_expr(state, &rhs))
+                    return false;
+
+                assert(count < 32 && "too many fields");
+                fields[count].field = field;
+                fields[count].value = rhs;
+                count++;
+
+                if (!parser_check_end(state, "Expected newline or ';' after field assignment"))
+                    return false;
+            }
+
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
+
+            *expr = expr_make_struct(*expr, count);
+            memcpy(((struct expr_struct *)*expr)->fields, fields, count * sizeof(struct struct_init));
+            expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
+            continue;
+        }
+
         if (op_tag == TOKEN_DOT) {
             if (!parser_check_sym(state, &field, "Expected field name after '.'"))
                 return false;
@@ -586,12 +633,6 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
     }
 
     return true;
-}
-
-static bool
-parser_expr(struct parser *state, struct expr **expr)
-{
-    return parser_expr_prec(state, expr, 0);
 }
 
 static bool
@@ -924,7 +965,7 @@ parser_decl_struct(struct parser *state, struct decl **decl)
         assert(fields_count < 64 && "too many fields!");
         fields[fields_count].name = field_sym;
         fields[fields_count].type = field_type;
-        fields[fields_count].offset = fields_count;
+        fields[fields_count].index = fields_count;
         fields_count++;
 
         if (!parser_check_end(state, "Expected newline or ';' after field"))

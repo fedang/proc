@@ -19,6 +19,7 @@ enum expr_tag {
     EXPR_INDEX,
     EXPR_ACCESS,
     EXPR_ARRAY,
+    EXPR_STRUCT,
     EXPR_MACRO,
 };
 
@@ -67,6 +68,11 @@ enum unop_tag {
     UNOP_DEREF,
     UNOP_NEG,
     UNOP_NOT,
+};
+
+struct struct_init {
+    struct symbol *field;
+    struct expr *value;
 };
 
 enum macro_tag {
@@ -136,7 +142,7 @@ struct expr_access {
     struct expr expr;
     struct expr *op;
     struct symbol *field;
-    unsigned offset;
+    unsigned index;
 };
 
 struct expr_array {
@@ -144,6 +150,14 @@ struct expr_array {
     unsigned slot;
     size_t args_count;
     struct expr *args[];
+};
+
+struct expr_struct {
+    struct expr expr;
+    struct expr *op;
+    unsigned slot;
+    size_t fields_count;
+    struct struct_init fields[];
 };
 
 struct expr_macro {
@@ -177,6 +191,8 @@ struct expr *expr_make_index(struct expr *op, struct expr *index);
 struct expr *expr_make_access(struct expr *op, struct symbol *field);
 
 struct expr *expr_make_array(size_t args_count);
+
+struct expr *expr_make_struct(struct expr *op, size_t fields_count);
 
 struct expr *expr_make_macro(struct symbol *name, struct stmt *body,
                              size_t args_count);

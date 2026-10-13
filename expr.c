@@ -116,6 +116,19 @@ expr_make_array(size_t args_count)
 }
 
 struct expr *
+expr_make_struct(struct expr *op, size_t fields_count)
+{
+    struct expr_struct *expr;
+    size_t size;
+
+    size = sizeof(struct expr_struct) + fields_count * sizeof(struct struct_init);
+    expr = expr_make(size, EXPR_STRUCT);
+    expr->op = op;
+    expr->fields_count = fields_count;
+    return &expr->expr;
+}
+
+struct expr *
 expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
 {
     struct expr_macro *expr;
@@ -176,6 +189,7 @@ expr_is_mem(const struct expr *expr)
         case EXPR_IDENT:
         case EXPR_INDEX:
         case EXPR_ARRAY:
+        case EXPR_STRUCT:
             return true;
 
         case EXPR_UNOP:
