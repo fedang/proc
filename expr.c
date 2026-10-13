@@ -165,3 +165,35 @@ expr_is_lvalue(const struct expr *expr)
             return false;
     }
 }
+
+bool
+expr_is_mem(const struct expr *expr)
+{
+    const struct expr_access *access;
+    const struct expr_macro *macro;
+
+    switch (expr->tag) {
+        case EXPR_IDENT:
+        case EXPR_INDEX:
+        case EXPR_ARRAY:
+            return true;
+
+        case EXPR_UNOP:
+            return ((const struct expr_unop *)expr)->unop == UNOP_DEREF;
+
+        case EXPR_ACCESS:
+            access = (const struct expr_access *)expr;
+            if (access->op->type->tag == TYPE_PTR)
+                return true;
+            return expr_is_mem(access->op);
+
+        case EXPR_MACRO:
+            macro = (const struct expr_macro *)expr;
+            if (macro->macro.tag == MACRO_EXPR)
+                return expr_is_mem(macro->macro.expr);
+            /* fall through */
+
+        default:
+            return false;
+    }
+}

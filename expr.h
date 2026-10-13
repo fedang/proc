@@ -183,4 +183,6 @@ struct expr *expr_make_macro(struct symbol *name, struct stmt *body,
 
 bool expr_is_lvalue(const struct expr *expr);
 
+bool expr_is_mem(const struct expr *expr);
+
 #endif

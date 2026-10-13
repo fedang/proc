@@ -1,5 +1,9 @@
 struct zst {
     x: void
+    y: [void, 4]
+}
+
+struct empty {
 }
 
 proc zsp(a: zst, b: void): zst {
