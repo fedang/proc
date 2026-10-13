@@ -228,6 +228,24 @@ irgen_emit_gep(struct irgen *state, struct type *type, struct irval ptr,
 }
 
 static struct irval
+irgen_emit_extractvalue(struct irgen *state, struct irval arr,
+                        struct type *arr_type, struct type *type, size_t idx)
+{
+    struct irval out;
+
+    if (type_is_zst(arr_type) || type_is_zst(type))
+        return IRVAL_INT(0);
+
+    out = IRVAL_REG(irgen_fresh_reg(state));
+    IR_EMITF(state, "\t%%%u = extractvalue ", out.reg);
+    irgen_type(state, arr_type);
+    IR_EMITC(state, ' ');
+    irgen_val(state, arr);
+    IR_EMITF(state, ", %zu\n", idx);
+    return out;
+}
+
+static struct irval
 irgen_emit_conv(struct irgen *state, const char *instr, struct irval val,
                 struct type *src, struct type *dst)
 {
@@ -342,6 +360,25 @@ irgen_emit_block(struct irgen *state, unsigned label)
 struct irval irgen_expr(struct irgen *state, struct expr *expr);
 
 static struct irval
+irgen_init_array(struct irgen *state, struct expr_array *expr)
+{
+    struct irval slot, ptr, val;
+    size_t i;
+
+    slot = IRVAL_REG(expr->slot);
+
+    for (i = 0; i < expr->args_count; i++) {
+        val = irgen_expr(state, expr->args[i]);
+        ptr = irgen_emit_gep(state, expr->expr.type, slot, 2,
+                             IRVAL_INT(0), NULL,
+                             IRVAL_INT(i), NULL);
+        irgen_emit_store(state, expr->args[i]->type, ptr, val);
+    }
+
+    return slot;
+}
+
+static struct irval
 irgen_expr_lvalue(struct irgen *state, struct expr *expr)
 {
     struct expr_ident *ident;
@@ -369,7 +406,7 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
 
             report_error(state->src, &expr->span, "Undefined variable '%s'\n",
                          ident->sym->str);
-            longjmp(state->recovery, 1);
+            goto err;
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -420,6 +457,9 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
                                   IRVAL_INT(0), NULL,
                                   IRVAL_INT(access->offset), NULL);
 
+        case EXPR_ARRAY:
+            return irgen_init_array(state, (struct expr_array *)expr);
+
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
             if (macro->macro.tag == MACRO_EXPR)
@@ -428,10 +468,11 @@ irgen_expr_lvalue(struct irgen *state, struct expr *expr)
 
         default:
             report_error(state->src, &expr->span, "Invalid lvalue expression\n");
-            longjmp(state->recovery, 1);
+            goto err;
     }
 
-    unreachable();
+err:
+    longjmp(state->recovery, 1);
 }
 
 static struct irval
@@ -673,21 +714,13 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
 }
 
 static struct irval
-irgen_expr_index(struct irgen *state, struct expr_index *expr)
-{
-    unreachable();
-}
-
-static struct irval
 irgen_expr_access(struct irgen *state, struct expr_access *expr)
 {
-    unreachable();
-}
+    struct irval val;
 
-static struct irval
-irgen_expr_array(struct irgen *state, struct expr_array *expr)
-{
-    unreachable();
+    val = irgen_expr(state, expr->op);
+    return irgen_emit_extractvalue(state, val, expr->op->type,
+                                   expr->expr.type, expr->offset);
 }
 
 static const char *
@@ -772,14 +805,13 @@ irgen_expr(struct irgen *state, struct expr *expr)
         case EXPR_CALL:
             return irgen_expr_call(state, (struct expr_call *)expr);
 
-        case EXPR_INDEX:
-            return irgen_expr_index(state, (struct expr_index *)expr);
-
         case EXPR_ACCESS:
             return irgen_expr_access(state, (struct expr_access *)expr);
 
+        case EXPR_INDEX:
         case EXPR_ARRAY:
-            return irgen_expr_array(state, (struct expr_array *)expr);
+            ptr = irgen_expr_lvalue(state, expr);
+            return irgen_emit_load(state, expr->type, ptr);
 
         case EXPR_MACRO:
             return irgen_expr_macro(state, (struct expr_macro *)expr);
@@ -1001,7 +1033,72 @@ irgen_stmt(struct irgen *state, struct stmt *stmt)
  * Hoist local vars to the first IR block for mem2reg
  */
 static void
-irgen_emit_vars(struct irgen *state, struct stmt *stmt)
+irgen_hoist_expr(struct irgen *state, struct expr *expr)
+{
+    struct expr_array *array;
+    struct expr_call *call;
+    struct expr_macro *macro;
+    size_t i;
+
+    if (!expr)
+        return;
+
+    switch (expr->tag) {
+        case EXPR_LITERAL:
+        case EXPR_IDENT:
+            break;
+
+        case EXPR_BINOP:
+            irgen_hoist_expr(state, ((struct expr_binop *)expr)->op_lhs);
+            irgen_hoist_expr(state, ((struct expr_binop *)expr)->op_rhs);
+            break;
+
+        case EXPR_UNOP:
+            irgen_hoist_expr(state, ((struct expr_unop *)expr)->op);
+            break;
+
+        case EXPR_CALL:
+            call = (struct expr_call *)expr;
+            irgen_hoist_expr(state, call->op);
+            for (i = 0; i < call->args_count; i++) {
+                irgen_hoist_expr(state, call->args[i]);
+            }
+            break;
+
+        case EXPR_INDEX:
+            irgen_hoist_expr(state, ((struct expr_index *)expr)->op);
+            irgen_hoist_expr(state, ((struct expr_index *)expr)->index);
+            break;
+
+        case EXPR_ACCESS:
+            irgen_hoist_expr(state, ((struct expr_access *)expr)->op);
+            break;
+
+        case EXPR_ARRAY:
+            array = (struct expr_array *)expr;
+            array->slot = irgen_emit_simple0(state, "alloca", expr->type).reg;
+            for (i = 0; i < array->args_count; i++) {
+                irgen_hoist_expr(state, array->args[i]);
+            }
+            break;
+
+
+        case EXPR_MACRO:
+            macro = (struct expr_macro *)expr;
+            if (macro->macro.tag == MACRO_CAST) {
+                irgen_hoist_expr(state, macro->args[1]);
+            } else if (macro->macro.tag == MACRO_EXPR) {
+                irgen_hoist_expr(state, macro->macro.expr);
+            }
+            break;
+
+        default:
+            unreachable();
+    }
+}
+
+static void
+irgen_hoist_stmt(struct irgen *state, struct stmt *stmt)
 {
     struct stmt_var *var;
     struct stmt_block *block;
@@ -1019,20 +1116,26 @@ irgen_emit_vars(struct irgen *state, struct stmt *stmt)
         case STMT_BLOCK:
             block = (struct stmt_block *)stmt;
             for (i = 0; i < block->items_count; i++)
-                irgen_emit_vars(state, block->items[i]);
+                irgen_hoist_stmt(state, block->items[i]);
             break;
 
         case STMT_IF:
-            irgen_emit_vars(state, ((struct stmt_if *)stmt)->b_true);
-            irgen_emit_vars(state, ((struct stmt_if *)stmt)->b_false);
+            irgen_hoist_stmt(state, ((struct stmt_if *)stmt)->b_true);
+            irgen_hoist_stmt(state, ((struct stmt_if *)stmt)->b_false);
             break;
 
         case STMT_WHILE:
-            irgen_emit_vars(state, ((struct stmt_while *)stmt)->body);
+            irgen_hoist_stmt(state, ((struct stmt_while *)stmt)->body);
             break;
 
         case STMT_EXPR:
+            irgen_hoist_expr(state, ((struct stmt_expr *)stmt)->expr);
+            break;
+
         case STMT_RETURN:
+            irgen_hoist_expr(state, ((struct stmt_return *)stmt)->expr);
+            break;
+
         case STMT_CONTINUE:
         case STMT_BREAK:
             break;
@@ -1111,7 +1214,7 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
         state->locals_count++;
     }
 
-    irgen_emit_vars(state, decl->body);
+    irgen_hoist_stmt(state, decl->body);
 
     irgen_stmt(state, decl->body);
 
