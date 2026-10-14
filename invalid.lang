@@ -10,3 +10,45 @@ struct Broken {
 struct Trigger {
     arr: [int, @size_of(Broken)]
 }
+
+
+proc main(x: int) {
+    var x = 1+"a"
+    main(x)
+}
+
+proc broken_variable() {
+    var x = does_not_exist()
+    var y: int = x
+    var z = x + 10
+    x.some_field = 42
+    y = x()
+}
+
+proc missing_return(flag: bool): int {
+    if flag {
+        return 10
+    }
+}
+
+proc good_zst_return() {
+    var a = 5
+}
+
+proc type_mismatches() {
+    var text: int = "hello"
+    var math = text + 5
+    var empty: void
+    empty = 10
+}
+
+struct K {
+    a: int
+}
+
+proc struks() {
+    var x = K {
+        a = "a"; b = 10
+    }
+    var y = x
+}

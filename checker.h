@@ -6,29 +6,7 @@
 #include "type.h"
 #include "decl.h"
 #include "source.h"
-
-enum resolve_status {
-    RESOLVE_NONE,
-    RESOLVE_PENDING,
-    RESOLVE_DONE,
-};
-
-struct binding {
-    struct symbol *sym;
-    struct scope *scope;
-    enum resolve_status status;
-    bool is_type;
-    bool is_public;
-    struct decl *decl;
-    struct type *type;
-};
-
-struct scope {
-    struct scope *parent;
-    struct symbol *name;
-    struct binding bindings[256];
-    size_t bindings_count;
-};
+#include "scope.h"
 
 struct local_var {
     struct symbol *sym;

@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include <stdio.h>
 
 #include "checker.h"
@@ -6,65 +5,6 @@
 
 #define TYCHK_ERROR(state, span, ...) \
     report_error((state)->src, &(span), __VA_ARGS__)
-
-/*
- * Scopes
- */
-static struct scope *
-scope_make(struct symbol *name, struct scope *parent)
-{
-    struct scope *scope = calloc(1, sizeof(struct scope));
-    scope->name = name;
-    scope->parent = parent;
-    return scope;
-}
-
-static struct binding *
-scope_push(struct scope *scope, struct symbol *sym,
-           struct type *type, struct decl *decl, bool is_type)
-{
-    struct binding *bind;
-
-    assert(scope->bindings_count < 256 && "too many bindings!");
-    bind = &scope->bindings[scope->bindings_count++];
-
-    bind->sym = sym;
-    bind->status = decl ? RESOLVE_NONE : RESOLVE_DONE;
-    bind->scope = scope;
-    bind->is_type = is_type;
-    bind->is_public = true;
-    bind->decl = decl;
-    bind->type = type;
-    return bind;
-}
-
-static struct binding *
-scope_lookup_local(struct scope *scope, struct symbol *sym, bool is_type)
-{
-    size_t i;
-
-    for (i = 0; i < scope->bindings_count; i++) {
-        if (scope->bindings[i].is_type == is_type &&
-            scope->bindings[i].sym == sym)
-            return &scope->bindings[i];
-    }
-
-    return NULL;
-}
-
-static struct binding *
-scope_lookup(struct scope *scope, struct symbol *sym, bool is_type)
-{
-    struct binding *bind;
-
-    do {
-        bind = scope_lookup_local(scope, sym, is_type);
-        if (bind)
-            return bind;
-    } while ((scope = scope->parent) != NULL);
-
-    return NULL;
-}
 
 static void
 checker_root_push(struct checker *state, const char *name, struct type *type)
@@ -395,8 +335,10 @@ checker_resolve(struct checker *state, struct type **type_ptr)
     switch (type->tag) {
         case TYPE_RAW:
             type = checker_eval_raw(state, type->raw);
-            if (!type)
+            if (!type) {
+                *type_ptr = type_get_invalid();
                 return false;
+            }
             *type_ptr = type;
             return true;
 
@@ -465,14 +407,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             if (!d_type->type)
                 break;
 
-            type = checker_eval_raw(state, d_type->type->raw);
-            if (!type) {
-                ok = false;
-                bind->type = type_get_invalid();
-                break;
-            }
-            d_type->type = type;
-            bind->type = type;
+            ok = checker_resolve(state, &d_type->type);
+            bind->type = d_type->type;
             break;
 
         case DECL_STRUCT:
@@ -500,19 +436,23 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
             if (!checker_resolve(state, &proc->out)) {
                 ok = false;
+                proc->out = type_get_invalid();
             } else if (!type_is_sized(proc->out)) {
                 TYCHK_ERROR(state, proc->decl.span,
                             "Return type must be a sized type\n");
                 ok = false;
+                proc->out = type_get_invalid();
             }
 
             for (i = 0, ptr = proc->args; ptr != NULL; ptr = ptr->next) {
                 if (!checker_resolve(state, &ptr->type)) {
                     ok = false;
+                    ptr->type = type_get_invalid();
                 } else if (!type_is_sized(ptr->type)) {
                     TYCHK_ERROR(state, proc->decl.span,
                                 "Parameter must be a sized type\n");
                     ok = false;
+                    ptr->type = type_get_invalid();
                 }
                 assert(i < 32 && "too many args!");
                 args[i++] = ptr->type;
@@ -538,6 +478,12 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 static bool
 checker_cmp(struct checker *state, struct type *t1, struct type *t2)
 {
+    /*
+     * Treat invalid types as wildcard to prevent error cascades
+     */
+    if (t1->tag == TYPE_INVALID || t2->tag == TYPE_INVALID)
+        return true;
+
     // XXX
     assert(t1->tag != TYPE_RAW && t2->tag != TYPE_RAW);
     return t1 == t2;
@@ -597,6 +543,12 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
 {
     if (!checker_expr(state, expr->op_lhs) || !checker_expr(state, expr->op_rhs))
         return false;
+
+    if (expr->op_lhs->type->tag == TYPE_INVALID ||
+        expr->op_rhs->type->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
 
     if (!checker_cmp(state, expr->op_lhs->type, expr->op_rhs->type)) {
         TYCHK_ERROR(state, expr->expr.span,
@@ -683,6 +635,11 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
                         "Unop operand is not an lvalue\n");
             return false;
         }
+    }
+
+    if (expr->op->type->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
     }
 
     switch (expr->unop) {
@@ -784,6 +741,12 @@ checker_expr_index(struct checker *state, struct expr_index *expr)
     if (!checker_expr(state, expr->op) || !checker_expr(state, expr->index))
         return false;
 
+    if (expr->op->type->tag == TYPE_INVALID ||
+        expr->index->type->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
+
     if (!type_is_integer(expr->index->type)) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Invalid index type\n");
@@ -820,6 +783,11 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
         return false;
 
     type = expr->op->type;
+
+    if (type->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
 
     /*
      * Slices expose the fields 'ptr' and 'len'
@@ -926,8 +894,10 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
     ok = true;
 
     for (i = 0; i < expr->fields_count; i++) {
-        if (!checker_expr(state, expr->fields[i].value))
-            return false;
+        if (!checker_expr(state, expr->fields[i].value)) {
+            ok = false;
+            expr->fields[i].value->type = type_get_invalid();
+        }
 
         found = false;
         for (j = 0; j < type->strukt.fields_count; j++) {
@@ -1102,42 +1072,48 @@ static bool checker_stmt(struct checker *state, struct stmt *stmt);
 static bool
 checker_stmt_var(struct checker *state, struct stmt_var *stmt)
 {
+    bool ok = true;
+
     /*
      * The user could have provided an explicit type
      */
     if (stmt->type) {
-        if (!checker_resolve(state, &stmt->type))
-            return false;
+        if (!checker_resolve(state, &stmt->type)) {
+            ok = false;
+            stmt->type = type_get_invalid();
+        }
     }
 
     if (stmt->value) {
-        if (!checker_expr(state, stmt->value))
-            return false;
+        if (!checker_expr(state, stmt->value)) {
+            ok = false;
+            stmt->value->type = type_get_invalid();
+        }
 
         if (!stmt->type) {
             stmt->type = stmt->value->type;
         } else if (!checker_cmp(state, stmt->type, stmt->value->type)) {
             TYCHK_ERROR(state, stmt->stmt.span,
                         "Type mismatch in variable assignment\n");
-            return false;
+            ok = false;
         }
     }
 
     if (!stmt->type) {
         TYCHK_ERROR(state, stmt->stmt.span,
                     "Cannot infer type for variable '%s'\n", stmt->sym->str);
-        return false;
-    }
-
-    if (!type_is_sized(stmt->type)) {
+        ok = false;
+        stmt->type = type_get_invalid();
+    } else if (stmt->type->tag != TYPE_INVALID && !type_is_sized(stmt->type)) {
         TYCHK_ERROR(state, stmt->stmt.span,
                     "Variable '%s' cannot have an unsized type (use a pointer)\n",
                     stmt->sym->str);
-        return false;
+        ok = false;
+        stmt->type = type_get_invalid();
     }
 
     checker_local_push(state, stmt->sym, stmt->type);
-    return true;
+    return ok;
 }
 
 static bool
@@ -1317,6 +1293,7 @@ checker_decl_register(struct checker *state, struct decl *decl)
     struct decl_struct *strukt;
     struct decl_type *d_type;
     struct type *type;
+    bool ok = true;
 
     switch (decl->tag) {
         case DECL_PROC:
@@ -1324,31 +1301,31 @@ checker_decl_register(struct checker *state, struct decl *decl)
             if (scope_lookup_local(state->curr_scope, proc->sym, false)) {
                 TYCHK_ERROR(state, decl->span,
                             "Redefinition of symbol '%s'\n", proc->sym->str);
-                return false;
+                ok = false;
             }
 
             scope_push(state->curr_scope, proc->sym, NULL, decl, false);
-            return true;
+            return ok;
 
         case DECL_STRUCT:
             strukt = (struct decl_struct *)decl;
             if (scope_lookup_local(state->curr_scope, strukt->sym, true)) {
                 TYCHK_ERROR(state, decl->span,
                             "Redefinition of symbol '%s'\n", strukt->sym->str);
-                return false;
+                ok = false;
             }
 
             type = type_get_struct(decl->attr, strukt->sym,
                                    strukt->fields, strukt->fields_count);
             scope_push(state->curr_scope, strukt->sym, type, decl, true);
-            return true;
+            return ok;
 
         case DECL_TYPE:
             d_type = (struct decl_type *)decl;
             if (scope_lookup_local(state->curr_scope, d_type->sym, true)) {
                 TYCHK_ERROR(state, decl->span,
                             "Redefinition of symbol '%s'\n", d_type->sym->str);
-                return false;
+                ok = false;
             }
 
             /*
@@ -1356,7 +1333,7 @@ checker_decl_register(struct checker *state, struct decl *decl)
              */
             type = d_type->type ? NULL : type_get_opaque(decl->attr, d_type->sym);
             scope_push(state->curr_scope, d_type->sym, type, decl, true);
-            return true;
+            return ok;
 
         default:
             unreachable();
@@ -1421,9 +1398,6 @@ checker_module(struct checker *state, struct decl **decls, size_t decls_count)
         }
     }
 
-    if (!ok)
-        return false;
-
     /*
      * Resolve (recursively) all the bindings in scope
      */
@@ -1432,9 +1406,6 @@ checker_module(struct checker *state, struct decl **decls, size_t decls_count)
             ok = false;
         }
     }
-
-    if (!ok)
-        return false;
 
     /*
      * Validate procedure bodies
