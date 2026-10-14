@@ -333,29 +333,35 @@ checker_resolve(struct checker *state, struct type **type_ptr)
     ok = true;
 
     switch (type->tag) {
+        case TYPE_INVALID:
+            return false;
+
         case TYPE_RAW:
             type = checker_eval_raw(state, type->raw);
             if (!type) {
-                *type_ptr = type_get_invalid();
-                return false;
+                ok = false;
+            } else {
+                *type_ptr = type;
             }
-            *type_ptr = type;
-            return true;
+            break;
 
         case TYPE_PTR:
             // Delay resolution of the inner type
             return true;
 
         case TYPE_ARRAY:
-            return checker_resolve(state, &type->array.item);
+            ok = checker_resolve(state, &type->array.item);
+            break;
 
         case TYPE_SLICE:
-            return checker_resolve(state, &type->slice.item);
+            ok = checker_resolve(state, &type->slice.item);
+            break;
 
         case TYPE_STRUCT:
             bind = scope_lookup(state->curr_scope, type->strukt.name, true);
-            if (bind && bind->status != RESOLVE_DONE)
-                return checker_resolve_binding(state, bind);
+            if (bind && bind->status != RESOLVE_DONE) {
+                ok = checker_resolve_binding(state, bind);
+            }
             break;
 
         case TYPE_PROC:
@@ -372,6 +378,10 @@ checker_resolve(struct checker *state, struct type **type_ptr)
 
         default:
             break;
+    }
+
+    if (!ok) {
+        *type_ptr = type_get_invalid();
     }
 
     return ok;
@@ -416,7 +426,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             for (i = 0; i < type->strukt.fields_count; i++) {
                 if (!checker_resolve(state, &type->strukt.fields[i].type)) {
                     ok = false;
-                    type->strukt.fields[i].type = type_get_invalid();
                 } else if (!type_is_sized(type->strukt.fields[i].type)) {
                     TYCHK_ERROR(state, bind->decl->span,
                                 "Struct field '%s' must have a sized type\n",
@@ -436,7 +445,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
             if (!checker_resolve(state, &proc->out)) {
                 ok = false;
-                proc->out = type_get_invalid();
             } else if (!type_is_sized(proc->out)) {
                 TYCHK_ERROR(state, proc->decl.span,
                             "Return type must be a sized type\n");
@@ -447,7 +455,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             for (i = 0, ptr = proc->args; ptr != NULL; ptr = ptr->next) {
                 if (!checker_resolve(state, &ptr->type)) {
                     ok = false;
-                    ptr->type = type_get_invalid();
                 } else if (!type_is_sized(ptr->type)) {
                     TYCHK_ERROR(state, proc->decl.span,
                                 "Parameter must be a sized type\n");
@@ -852,6 +859,11 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
         return false;
 
     type = expr->args[0]->type;
+    if (type->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
+
     if (!type_is_sized(type)) {
         TYCHK_ERROR(state, expr->args[0]->span,
                     "Invalid array element type\n");
@@ -883,6 +895,11 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
     type = checker_eval_raw(state, expr->op);
     if (!type)
         return false;
+
+    if (type->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
 
     if (type->tag != TYPE_STRUCT) {
         TYCHK_ERROR(state, expr->op->span,
@@ -950,6 +967,11 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         if (!type)
             return false;
 
+        if (type->tag == TYPE_INVALID) {
+            expr->expr.type = type_get_invalid();
+            return true;
+        }
+
         if (!type_is_sized(type)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Expected a sized type\n");
@@ -982,6 +1004,11 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         if (!type)
             return false;
 
+        if (type->tag == TYPE_INVALID || expr->args[1]->type->tag == TYPE_INVALID) {
+            expr->expr.type = type_get_invalid();
+            return true;
+        }
+
         if (!type_is_scalar(expr->args[1]->type) || !type_is_scalar(type)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Cast can only be used with scalar types\n");
@@ -1004,6 +1031,11 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             return false;
 
         arg = expr->args[0]->type;
+
+        if (arg->tag == TYPE_INVALID) {
+            expr->expr.type = type_get_invalid();
+            return true;
+        }
 
         if (arg->tag == TYPE_ARRAY) {
             type = arg->array.item;
@@ -1080,14 +1112,12 @@ checker_stmt_var(struct checker *state, struct stmt_var *stmt)
     if (stmt->type) {
         if (!checker_resolve(state, &stmt->type)) {
             ok = false;
-            stmt->type = type_get_invalid();
         }
     }
 
     if (stmt->value) {
         if (!checker_expr(state, stmt->value)) {
             ok = false;
-            stmt->value->type = type_get_invalid();
         }
 
         if (!stmt->type) {
