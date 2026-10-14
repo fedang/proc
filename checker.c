@@ -284,15 +284,17 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             /*
-             * Force resolution if the type object was not created yet
+             * If we don't have a type yet, this is cyclic
              */
-            if (!bind->type) {
-                if (!checker_resolve_binding(state, bind))
-                    return NULL;
-            } else if (bind->status == RESOLVE_PENDING && bind->decl->tag != DECL_STRUCT) {
+            if (bind->status == RESOLVE_PENDING && !bind->type) {
                 TYCHK_ERROR(state, expr->span,
                             "Cyclic definition involving '%s'\n", bind->sym->str);
                 return NULL;
+            }
+
+            if (!bind->type) {
+                if (!checker_resolve_binding(state, bind))
+                    return NULL;
             }
 
             return bind->type;
@@ -338,9 +340,9 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             if (!checker_eval_const(state, array->args[1], &count))
                 return NULL;
 
-            if (count <= 0) {
+            if (count < 0) {
                 TYCHK_ERROR(state, array->args[1]->span,
-                            "Array size must be greater than 0\n");
+                            "Array size must be positive\n");
                 return NULL;
             }
 
@@ -455,17 +457,13 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     switch (bind->decl->tag) {
         case DECL_TYPE:
             d_type = (struct decl_type *)bind->decl;
-
-            if (!d_type->type) {
-                TYCHK_ERROR(state, bind->decl->span,
-                            "Opaque types not implemented yet\n");
-                ok = false;
+            if (!d_type->type)
                 break;
-            }
 
             type = checker_eval_raw(state, d_type->type->raw);
             if (!type) {
                 ok = false;
+                bind->type = type_get_invalid();
                 break;
             }
             d_type->type = type;
@@ -477,11 +475,13 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             for (i = 0; i < type->strukt.fields_count; i++) {
                 if (!checker_resolve(state, &type->strukt.fields[i].type)) {
                     ok = false;
+                    type->strukt.fields[i].type = type_get_invalid();
                 } else if (!type_is_sized(type->strukt.fields[i].type)) {
                     TYCHK_ERROR(state, bind->decl->span,
                                 "Struct field '%s' must have a sized type\n",
                                 type->strukt.fields[i].name->str);
                     ok = false;
+                    type->strukt.fields[i].type = type_get_invalid();
                 }
             }
             break;
@@ -516,6 +516,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             if (ok) {
                 bind->type = type_get_proc(proc->decl.attr, proc->out,
                                            args, proc->args_count);
+            } else {
+                bind->type = type_get_invalid();
             }
             break;
 
@@ -731,6 +733,11 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
 
     proc = expr->op->type;
 
+    if (proc->tag == TYPE_INVALID) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
+
     /*
      * Allow one level of automatic pointer dereference for proc pointers
      */
@@ -877,7 +884,8 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
         return false;
 
     if (type->tag != TYPE_STRUCT) {
-        TYCHK_ERROR(state, expr->op->span, "Expected struct type for literal\n");
+        TYCHK_ERROR(state, expr->op->span,
+                    "Expected struct type for literal\n");
         return false;
     }
 
@@ -1283,7 +1291,11 @@ checker_decl_register(struct checker *state, struct decl *decl)
                 return false;
             }
 
-            scope_push(state->curr_scope, d_type->sym, NULL, decl, true);
+            /*
+             * If no alias type is given, treat as opaque
+             */
+            type = d_type->type ? NULL : type_get_opaque(decl->attr, d_type->sym);
+            scope_push(state->curr_scope, d_type->sym, type, decl, true);
             return true;
 
         default:

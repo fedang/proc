@@ -78,6 +78,13 @@ type_make_raw(struct expr *raw)
 }
 
 struct type *
+type_get_invalid(void)
+{
+    static struct type invalid = { TYPE_INVALID };
+    return &invalid;
+}
+
+struct type *
 type_get_bool(struct attr *attr)
 {
     return type_get_simple(attr, TYPE_BOOL);
@@ -222,6 +229,25 @@ type_get_proc(struct attr *attr, struct type *out,
     return type;
 }
 
+struct type *
+type_get_opaque(struct attr *attr, struct symbol *name)
+{
+    struct type *type;
+    size_t i;
+
+    for (i = 0; i < type_count; i++) {
+        type = &type_pool[i];
+        if (type->tag == TYPE_OPAQUE && type->attr == attr
+                && type->opaque.name == name) {
+            return type;
+        }
+    }
+
+    type = type_get_fresh(attr, TYPE_OPAQUE);
+    type->opaque.name = name;
+    return type;
+}
+
 #define ROUND_UP(x, y) \
     ((x) + (y) - 1) & ~((y) - 1)
 
@@ -231,6 +257,9 @@ type_sizeof(const struct type *type)
     size_t i, size, align;
 
     switch (type->tag) {
+        case TYPE_INVALID:
+            /* fall through */
+
         case TYPE_VOID:
             return 0;
 
@@ -268,6 +297,9 @@ type_alignof(const struct type *type)
     size_t i, align, max;
 
     switch (type->tag) {
+        case TYPE_INVALID:
+            /* fall through */
+
         case TYPE_VOID:
         case TYPE_BOOL:
             return 1;

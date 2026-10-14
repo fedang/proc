@@ -1,0 +1,12 @@
+proc trigger_null(x: NoSuchType) {}
+
+type Alias = @type_of(trigger_null(1));
+
+
+struct Broken {
+    bad_field: NoSuchType
+}
+
+struct Trigger {
+    arr: [int, @size_of(Broken)]
+}

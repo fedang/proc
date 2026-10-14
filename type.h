@@ -20,6 +20,7 @@ enum type_tag {
     TYPE_ARRAY,
     TYPE_STRUCT,
     TYPE_PROC,
+    TYPE_OPAQUE,
 };
 
 struct struct_field {
@@ -49,6 +50,9 @@ struct type {
             struct type **args;
             size_t args_count;
         } proc;
+        struct {
+            struct symbol *name;
+        } opaque;
     };
 };
 
@@ -85,7 +89,8 @@ type_integer_bits(const struct type *type)
 static inline bool
 type_is_sized(const struct type *type)
 {
-    return type->tag != TYPE_PROC;
+    return type->tag != TYPE_PROC
+        && type->tag != TYPE_OPAQUE;
 }
 
 static inline bool
@@ -96,6 +101,8 @@ type_is_zst(const struct type *type)
 }
 
 struct type *type_make_raw(struct expr *raw);
+
+struct type *type_get_invalid(void);
 
 struct type *type_get_bool(struct attr *attr);
 
@@ -114,5 +121,7 @@ struct type *type_get_struct(struct attr *attr, struct symbol *name,
 
 struct type *type_get_proc(struct attr *attr, struct type *out,
                            struct type **args, size_t args_count);
+
+struct type *type_get_opaque(struct attr *attr, struct symbol *name);
 
 #endif
