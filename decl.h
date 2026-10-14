@@ -20,6 +20,7 @@ enum decl_tag {
     DECL_TYPE,
     DECL_MODULE,
     DECL_SIG,
+    DECL_IMPORT,
 };
 
 struct decl {
@@ -67,6 +68,11 @@ struct decl_sig {
     bool no_body;
 };
 
+struct decl_import {
+    struct decl decl;
+    struct expr *expr;
+};
+
 static inline void
 decl_set_span(struct decl *decl, struct span span)
 {
@@ -93,5 +99,7 @@ struct decl *decl_make_module(struct symbol *sym, struct type *sig,
 
 struct decl *decl_make_sig(struct symbol *sym, struct decl **items,
                            size_t items_count);
+
+struct decl *decl_make_import(struct expr *expr);
 
 #endif

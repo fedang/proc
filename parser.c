@@ -1120,6 +1120,34 @@ parser_decl_sig(struct parser *state, struct decl **decl)
 }
 
 static bool
+parser_decl_import(struct parser *state, struct decl **decl)
+{
+    struct expr *expr;
+    bool saved_parens, saved_noblock;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = false;
+    state->no_block = false;
+
+    if (!parser_expr(state, &expr))
+        return false;
+
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+
+    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+        return false;
+
+    *decl = decl_make_import(expr);
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
 parser_decl(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
@@ -1148,6 +1176,11 @@ parser_decl(struct parser *state, struct decl **decl)
         if (sym == symbol_sig) {
             parser_advance(state);
             return parser_decl_sig(state, decl);
+        }
+
+        if (sym == symbol_import) {
+            parser_advance(state);
+            return parser_decl_import(state, decl);
         }
     }
 

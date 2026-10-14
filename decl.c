@@ -76,3 +76,13 @@ decl_make_sig(struct symbol *sym, struct decl **items, size_t items_count)
     decl->items_count = items_count;
     return &decl->decl;
 }
+
+struct decl *
+decl_make_import(struct expr *expr)
+{
+    struct decl_import *decl;
+
+    decl = decl_make(sizeof(struct decl_import), DECL_IMPORT);
+    decl->expr = expr;
+    return &decl->decl;
+}
