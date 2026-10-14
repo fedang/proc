@@ -6,6 +6,8 @@
 //sig Y {
 //}
 
+//type Opaque
+
 type X = int
 
 struct zst {
@@ -165,3 +167,5 @@ proc stest() {
 //    } else {
 //    }
 //}
+
+struct Node { next: *Node }

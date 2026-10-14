@@ -4,46 +4,72 @@
 #include "checker.h"
 #include "report.h"
 
-#define TYCHK_FIRST_PASS    0
-#define TYCHK_SECOND_PASS   1
-#define TYCHK_THIRD_PASS    2
-
 #define TYCHK_ERROR(state, span, ...) \
     report_error((state)->src, &(span), __VA_ARGS__)
 
-static void
-checker_type_push(struct checker *state, struct symbol *sym, struct type *type)
+/*
+ * Scopes
+ */
+static struct scope *
+scope_make(struct symbol *name, struct scope *parent)
 {
-    assert(state->types_count < 256 && "too many types!");
-
-    state->types[state->types_count].sym = sym;
-    state->types[state->types_count].type = type;
-    state->types_count++;
+    struct scope *scope = calloc(1, sizeof(struct scope));
+    scope->name = name;
+    scope->parent = parent;
+    return scope;
 }
 
-void
-checker_init(struct checker *state, struct source *src)
+static struct binding *
+scope_push(struct scope *scope, struct symbol *sym,
+           struct type *type, struct decl *decl, bool is_type)
 {
-    state->src = src;
-    state->pass = TYCHK_FIRST_PASS;
-    state->ret_type = NULL;
-    state->loop_depth = 0;
-    state->locals_count = 0;
-    state->globals_count = 0;
-    state->types_count = 0;
+    struct binding *bind;
 
-    checker_type_push(state, symbol_make("i8"), type_get_int(NULL, 8));
-    checker_type_push(state, symbol_make("i16"), type_get_int(NULL, 16));
-    checker_type_push(state, symbol_make("i32"), type_get_int(NULL, 32));
-    checker_type_push(state, symbol_make("i64"), type_get_int(NULL, 64));
-    checker_type_push(state, symbol_make("int"), type_get_int(NULL, 0));
-    checker_type_push(state, symbol_make("u8"), type_get_uint(NULL, 8));
-    checker_type_push(state, symbol_make("u16"), type_get_uint(NULL, 16));
-    checker_type_push(state, symbol_make("u32"), type_get_uint(NULL, 32));
-    checker_type_push(state, symbol_make("u64"), type_get_uint(NULL, 64));
-    checker_type_push(state, symbol_make("uint"), type_get_uint(NULL, 0));
-    checker_type_push(state, symbol_make("bool"), type_get_bool(NULL));
-    checker_type_push(state, symbol_make("void"), type_get_void(NULL));
+    assert(scope->bindings_count < 256 && "too many bindings!");
+    bind = &scope->bindings[scope->bindings_count++];
+
+    bind->sym = sym;
+    bind->status = decl ? RESOLVE_NONE : RESOLVE_DONE;
+    bind->scope = scope;
+    bind->is_type = is_type;
+    bind->is_public = true;
+    bind->decl = decl;
+    bind->type = type;
+    return bind;
+}
+
+static struct binding *
+scope_lookup_local(struct scope *scope, struct symbol *sym, bool is_type)
+{
+    size_t i;
+
+    for (i = 0; i < scope->bindings_count; i++) {
+        if (scope->bindings[i].is_type == is_type &&
+            scope->bindings[i].sym == sym)
+            return &scope->bindings[i];
+    }
+
+    return NULL;
+}
+
+static struct binding *
+scope_lookup(struct scope *scope, struct symbol *sym, bool is_type)
+{
+    struct binding *bind;
+
+    do {
+        bind = scope_lookup_local(scope, sym, is_type);
+        if (bind)
+            return bind;
+    } while ((scope = scope->parent) != NULL);
+
+    return NULL;
+}
+
+static void
+checker_root_push(struct checker *state, const char *name, struct type *type)
+{
+    scope_push(state->root_scope, symbol_make(name), type, NULL, true);
 }
 
 static void
@@ -64,64 +90,40 @@ checker_local_pop(struct checker *state, unsigned n)
     state->locals_count = n;
 }
 
-static void
-checker_global_push(struct checker *state, struct symbol *sym,
-                      struct type *type)
+void
+checker_init(struct checker *state, struct source *src)
 {
-    assert(state->globals_count < 256 && "too many globals!");
+    struct scope *root;
 
-    state->globals[state->globals_count].sym = sym;
-    state->globals[state->globals_count].type = type;
-    state->globals_count++;
-}
+    state->src = src;
+    state->ret_type = NULL;
+    state->loop_depth = 0;
+    state->locals_count = 0;
 
-static struct named *
-checker_type_find(struct checker *state, struct symbol *sym)
-{
-    size_t i;
+    root = scope_make(NULL, NULL);
+    state->root_scope = root;
+    state->curr_scope = root;
 
-    for (i = 0; i < state->types_count; i++) {
-        if (state->types[i].sym == sym)
-            return &state->types[i];
-    }
-
-    return NULL;
-}
-
-static struct type *
-checker_global_find(struct checker *state, struct symbol *sym)
-{
-    size_t i;
-
-    for (i = 0; i < state->globals_count; i++) {
-        if (state->globals[i].sym == sym)
-            return state->globals[i].type;
-    }
-
-    return NULL;
-}
-
-static struct type *
-checker_lookup(struct checker *state, struct symbol *sym)
-{
-    size_t i;
-
-    /*
-     * First search the locals, starting from the latest,
-     * then continue with the globals (in any order)
-     */
-    for (i = state->locals_count; i > 0; i--) {
-        if (state->locals[i - 1].sym == sym)
-            return state->locals[i - 1].type;
-    }
-
-    return checker_global_find(state, sym);
+    checker_root_push(state, "i8", type_get_int(NULL, 8));
+    checker_root_push(state, "i16", type_get_int(NULL, 16));
+    checker_root_push(state, "i32", type_get_int(NULL, 32));
+    checker_root_push(state, "i64", type_get_int(NULL, 64));
+    checker_root_push(state, "int", type_get_int(NULL, 0));
+    checker_root_push(state, "u8", type_get_uint(NULL, 8));
+    checker_root_push(state, "u16", type_get_uint(NULL, 16));
+    checker_root_push(state, "u32", type_get_uint(NULL, 32));
+    checker_root_push(state, "u64", type_get_uint(NULL, 64));
+    checker_root_push(state, "uint", type_get_uint(NULL, 0));
+    checker_root_push(state, "bool", type_get_bool(NULL));
+    checker_root_push(state, "void", type_get_void(NULL));
 }
 
 /*
  * Compile time evaluation
  */
 static bool checker_resolve(struct checker *state, struct type **type);
+
+static bool checker_resolve_binding(struct checker *state, struct binding *bind);
 
 static struct type *checker_eval_raw(struct checker *state, struct expr *expr);
 
@@ -262,27 +264,38 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 static struct type *
 checker_eval_raw(struct checker *state, struct expr *expr)
 {
+    struct binding *bind;
     struct type *type;
     struct expr_ident *ident;
     struct expr_unop *unop;
     struct expr_array *array;
     struct expr_macro *macro;
-    struct named *named;
     int64_t count;
 
     switch (expr->tag) {
         case EXPR_IDENT:
             ident = (struct expr_ident *)expr;
 
-            named = checker_type_find(state, ident->sym);
-            if (!named) {
-             TYCHK_ERROR(state, expr->span,
-                         "Unknown type '%s'\n", ident->sym->str);
-                 return NULL;
-             }
-             if (!checker_resolve(state, &named->type))
-                 return NULL;
-             return named->type;
+            bind = scope_lookup(state->curr_scope, ident->sym, true);
+            if (!bind) {
+                TYCHK_ERROR(state, expr->span,
+                            "Unknown type '%s'\n", ident->sym->str);
+                return NULL;
+            }
+
+            /*
+             * Force resolution if the type object was not created yet
+             */
+            if (!bind->type) {
+                if (!checker_resolve_binding(state, bind))
+                    return NULL;
+            } else if (bind->status == RESOLVE_PENDING && bind->decl->tag != DECL_STRUCT) {
+                TYCHK_ERROR(state, expr->span,
+                            "Cyclic definition involving '%s'\n", bind->sym->str);
+                return NULL;
+            }
+
+            return bind->type;
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -301,7 +314,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
         case EXPR_INDEX:
             // Offer a tip to confused users
             TYCHK_ERROR(state, expr->span,
-                        "Expected [type, count] for array type\n");
+                        "Array types are [type, count], not type[count]\n");
             return NULL;
 
         case EXPR_ARRAY:
@@ -313,7 +326,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             type = checker_eval_raw(state, array->args[0]);
-            if (!type)
+            if (!type || !checker_resolve(state, &type))
                 return NULL;
 
             if (!type_is_sized(type)) {
@@ -361,57 +374,165 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 }
 
 static bool
-checker_resolve(struct checker *state, struct type **type)
+checker_resolve(struct checker *state, struct type **type_ptr)
 {
+    struct type *type;
+    struct binding *bind;
     size_t i;
-    struct type *eval, *t;
-    bool ok = true;
+    bool ok;
 
-    if (!type || !*type)
+    if (!type_ptr || !*type_ptr)
         return true;
 
-    t = *type;
+    type = *type_ptr;
+    ok = true;
 
-    if (t->tag == TYPE_RAW) {
-        eval = checker_eval_raw(state, t->raw);
-        if (!eval)
-            return false;
+    switch (type->tag) {
+        case TYPE_RAW:
+            type = checker_eval_raw(state, type->raw);
+            if (!type)
+                return false;
+            *type_ptr = type;
+            return true;
 
-        *type = eval;
-        return true;
-    }
+        case TYPE_PTR:
+            // Delay resolution of the inner type
+            return true;
 
-    if (t->tag == TYPE_PTR) {
-        return checker_resolve(state, &t->pointer);
-    }
+        case TYPE_ARRAY:
+            return checker_resolve(state, &type->array.item);
 
-    if (t->tag == TYPE_ARRAY) {
-        return checker_resolve(state, &t->array.item);
-    }
 
-    if (t->tag == TYPE_STRUCT) {
-        for (i = 0; i < t->strukt.fields_count; i++) {
-            if (!checker_resolve(state, &t->strukt.fields[i].type))
-                ok = false;
-        }
-    } else if (t->tag == TYPE_PROC) {
-        if (!checker_resolve(state, &t->proc.out)) {
-            ok = false;
-        }
+        case TYPE_STRUCT:
+            bind = scope_lookup(state->curr_scope, type->strukt.name, true);
+            if (bind && bind->status != RESOLVE_DONE)
+                return checker_resolve_binding(state, bind);
+            break;
 
-        for (i = 0; i < t->proc.args_count; i++) {
-            if (!checker_resolve(state, &t->proc.args[i])) {
+        case TYPE_PROC:
+            if (!checker_resolve(state, &type->proc.out)) {
                 ok = false;
             }
-        }
+
+            for (i = 0; i < type->proc.args_count; i++) {
+                if (!checker_resolve(state, &type->proc.args[i])) {
+                    ok = false;
+                }
+            }
+            break;
+
+        default:
+            break;
     }
 
     return ok;
 }
 
 static bool
+checker_resolve_binding(struct checker *state, struct binding *bind)
+{
+    struct decl_proc *proc;
+    struct decl_type *d_type;
+    struct type *type, *args[32];
+    struct proc_arg *ptr;
+    struct scope *saved;
+    size_t i;
+    bool ok = true;
+
+    if (bind->status == RESOLVE_DONE)
+        return true;
+
+    if (bind->status == RESOLVE_PENDING) {
+        TYCHK_ERROR(state, bind->decl->span,
+                    "Cyclic definition involving '%s'\n", bind->sym->str);
+        return false;
+    }
+
+    saved = state->curr_scope;
+    state->curr_scope = bind->scope;
+    bind->status = RESOLVE_PENDING;
+
+    switch (bind->decl->tag) {
+        case DECL_TYPE:
+            d_type = (struct decl_type *)bind->decl;
+
+            if (!d_type->type) {
+                TYCHK_ERROR(state, bind->decl->span,
+                            "Opaque types not implemented yet\n");
+                ok = false;
+                break;
+            }
+
+            type = checker_eval_raw(state, d_type->type->raw);
+            if (!type) {
+                ok = false;
+                break;
+            }
+            d_type->type = type;
+            bind->type = type;
+            break;
+
+        case DECL_STRUCT:
+            type = bind->type;
+            for (i = 0; i < type->strukt.fields_count; i++) {
+                if (!checker_resolve(state, &type->strukt.fields[i].type)) {
+                    ok = false;
+                } else if (!type_is_sized(type->strukt.fields[i].type)) {
+                    TYCHK_ERROR(state, bind->decl->span,
+                                "Struct field '%s' must have a sized type\n",
+                                type->strukt.fields[i].name->str);
+                    ok = false;
+                }
+            }
+            break;
+
+        case DECL_PROC:
+            proc = (struct decl_proc *)bind->decl;
+
+            if (!proc->out) {
+                proc->out = type_get_void(proc->decl.attr);
+            }
+
+            if (!checker_resolve(state, &proc->out)) {
+                ok = false;
+            } else if (!type_is_sized(proc->out)) {
+                TYCHK_ERROR(state, proc->decl.span,
+                            "Return type must be a sized type\n");
+                ok = false;
+            }
+
+            for (i = 0, ptr = proc->args; ptr != NULL; ptr = ptr->next) {
+                if (!checker_resolve(state, &ptr->type)) {
+                    ok = false;
+                } else if (!type_is_sized(ptr->type)) {
+                    TYCHK_ERROR(state, proc->decl.span,
+                                "Parameter must be a sized type\n");
+                    ok = false;
+                }
+                assert(i < 32 && "too many args!");
+                args[i++] = ptr->type;
+            }
+
+            if (ok) {
+                bind->type = type_get_proc(proc->decl.attr, proc->out,
+                                           args, proc->args_count);
+            }
+            break;
+
+        default:
+            unreachable();
+    }
+
+    bind->status = RESOLVE_DONE;
+    state->curr_scope = saved;
+    return ok;
+}
+
+static bool
 checker_cmp(struct checker *state, struct type *t1, struct type *t2)
 {
+    // XXX
+    assert(t1->tag != TYPE_RAW && t2->tag != TYPE_RAW);
     return t1 == t2;
 }
 
@@ -440,16 +561,27 @@ checker_expr_literal(struct checker *state, struct expr_literal *expr)
 static bool
 checker_expr_ident(struct checker *state, struct expr_ident *expr)
 {
-    struct type *type;
+    struct binding *bind;
+    size_t i;
 
-    type = checker_lookup(state, expr->sym);
-    if (!type) {
+    for (i = state->locals_count; i > 0; i--) {
+        if (state->locals[i - 1].sym == expr->sym) {
+            expr->expr.type = state->locals[i - 1].type;
+            return true;
+        }
+    }
+
+    bind = scope_lookup(state->curr_scope, expr->sym, false);
+    if (!bind) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Undefined variable '%s'\n", expr->sym->str);
         return false;
     }
 
-    expr->expr.type = type;
+    if (!checker_resolve_binding(state, bind))
+        return false;
+
+    expr->expr.type = bind->type;
     return true;
 }
 
@@ -764,9 +896,8 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
                     TYCHK_ERROR(state, expr->fields[i].value->span,
                                 "Field '%s' type mismatch\n", expr->fields[i].field->str);
                     ok = false;
-                } else {
-                    found = true;
                 }
+                found = true;
                 break;
             }
         }
@@ -952,9 +1083,10 @@ checker_stmt_block(struct checker *state, struct stmt_block *stmt)
 {
     size_t i;
     unsigned locals;
-    bool ok = true;
+    bool ok;
 
     locals = state->locals_count;
+    ok = true;
 
     for (i = 0; i < stmt->items_count; i++) {
         if (!checker_stmt(state, stmt->items[i])) {
@@ -963,7 +1095,6 @@ checker_stmt_block(struct checker *state, struct stmt_block *stmt)
     }
 
     checker_local_pop(state, locals);
-
     return ok;
 }
 
@@ -1112,225 +1243,135 @@ checker_proc_returns(struct stmt *stmt)
  * Declarations
  */
 static bool
-checker_decl_proc(struct checker *state, struct decl_proc *decl)
+checker_decl_register(struct checker *state, struct decl *decl)
 {
-    struct type *proc;
-    struct type *args[32];
-    struct proc_arg *ptr;
-    size_t i;
-    bool ok = true;
-
-    if (state->pass == TYCHK_FIRST_PASS) {
-        for (i = 0, ptr = decl->args; ptr != NULL; ptr = ptr->next) {
-            assert(i < 32 && "too many parameters");
-            args[i++] = ptr->type;
-        }
-
-        if (checker_lookup(state, decl->sym) != NULL) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "Invalid redefinition of symbol '%s'\n", decl->sym->str);
-            return false;
-        }
-
-        // TODO: Maybe do this in the parser directly?
-        if (!decl->out) {
-            decl->out = type_get_void(decl->decl.attr);
-        }
-
-        proc = type_get_proc(decl->decl.attr, decl->out, args, decl->args_count);
-        checker_global_push(state, decl->sym, proc);
-
-        return true;
-    }
-
-    if (state->pass == TYCHK_SECOND_PASS) {
-        if (!checker_resolve(state, &decl->out)) {
-            ok = false;
-        } else if (!type_is_sized(decl->out)) {
-            TYCHK_ERROR(state, decl->decl.span, "Return type must be a sized type\n");
-            ok = false;
-        }
-
-        for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
-            if (!checker_resolve(state, &ptr->type)) {
-                ok = false;
-            } else if (!type_is_sized(ptr->type)) {
-                TYCHK_ERROR(state, decl->decl.span, "Parameter must be a sized type\n");
-                ok = false;
-            }
-        }
-
-        proc = checker_lookup(state, decl->sym);
-        if (proc && proc->tag == TYPE_PROC) {
-            if (!checker_resolve(state, &proc->proc.out)) {
-                ok = false;
-            }
-
-            for (i = 0; i < proc->proc.args_count; i++) {
-                if (!checker_resolve(state, &proc->proc.args[i])) {
-                    ok = false;
-                }
-            }
-        }
-        return ok;
-    }
-
-    /*
-     * Proc without a body should not be checked...
-     */
-    if (state->pass == TYCHK_THIRD_PASS && decl->body) {
-        assert(state->locals_count == 0 && "leftover locals!");
-
-        for (ptr = decl->args; ptr != NULL; ptr = ptr->next) {
-            checker_local_push(state, ptr->sym, ptr->type);
-        }
-
-        state->loop_depth = 0;
-        state->ret_type = decl->out;
-        ok = checker_stmt(state, decl->body);
-        checker_local_pop(state, 0);
-
-        if (ok && decl->out->tag != TYPE_VOID
-               && !checker_proc_returns(decl->body)) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "Procedure '%s' does not return a value on all branches\n",
-                        decl->sym->str);
-            ok = false;
-        }
-    }
-
-    return ok;
-}
-
-static bool
-checker_decl_struct(struct checker *state, struct decl_struct *decl)
-{
+    struct decl_proc *proc;
+    struct decl_struct *strukt;
+    struct decl_type *d_type;
     struct type *type;
-    size_t i;
-    bool ok = true;
 
-    if (state->pass == TYCHK_FIRST_PASS) {
-        type = type_get_struct(decl->decl.attr, decl->sym,
-                               decl->fields, decl->fields_count);
-
-        checker_type_push(state, decl->sym, type);
-        return true;
-    }
-
-    if (state->pass == TYCHK_SECOND_PASS) {
-        for (i = 0; i < decl->fields_count; i++) {
-            if (!checker_resolve(state, &decl->fields[i].type)) {
-                ok = false;
-            } else if (!type_is_sized(decl->fields[i].type)) {
-                TYCHK_ERROR(state, decl->decl.span,
-                            "Struct field '%s' must have a sized type\n",
-                            decl->fields[i].name->str);
-                ok = false;
-            }
-        }
-
-        type = NULL;
-        for (i = 0; i < state->types_count; i++) {
-            if (state->types[i].sym == decl->sym) {
-                type = state->types[i].type;
-                break;
-            }
-        }
-
-        if (type && type->tag == TYPE_STRUCT) {
-            for (size_t i = 0; i < type->strukt.fields_count; i++) {
-                if (!checker_resolve(state, &type->strukt.fields[i].type)) {
-                    ok = false;
-                }
-            }
-        }
-    }
-
-    return ok;
-}
-
-static bool
-checker_decl_type(struct checker *state, struct decl_type *decl)
-{
-    size_t i;
-
-    if (!decl->type) {
-        TYCHK_ERROR(state, decl->decl.span,
-                    "Opaque types not implemented yet\n");
-        return false;
-    }
-
-    if (state->pass == TYCHK_FIRST_PASS) {
-        checker_type_push(state, decl->sym, decl->type);
-    } else if (state->pass == TYCHK_SECOND_PASS) {
-        if (!checker_resolve(state, &decl->type))
-            return false;
-
-        for (i = 0; i < state->types_count; i++) {
-            if (state->types[i].sym == decl->sym) {
-                state->types[i].type = decl->type;
-                break;
-            }
-        }
-    }
-
-    return true;
-}
-
-static bool
-checker_decl(struct checker *state, struct decl *decl)
-{
     switch (decl->tag) {
         case DECL_PROC:
-            return checker_decl_proc(state, (struct decl_proc *)decl);
+            proc = (struct decl_proc *)decl;
+            if (scope_lookup_local(state->curr_scope, proc->sym, false)) {
+                TYCHK_ERROR(state, decl->span,
+                            "Redefinition of symbol '%s'\n", proc->sym->str);
+                return false;
+            }
+
+            scope_push(state->curr_scope, proc->sym, NULL, decl, false);
+            return true;
 
         case DECL_STRUCT:
-            return checker_decl_struct(state, (struct decl_struct *)decl);
+            strukt = (struct decl_struct *)decl;
+            if (scope_lookup_local(state->curr_scope, strukt->sym, true)) {
+                TYCHK_ERROR(state, decl->span,
+                            "Redefinition of symbol '%s'\n", strukt->sym->str);
+                return false;
+            }
+
+            type = type_get_struct(decl->attr, strukt->sym,
+                                   strukt->fields, strukt->fields_count);
+            scope_push(state->curr_scope, strukt->sym, type, decl, true);
+            return true;
 
         case DECL_TYPE:
-            return checker_decl_type(state, (struct decl_type *)decl);
+            d_type = (struct decl_type *)decl;
+            if (scope_lookup_local(state->curr_scope, d_type->sym, true)) {
+                TYCHK_ERROR(state, decl->span,
+                            "Redefinition of symbol '%s'\n", d_type->sym->str);
+                return false;
+            }
+
+            scope_push(state->curr_scope, d_type->sym, NULL, decl, true);
+            return true;
 
         default:
             unreachable();
     }
 }
 
+static bool
+checker_proc_body(struct checker *state, struct decl *decl)
+{
+    struct decl_proc *proc;
+    struct proc_arg *ptr;
+    bool ok;
+
+    if (decl->tag != DECL_PROC)
+        return true;
+
+    proc = (struct decl_proc *)decl;
+
+     /*
+     * Proc without a body should not be checked...
+     */
+    if (!proc->body)
+        return true;
+
+    assert(state->locals_count == 0 && "leftover locals!");
+
+    for (ptr = proc->args; ptr != NULL; ptr = ptr->next) {
+        checker_local_push(state, ptr->sym, ptr->type);
+    }
+
+    state->loop_depth = 0;
+    state->ret_type = proc->out;
+    ok = checker_stmt(state, proc->body);
+    checker_local_pop(state, 0);
+
+    if (ok && proc->out->tag != TYPE_VOID && !checker_proc_returns(proc->body)) {
+        TYCHK_ERROR(state, decl->span,
+                    "Procedure '%s' does not return a value on all branches\n",
+                    proc->sym->str);
+        ok = false;
+    }
+
+    return ok;
+}
+
 bool
 checker_module(struct checker *state, struct decl **decls, size_t decls_count)
 {
+    struct scope *file_scope;
     size_t i;
     bool ok = true;
 
-    state->pass = TYCHK_FIRST_PASS;
+    file_scope = scope_make(NULL, state->root_scope);
+    state->curr_scope = file_scope;
 
+    /*
+     * Register module declarations
+     */
     for (i = 0; i < decls_count; i++) {
-        if (!checker_decl(state, decls[i])) {
+        if (!checker_decl_register(state, decls[i])) {
             ok = false;
         }
     }
 
     if (!ok)
-        goto done;
+        return false;
 
-    state->pass = TYCHK_SECOND_PASS;
-
-    for (i = 0; i < decls_count; i++) {
-        if (!checker_decl(state, decls[i])) {
+    /*
+     * Resolve (recursively) all the bindings in scope
+     */
+    for (i = 0; i < file_scope->bindings_count; i++) {
+        if (!checker_resolve_binding(state, &file_scope->bindings[i])) {
             ok = false;
         }
     }
 
     if (!ok)
-        goto done;
+        return false;
 
-    state->pass = TYCHK_THIRD_PASS;
-
+    /*
+     * Validate procedure bodies
+     */
     for (i = 0; i < decls_count; i++) {
-        if (!checker_decl(state, decls[i])) {
+        if (!checker_proc_body(state, decls[i])) {
             ok = false;
         }
     }
 
-done:
     return ok;
 }
