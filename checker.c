@@ -936,10 +936,17 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
 static bool
 checker_expr_macro(struct checker *state, struct expr_macro *expr)
 {
-    struct type *type;
+    struct type *arg, *type;
 
     if (expr->macro.tag != MACRO_INVALID)
         return true;
+
+    if (expr->name == symbol_type_of) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "'@%s' produces a type and cannot be used as a value\n",
+                    expr->name->str);
+        return false;
+    }
 
     if (expr->name == symbol_size_of || expr->name == symbol_align_of) {
         if (expr->body || expr->args_count != 1) {
@@ -995,11 +1002,31 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         return true;
     }
 
-    if (expr->name == symbol_type_of) {
-        TYCHK_ERROR(state, expr->expr.span,
-                    "'@%s' produces a type and cannot be used as a value\n",
-                    expr->name->str);
-        return false;
+    if (expr->name == symbol_slice) {
+        if (expr->body || expr->args_count != 1) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Expected 1 argument: @slice(array)\n");
+            return false;
+        }
+
+        if (!checker_expr(state, expr->args[0]))
+            return false;
+
+        arg = expr->args[0]->type;
+
+        if (arg->tag == TYPE_ARRAY) {
+            type = arg->array.item;
+        } else if (arg->tag == TYPE_PTR && arg->pointer->tag == TYPE_ARRAY) {
+            type = arg->pointer->array.item;
+        } else {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Expected an array or pointer to array\n");
+            return false;
+        }
+
+        expr->macro.tag = MACRO_SLICE;
+        expr->expr.type = type_get_slice(NULL, type);
+        return true;
     }
 
     TYCHK_ERROR(state, expr->expr.span,

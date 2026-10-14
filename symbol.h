@@ -20,7 +20,8 @@
     X(size_of) \
     X(align_of) \
     X(type_of) \
-    X(cast)
+    X(cast) \
+    X(slice) \
 
 struct symbol {
     const char *str;

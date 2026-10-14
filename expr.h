@@ -82,6 +82,7 @@ enum macro_tag {
     MACRO_SIZEOF,
     MACRO_ALIGNOF,
     MACRO_CAST,
+    MACRO_SLICE,
 };
 
 struct macro {

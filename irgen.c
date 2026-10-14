@@ -38,6 +38,10 @@ irgen_val(struct irgen *state, struct irval val)
             IR_EMITF(state, "zeroinitializer");
             break;
 
+        case IRVAL_UNDEF:
+            IR_EMITF(state, "undef");
+            break;
+
         case IRVAL_INT:
             IR_EMITF(state, "%ld", val.ival);
             break;
@@ -248,6 +252,28 @@ irgen_emit_extractvalue(struct irgen *state, struct irval arr,
     irgen_type(state, arr_type);
     IR_EMITC(state, ' ');
     irgen_val(state, arr);
+    IR_EMITF(state, ", %zu\n", idx);
+    return out;
+}
+
+static struct irval
+irgen_emit_insertvalue(struct irgen *state, struct irval arr, struct type *arr_type,
+                       struct irval val, struct type *type, size_t idx)
+{
+    struct irval out;
+
+    if (type_is_zst(arr_type) || type_is_zst(type))
+        return IRVAL_INT(0);
+
+    out = IRVAL_REG(irgen_fresh_reg(state));
+    IR_EMITF(state, "\t%%%u = insertvalue ", out.reg);
+    irgen_type(state, arr_type);
+    IR_EMITC(state, ' ');
+    irgen_val(state, arr);
+    IR_EMITF(state, ", ");
+    irgen_type(state, type);
+    IR_EMITC(state, ' ');
+    irgen_val(state, val);
     IR_EMITF(state, ", %zu\n", idx);
     return out;
 }
@@ -795,9 +821,11 @@ irgen_cast_instr(const struct type *src, const struct type *dst)
 static struct irval
 irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
 {
+    struct type *type;
     struct expr *arg;
-    struct irval val;
+    struct irval val, ptr;
     const char *instr;
+    size_t count;
 
     switch (expr->macro.tag) {
         case MACRO_EXPR:
@@ -814,6 +842,26 @@ irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
             return instr
                  ? irgen_emit_conv(state, instr, val, arg->type, expr->expr.type)
                  : val;
+
+        case MACRO_SLICE:
+            arg = expr->args[0];
+
+            if (arg->type->tag == TYPE_PTR) {
+                type = arg->type->pointer->array.item;
+                count = arg->type->pointer->array.count;
+                ptr = irgen_expr(state, arg);
+            } else {
+                type = arg->type->array.item;
+                count = arg->type->array.count;
+                ptr = irgen_expr_addr(state, arg);
+            }
+
+            val = IRVAL_UNDEF();
+            val = irgen_emit_insertvalue(state, val, expr->expr.type,
+                                         ptr, type_get_ptr(NULL, type), 0);
+            val = irgen_emit_insertvalue(state, val, expr->expr.type,
+                                         IRVAL_INT(count), type_get_int(NULL, 64), 1);
+            return val;
 
         default:
             unreachable();
@@ -1128,10 +1176,13 @@ irgen_hoist_expr(struct irgen *state, struct expr *expr)
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
-            if (macro->macro.tag == MACRO_CAST) {
-                irgen_hoist_expr(state, macro->args[1]);
-            } else if (macro->macro.tag == MACRO_EXPR) {
+
+            if (macro->macro.tag == MACRO_EXPR) {
                 irgen_hoist_expr(state, macro->macro.expr);
+            } else if (macro->macro.tag == MACRO_CAST) {
+                irgen_hoist_expr(state, macro->args[1]);
+            } else if (macro->macro.tag == MACRO_SLICE) {
+                irgen_hoist_expr(state, macro->args[0]);
             }
             break;
 
