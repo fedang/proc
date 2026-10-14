@@ -6,7 +6,9 @@
 //sig Y {
 //}
 
-//type Opaque
+//import expr.ls.ks
+
+type Opaque
 
 type X = int
 
@@ -177,4 +179,12 @@ struct Node { next: *Node }
 proc sliced(s: [int]) {
     puts("in sliced!")
     print32(s[0])
+
+    var i = @cast(i64, 0)
+    //while i < @count_of(s) {
+    //while i < @length_of(s) {
+    while i < s.len {
+        print32(s[i])
+        i += @cast(i64, 1)
+    }
 }

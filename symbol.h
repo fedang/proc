@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #define SYMBOL_LIST(X) \
-    X(let) \
+    /* Keywords */ \
     X(var) \
     X(if) \
     X(else) \
@@ -17,6 +17,11 @@
     X(type) \
     X(module) \
     X(sig) \
+    X(import) \
+    /* Special idents */ \
+    X(len) \
+    X(ptr) \
+    /* Builtins */ \
     X(size_of) \
     X(align_of) \
     X(type_of) \

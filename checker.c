@@ -822,6 +822,27 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     type = expr->op->type;
 
     /*
+     * Slices expose the fields 'ptr' and 'len'
+     */
+    if (type->tag == TYPE_SLICE) {
+        if (expr->field == symbol_ptr) {
+            expr->expr.type = type_get_ptr(NULL, type->slice.item);
+            expr->index = 0;
+            return true;
+        }
+
+        if (expr->field == symbol_len) {
+            expr->expr.type = type_get_int(NULL, 64);
+            expr->index = 1;
+            return true;
+        }
+
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Slice has no field named '%s'\n", expr->field->str);
+        return false;
+    }
+
+    /*
      * Automatically dereference struct pointers
      */
     while (type->tag == TYPE_PTR) {
