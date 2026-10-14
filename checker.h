@@ -25,7 +25,6 @@ struct checker {
 
 void checker_init(struct checker *state, struct source *src);
 
-bool checker_module(struct checker *state, struct decl **decls,
-                    size_t decls_count);
+bool checker_module(struct checker *state, struct decl *decl);
 
 #endif

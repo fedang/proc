@@ -60,6 +60,6 @@ struct irgen {
 
 void irgen_init(struct irgen *state, struct source *src, FILE *out);
 
-bool irgen_module(struct irgen *state, struct decl **decls, size_t decls_count);
+bool irgen_module(struct irgen *state, struct decl *decl);
 
 #endif

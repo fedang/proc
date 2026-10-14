@@ -18,8 +18,7 @@ main(int argc, char **argv)
     struct checker tychk;
     struct irgen irgen;
     struct token *tokens;
-    struct decl **decls;
-    size_t decls_count;
+    struct decl *mod;
     FILE *out;
 
     if (argc != 2) {
@@ -38,18 +37,16 @@ main(int argc, char **argv)
     lexer_tokenize(&lexer, &tokens);
 
     parser_init(&parser, &src, tokens);
-    if (!parser_module(&parser, &decls, &decls_count)) {
+    if (!parser_module(&parser, &mod)) {
         report_info(&src, NULL, "Failed to parse source file\n");
         return 1;
     }
 
     checker_init(&tychk, &src);
-    if (!checker_module(&tychk, decls, decls_count)) {
+    if (!checker_module(&tychk, mod)) {
         report_info(&src, NULL, "Failed semantic analysis\n");
         return 1;
     }
-
-    report_info(&src, NULL, "Parsed %zu declarations\n", decls_count);
 
     out = fopen("test.ll", "wb");
     if (!out) {
@@ -58,7 +55,7 @@ main(int argc, char **argv)
     }
 
     irgen_init(&irgen, &src, out);
-    if (!irgen_module(&irgen, decls, decls_count)) {
+    if (!irgen_module(&irgen, mod)) {
         report_info(&src, NULL, "Failed to generate IR\n");
         return 1;
     }

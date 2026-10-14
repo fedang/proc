@@ -1410,11 +1410,15 @@ checker_proc_body(struct checker *state, struct decl *decl)
 }
 
 bool
-checker_module(struct checker *state, struct decl **decls, size_t decls_count)
+checker_module(struct checker *state, struct decl *decl)
 {
+    struct decl_module *mod;
     struct scope *file_scope;
     size_t i;
     bool ok = true;
+
+    assert(decl->tag == DECL_MODULE);
+    mod = (struct decl_module *)decl;
 
     file_scope = scope_make(NULL, state->root_scope);
     state->curr_scope = file_scope;
@@ -1422,8 +1426,8 @@ checker_module(struct checker *state, struct decl **decls, size_t decls_count)
     /*
      * Register module declarations
      */
-    for (i = 0; i < decls_count; i++) {
-        if (!checker_decl_register(state, decls[i])) {
+    for (i = 0; i < mod->items_count; i++) {
+        if (!checker_decl_register(state, mod->items[i])) {
             ok = false;
         }
     }
@@ -1440,8 +1444,8 @@ checker_module(struct checker *state, struct decl **decls, size_t decls_count)
     /*
      * Validate procedure bodies
      */
-    for (i = 0; i < decls_count; i++) {
-        if (!checker_proc_body(state, decls[i])) {
+    for (i = 0; i < mod->items_count; i++) {
+        if (!checker_proc_body(state, mod->items[i])) {
             ok = false;
         }
     }

@@ -20,7 +20,6 @@ struct parser {
 
 void parser_init(struct parser *state, struct source *src, struct token *tokens);
 
-bool parser_module(struct parser *state, struct decl ***decls,
-                   size_t *decls_count);
+bool parser_module(struct parser *state, struct decl **decl);
 
 #endif

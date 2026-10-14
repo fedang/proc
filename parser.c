@@ -1189,27 +1189,29 @@ parser_decl(struct parser *state, struct decl **decl)
 }
 
 bool
-parser_module(struct parser *state, struct decl ***decls, size_t *decls_count)
+parser_module(struct parser *state, struct decl **decl)
 {
-    size_t max;
+    struct decl **items;
+    size_t max, count;
 
+    items = NULL;
     max = 0;
-    *decls = NULL;
-    *decls_count = 0;
+    count = 0;
 
     while (!parser_eof(state)) {
-        if (*decls_count >= max) {
+        if (count >= max) {
             max = max < 32 ? 32 : max * 2;
-            *decls = realloc(*decls, max * sizeof(struct decl *));
-            assert(*decls && "out of mem");
+            items = realloc(items, max * sizeof(struct decl *));
+            assert(items && "out of mem");
         }
 
-        if (parser_decl(state, &(*decls)[*decls_count])) {
-            (*decls_count)++;
+        if (parser_decl(state, &items[count])) {
+            count++;
         } else {
             parser_sync(state);
         }
     }
 
+    *decl = decl_make_module(symbol_make("main"), NULL, items, count);
     return state->perfect;
 }

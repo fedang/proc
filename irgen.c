@@ -1359,25 +1359,29 @@ irgen_decl(struct irgen *state, struct decl *decl)
 }
 
 bool
-irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
+irgen_module(struct irgen *state, struct decl *decl)
 {
+    struct decl_module *mod;
     struct symbol *sym;
     size_t i, j, len;
     uint8_t c;
+
+    assert(decl->tag == DECL_MODULE);
+    mod = (struct decl_module *)decl;
 
     if (setjmp(state->recovery) != 0)
         return false;
 
     IR_EMITF(state, "target triple = \"x86_64-pc-linux-gnu\"\n");
 
-    for (i = 0; i < decls_count; i++) {
-        if (decls[i]->tag == DECL_STRUCT) {
-            irgen_decl(state, decls[i]);
+    for (i = 0; i < mod->items_count; i++) {
+        if (mod->items[i]->tag == DECL_STRUCT) {
+            irgen_decl(state, mod->items[i]);
             continue;
         }
 
-        if (decls[i]->tag == DECL_PROC) {
-            sym = ((struct decl_proc *)decls[i])->sym;
+        if (mod->items[i]->tag == DECL_PROC) {
+            sym = ((struct decl_proc *)mod->items[i])->sym;
             assert(state->globals_count < 256 && "too many globals!");
             state->globals[state->globals_count].sym = sym;
             state->globals[state->globals_count].val = IRVAL_GLOBAL(sym->str);
@@ -1385,9 +1389,9 @@ irgen_module(struct irgen *state, struct decl **decls, size_t decls_count)
         }
     }
 
-    for (i = 0; i < decls_count; i++) {
-        if (decls[i]->tag == DECL_PROC)
-            irgen_decl(state, decls[i]);
+    for (i = 0; i < mod->items_count; i++) {
+        if (mod->items[i]->tag == DECL_PROC)
+            irgen_decl(state, mod->items[i]);
     }
 
     for (i = 0; i < state->strings_count; i++) {
