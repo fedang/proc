@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#include <setjmp.h>
 
 #include "decl.h"
 
@@ -43,7 +42,6 @@ struct irgen {
     FILE *out;
     unsigned regs;
     unsigned labels;
-    jmp_buf recovery;
 
     bool terminated;
     unsigned in_block;

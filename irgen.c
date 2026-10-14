@@ -420,9 +420,7 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
                     return state->globals[i].val;
             }
 
-            report_error(state->src, &expr->span, "Undefined variable '%s'\n",
-                         ident->sym->str);
-            longjmp(state->recovery, 1);
+            assert(false && "undefined vars slipped through!");
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -1368,9 +1366,6 @@ irgen_module(struct irgen *state, struct decl *decl)
 
     assert(decl->tag == DECL_MODULE);
     mod = (struct decl_module *)decl;
-
-    if (setjmp(state->recovery) != 0)
-        return false;
 
     IR_EMITF(state, "target triple = \"x86_64-pc-linux-gnu\"\n");
 
