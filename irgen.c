@@ -94,6 +94,10 @@ irgen_type(struct irgen *state, struct type *type)
             IR_EMITF(state, "]");
             break;
 
+        case TYPE_SLICE:
+            IR_EMITF(state, "{ ptr, i64 }");
+            break;
+
         case TYPE_STRUCT:
             if (type->strukt.name) {
                 IR_EMITF(state, "%%%s", type->strukt.name->str);
@@ -415,8 +419,18 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
                                       idx, index->index->type);
             }
 
-            ptr = irgen_expr(state, index->op);
-            idx = irgen_expr(state, index->index);
+            if (index->op->type->tag == TYPE_SLICE) {
+                val = irgen_expr(state, index->op);
+
+                idx = irgen_expr(state, index->index);
+
+                ptr = irgen_emit_extractvalue(state, val, index->op->type,
+                                              type_get_ptr(NULL, index->expr.type), 0);
+            } else {
+                ptr = irgen_expr(state, index->op);
+                idx = irgen_expr(state, index->index);
+            }
+
             return irgen_emit_gep(state, index->expr.type, ptr, 1,
                                   idx, index->index->type);
 

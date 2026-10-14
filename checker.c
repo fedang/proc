@@ -321,9 +321,9 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
         case EXPR_ARRAY:
             array = (struct expr_array *)expr;
-            if (array->args_count != 2) {
+            if (array->args_count != 1 && array->args_count != 2) {
                 TYCHK_ERROR(state, expr->span,
-                            "Expected [type, count] for array type\n");
+                            "Expected [type] or [type, count] for array/slice\n");
                 return NULL;
             }
 
@@ -333,9 +333,12 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             if (!type_is_sized(type)) {
                 TYCHK_ERROR(state, array->args[0]->span,
-                            "Invalid array element type\n");
+                            "Invalid element type\n");
                 return NULL;
             }
+
+            if (array->args_count == 1)
+                return type_get_slice(NULL, type);
 
             if (!checker_eval_const(state, array->args[1], &count))
                 return NULL;
@@ -404,6 +407,8 @@ checker_resolve(struct checker *state, struct type **type_ptr)
         case TYPE_ARRAY:
             return checker_resolve(state, &type->array.item);
 
+        case TYPE_SLICE:
+            return checker_resolve(state, &type->slice.item);
 
         case TYPE_STRUCT:
             bind = scope_lookup(state->curr_scope, type->strukt.name, true);
@@ -706,7 +711,7 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
             break;
 
         case UNOP_NEG:
-            if (expr->op->type->tag != TYPE_INT && expr->op->type->tag != TYPE_UINT) {
+            if (!type_is_integer(expr->op->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
                             "Only integers can be negated\n");
                 return false;
@@ -779,7 +784,7 @@ checker_expr_index(struct checker *state, struct expr_index *expr)
     if (!checker_expr(state, expr->op) || !checker_expr(state, expr->index))
         return false;
 
-    if (expr->index->type->tag != TYPE_INT && expr->index->type->tag != TYPE_UINT) {
+    if (!type_is_integer(expr->index->type)) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Invalid index type\n");
         return false;
@@ -788,7 +793,14 @@ checker_expr_index(struct checker *state, struct expr_index *expr)
     if (expr->op->type->tag == TYPE_ARRAY) {
         expr->expr.type = expr->op->type->array.item;
         return true;
-    } else if (expr->op->type->tag == TYPE_PTR) {
+    }
+
+    if (expr->op->type->tag == TYPE_SLICE) {
+        expr->expr.type = expr->op->type->slice.item;
+        return true;
+    }
+
+    if (expr->op->type->tag == TYPE_PTR) {
         expr->expr.type = expr->op->type->pointer;
         return true;
     }

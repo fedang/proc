@@ -150,6 +150,25 @@ type_get_array(struct attr *attr, struct type *item, size_t count)
 }
 
 struct type *
+type_get_slice(struct attr *attr, struct type *item)
+{
+    struct type *type;
+    size_t i;
+
+    for (i = 0; i < type_count; i++) {
+        type = &type_pool[i];
+        if (type->tag == TYPE_SLICE && type->attr == attr
+                && type->slice.item == item) {
+            return type;
+        }
+    }
+
+    type = type_get_fresh(attr, TYPE_SLICE);
+    type->slice.item = item;
+    return type;
+}
+
+struct type *
 type_get_struct(struct attr *attr, struct symbol *name,
                 struct struct_field *fields, size_t fields_count)
 {
@@ -276,6 +295,9 @@ type_sizeof(const struct type *type)
         case TYPE_ARRAY:
             return type->array.count * type_sizeof(type->array.item);
 
+        case TYPE_SLICE:
+            return PTR_SIZE + 8;
+
         case TYPE_STRUCT:
             for (i = 0, size = 0; i < type->strukt.fields_count; i++) {
                 align = type_alignof(type->strukt.fields[i].type);
@@ -309,6 +331,7 @@ type_alignof(const struct type *type)
             return type_integer_bits(type) / 8;
 
         case TYPE_PTR:
+        case TYPE_SLICE:
             return PTR_SIZE;
 
         case TYPE_ARRAY:

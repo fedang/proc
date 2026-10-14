@@ -18,6 +18,7 @@ enum type_tag {
     TYPE_UINT,
     TYPE_PTR,
     TYPE_ARRAY,
+    TYPE_SLICE,
     TYPE_STRUCT,
     TYPE_PROC,
     TYPE_OPAQUE,
@@ -40,6 +41,9 @@ struct type {
             struct type *item;
             size_t count;
         } array;
+        struct {
+            struct type *item;
+        } slice;
         struct {
             struct symbol *name;
             struct struct_field *fields;
@@ -115,6 +119,8 @@ struct type *type_get_uint(struct attr *attr, size_t bit_size);
 struct type *type_get_ptr(struct attr *attr, struct type *pointer);
 
 struct type *type_get_array(struct attr *attr, struct type *item, size_t count);
+
+struct type *type_get_slice(struct attr *attr, struct type *item);
 
 struct type *type_get_struct(struct attr *attr, struct symbol *name,
                              struct struct_field *fields, size_t fields_count);

@@ -169,3 +169,7 @@ proc stest() {
 //}
 
 struct Node { next: *Node }
+
+proc sl(s: [int]) {
+    print32(s[0])
+}
