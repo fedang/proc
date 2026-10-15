@@ -32,16 +32,17 @@ checker_local_pop(struct checker *state, unsigned n)
 }
 
 void
-checker_init(struct checker *state, struct source *src)
+checker_init(struct checker *state, struct modcache *cache)
 {
     struct scope *root;
 
-    state->src = src;
+    state->cache = cache;
+    state->src = NULL;
     state->ret_type = NULL;
     state->loop_depth = 0;
     state->locals_count = 0;
 
-    root = scope_make(NULL, NULL);
+    root = scope_make(NULL, NULL, NULL);
     state->root_scope = root;
     state->curr_scope = root;
 
@@ -466,6 +467,13 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
         return true;
 
     if (bind->status == RESOLVE_PENDING) {
+        /*
+         * Bindings whose type is set before resolution (e.g. modules)
+         * can be safely looked up recursively
+         */
+        if (bind->type)
+            return true;
+
         TYCHK_ERROR(state, bind->decl->span,
                     "Cyclic definition involving '%s'\n", bind->sym->str);
         return false;
@@ -1408,6 +1416,40 @@ checker_proc_returns(struct stmt *stmt)
 /*
  * Declarations
  */
+static struct symbol *
+checker_compute_prefix(const char *path)
+{
+    char buf[1024];
+    const char *ptr;
+    size_t len;
+    char *c;
+
+    if (!path)
+        return NULL;
+
+    ptr = path;
+    while (!strncmp(ptr, "./", 2)) {
+        ptr += 2;
+    }
+
+    strncpy(buf, ptr, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    len = strlen(buf);
+    if (len >= 12 && strcmp(buf + len - 12, "/module.lang") == 0) {
+        buf[len - 12] = '\0';
+    } else if (len >= 5 && strcmp(buf + len - 5, ".lang") == 0) {
+        buf[len - 5] = '\0';
+    }
+
+    for (c = buf; *c; c++) {
+        if (*c == '/' || *c == '\\')
+            *c = '.';
+    }
+
+    return symbol_make(buf);
+}
+
 static bool
 checker_decl_register(struct checker *state, struct decl *decl)
 {
@@ -1417,6 +1459,7 @@ checker_decl_register(struct checker *state, struct decl *decl)
     struct decl_module *mod;
     struct scope *saved, *scope;
     struct binding *bind;
+    struct symbol *prefix;
     struct type *type;
     size_t i;
     bool ok = true;
@@ -1479,7 +1522,17 @@ checker_decl_register(struct checker *state, struct decl *decl)
                 ok = false;
             }
 
-            scope = scope_make(mod->sym, state->curr_scope);
+            /*
+             * Principal modules get their prefix from their path,
+             * while module declarations inherit it from the enclosing scope
+             */
+            if (state->curr_scope == state->root_scope && state->src) {
+                prefix = checker_compute_prefix(state->src->path);
+            } else {
+                prefix = scope_mangle(mod->sym, state->curr_scope->prefix);
+            }
+
+            scope = scope_make(mod->sym, prefix, state->curr_scope);
             scope_push(state->curr_scope, mod->sym,
                        type_get_module(decl->attr, scope), decl, false);
 
@@ -1562,42 +1615,48 @@ checker_validate(struct checker *state, struct decl *decl)
 }
 
 bool
-checker_module(struct checker *state, struct decl *decl)
+checker_modcache(struct checker *state)
 {
     struct decl_module *mod;
     struct binding *file_bind;
+    size_t i;
     bool ok = true;
 
-    assert(decl->tag == DECL_MODULE);
-    mod = (struct decl_module *)decl;
-
     /*
-     * Register all declarations recursively
+     * Register all declarations recursively (the list grows as we go)
      */
-    if (!checker_decl_register(state, decl)) {
-        ok = false;
-    }
-
-    file_bind = scope_lookup_local(state->root_scope, mod->sym, false);
-    if (!file_bind)
-        return false;
-
-    /*
-     * Resolve bindings starting from the principal module
-     */
-    if (!checker_resolve_binding(state, file_bind)) {
-        ok = false;
+    for (i = 0; i < state->cache->mods_count; i++) {
+        state->src = &state->cache->mods[i].src;
+        if (!checker_decl_register(state, state->cache->mods[i].decl)) {
+            ok = false;
+        }
     }
 
     /*
-     * Validate the body of declarations
+     * Resolve bindings starting from the root modules
      */
-    if (!checker_validate(state, decl)) {
-        ok = false;
+    for (i = 0; i < state->cache->mods_count; i++) {
+        mod = (struct decl_module *)state->cache->mods[i].decl;
+        state->src = &state->cache->mods[i].src;
+
+        file_bind = scope_lookup_local(state->root_scope, mod->sym, false);
+        if (!file_bind) {
+            report_error(NULL, NULL,
+                         "Module '%s' was not registered\n", mod->sym->str);
+            ok = false;
+        } else if (!checker_resolve_binding(state, file_bind)) {
+            ok = false;
+        }
     }
 
-    if (mod->sym == symbol_invalid_mod) {
-        ok = false;
+    /*
+     * Validate AST bodies (proc, modules, etc)
+     */
+    for (i = 0; i < state->cache->mods_count; i++) {
+        state->src = &state->cache->mods[i].src;
+        if (!checker_validate(state, state->cache->mods[i].decl)) {
+            ok = false;
+        }
     }
 
     return ok;

@@ -11,10 +11,9 @@
     fputc((chr), (state)->out)
 
 void
-irgen_init(struct irgen *state, struct source *src, FILE *out)
+irgen_init(struct irgen *state, FILE *out)
 {
     memset(state, 0, sizeof(struct irgen));
-    state->src = src;
     state->out = out;
 }
 
@@ -1387,26 +1386,37 @@ irgen_decl_bodies(struct irgen *state, struct decl *decl)
 }
 
 bool
-irgen_module(struct irgen *state, struct decl *decl)
+irgen_modcache(struct irgen *state, struct modcache *cache)
 {
     size_t i, j, len;
     uint8_t c;
 
-    assert(decl->tag == DECL_MODULE);
-
     IR_EMITF(state, "target triple = \"x86_64-pc-linux-gnu\"\n");
 
-    irgen_decl_types(state, decl);
+    /*
+     * Emit all types to avoid declaration ordering issues
+     */
+    for (i = 0; i < cache->mods_count; i++) {
+        state->src = &cache->mods[i].src;
+        irgen_decl_types(state, cache->mods[i].decl);
+    }
 
-    irgen_decl_bodies(state, decl);
+    /*
+     * Emit all procedure bodies
+     */
+    for (i = 0; i < cache->mods_count; i++) {
+        state->src = &cache->mods[i].src;
+        irgen_decl_bodies(state, cache->mods[i].decl);
+    }
 
     /*
      * Emit collected string literals
      */
     for (i = 0; i < state->strings_count; i++) {
         len = strlen(state->strings[i]);
-        IR_EMITF(state, "\n@.str.%zu = private unnamed_addr constant [%zu x i8] c\"",
-                i, len + 1);
+        IR_EMITF(state, "\n@.str.%zu ="
+                 " private unnamed_addr constant [%zu x i8] c\"",
+                 i, len + 1);
 
         for (j = 0; j < len; j++) {
             c = state->strings[i][j];

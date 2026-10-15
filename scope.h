@@ -32,7 +32,10 @@ struct scope {
     size_t bindings_count;
 };
 
-struct scope *scope_make(struct symbol *name, struct scope *parent);
+struct symbol *scope_mangle(struct symbol *name, struct symbol *prefix);
+
+struct scope *scope_make(struct symbol *name, struct symbol *prefix,
+                         struct scope *parent);
 
 
 struct binding *scope_push(struct scope *scope, struct symbol *sym,

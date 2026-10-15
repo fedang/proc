@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#include "decl.h"
+#include "modcache.h"
 
 enum irval_tag {
     IRVAL_INVALID,
@@ -54,8 +54,8 @@ struct irgen {
     unsigned strings_count;
 };
 
-void irgen_init(struct irgen *state, struct source *src, FILE *out);
+void irgen_init(struct irgen *state, FILE *out);
 
-bool irgen_module(struct irgen *state, struct decl *decl);
+bool irgen_modcache(struct irgen *state, struct modcache *cache);
 
 #endif

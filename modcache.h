@@ -1,0 +1,27 @@
+#ifndef _MODCACHE_H
+#define _MODCACHE_H
+
+#include <stdbool.h>
+
+#include "source.h"
+#include "decl.h"
+
+struct modfile {
+    struct source src;
+    struct decl *decl;
+};
+
+struct modcache {
+    struct modfile mods[256];
+    size_t mods_count;
+};
+
+void modcache_init(struct modcache *cache);
+
+bool modcache_load(struct modcache *cache, const char *path,
+                   struct symbol *name, struct modfile **out);
+
+bool modcache_import(struct modcache *cache, struct symbol *name,
+                     const char *cwd, struct modfile **out);
+
+#endif

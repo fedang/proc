@@ -1,0 +1,16 @@
+//import file2
+
+proc main() {
+    //file2.hello()
+    //puts("yola")
+}
+
+//proc puts(_: *u8)
+
+proc myfun() {
+}
+
+module A {
+    proc foo() { }
+    type T = *A
+}

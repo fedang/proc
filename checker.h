@@ -5,7 +5,7 @@
 
 #include "type.h"
 #include "decl.h"
-#include "source.h"
+#include "modcache.h"
 #include "scope.h"
 
 struct local_var {
@@ -14,6 +14,7 @@ struct local_var {
 };
 
 struct checker {
+    struct modcache *cache;
     struct source *src;
     unsigned loop_depth;
     struct type *ret_type;
@@ -23,8 +24,8 @@ struct checker {
     unsigned locals_count;
 };
 
-void checker_init(struct checker *state, struct source *src);
+void checker_init(struct checker *state, struct modcache *cache);
 
-bool checker_module(struct checker *state, struct decl *decl);
+bool checker_modcache(struct checker *state);
 
 #endif

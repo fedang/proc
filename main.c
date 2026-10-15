@@ -32,60 +32,60 @@ int
 main(int argc, const char **argv)
 {
     struct options opts;
-    struct source src;
-    struct lexer lexer;
-    struct parser parser;
-    struct checker tychk;
+    struct modcache cache;
+    struct checker check;
     struct irgen irgen;
-    struct token *tokens;
-    struct decl *mod;
     const char *ir_file;
     FILE *ir_out;
+    size_t i;
 
     if (!options_init(&opts, argc, argv))
         return 1;
 
-    source_init(&src, opts.inputs[0], NULL);
-    if (!source_load(&src)) {
-        report_error(&src, NULL, "Failed to read input file %s\n",
-                     opts.inputs[0]);
-        return 1;
-    }
-
     symbol_init();
 
-    lexer_init(&lexer, &src);
-    lexer_tokenize(&lexer, &tokens);
+    modcache_init(&cache);
 
-    parser_init(&parser, &src, tokens);
-    if (!parser_module(&parser, &mod)) {
-        report_info(&src, NULL, "Failed to parse source file\n");
-        return 1;
+    /*
+     * Load all the root modules asked by the user
+     */
+    for (i = 0; i < opts.inputs_count; i++) {
+        if (!modcache_load(&cache, opts.inputs[i], NULL, NULL)) {
+            report_info(NULL, NULL,
+                        "Failed to load input file '%s'\n", opts.inputs[i]);
+            return 1;
+        }
     }
 
-    checker_init(&tychk, &src);
-    if (!checker_module(&tychk, mod)) {
-        report_info(&src, NULL, "Failed semantic analysis\n");
+    /*
+     * Verify and typecheck the modules
+     */
+    checker_init(&check, &cache);
+    if (!checker_modcache(&check)) {
+        report_info(NULL, NULL, "Failed semantic analysis\n");
         return 1;
     }
 
     ir_file = "test.ll"; // XXX
     ir_out = fopen(ir_file, "wb");
     if (!ir_out) {
-        report_info(&src, NULL, "Failed to open IR output file\n");
+        report_info(NULL, NULL, "Failed to open IR output file\n");
         return 1;
     }
 
-    irgen_init(&irgen, &src, ir_out);
-    if (!irgen_module(&irgen, mod)) {
-        report_info(&src, NULL, "Failed to generate IR\n");
+    /*
+     * Generate the LLVM IR
+     */
+    irgen_init(&irgen, ir_out);
+    if (!irgen_modcache(&irgen, &cache)) {
+        report_info(NULL, NULL, "Failed to generate IR\n");
+        fclose(ir_out);
         return 1;
     }
 
     fclose(ir_out);
-
     if (run_clang(&opts, ir_file)) {
-        report_info(&src, NULL, "Failed to compile IR\n");
+        report_info(NULL, NULL, "Failed to compile IR\n");
         return 1;
     }
 

@@ -1,0 +1,8 @@
+proc hello() {
+    puts("hello")
+}
+
+proc puts(_: *u8)
+
+proc myfun() {
+}
