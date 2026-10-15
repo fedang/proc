@@ -1,8 +1,8 @@
-//module X {
-//    proc x() {
-//    }
-//}
-//
+module X {
+    proc x() {
+    }
+}
+
 //sig Y {
 //}
 

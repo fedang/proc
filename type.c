@@ -4,6 +4,7 @@
 #include <assert.h>
 
 #include "type.h"
+#include "scope.h"
 #include "report.h"
 
 #define MAX_TYPES 4096
@@ -264,6 +265,25 @@ type_get_opaque(struct attr *attr, struct symbol *name)
 
     type = type_get_fresh(attr, TYPE_OPAQUE);
     type->opaque.name = name;
+    return type;
+}
+
+struct type *
+type_get_module(struct attr *attr, struct scope *scope)
+{
+    struct type *type;
+    size_t i;
+
+    for (i = 0; i < type_count; i++) {
+        type = &type_pool[i];
+        if (type->tag == TYPE_MODULE && type->attr == attr
+                && type->module.scope == scope) {
+            return type;
+        }
+    }
+
+    type = type_get_fresh(attr, TYPE_MODULE);
+    type->module.scope = scope;
     return type;
 }
 

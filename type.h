@@ -22,6 +22,7 @@ enum type_tag {
     TYPE_STRUCT,
     TYPE_PROC,
     TYPE_OPAQUE,
+    TYPE_MODULE,
 };
 
 struct struct_field {
@@ -29,6 +30,8 @@ struct struct_field {
     struct type *type;
     unsigned index;
 };
+
+struct scope;
 
 struct type {
     struct attr *attr;
@@ -57,6 +60,9 @@ struct type {
         struct {
             struct symbol *name;
         } opaque;
+        struct {
+            struct scope *scope;
+        } module;
     };
 };
 
@@ -129,5 +135,7 @@ struct type *type_get_proc(struct attr *attr, struct type *out,
                            struct type **args, size_t args_count);
 
 struct type *type_get_opaque(struct attr *attr, struct symbol *name);
+
+struct type *type_get_module(struct attr *attr, struct scope *scope);
 
 #endif

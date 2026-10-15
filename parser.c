@@ -1212,6 +1212,6 @@ parser_module(struct parser *state, struct decl **decl)
         }
     }
 
-    *decl = decl_make_module(symbol_make("main"), NULL, items, count);
+    *decl = decl_make_module(symbol_make("module"), NULL, items, count);
     return state->perfect;
 }

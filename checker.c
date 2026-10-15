@@ -394,7 +394,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct decl_type *d_type;
     struct type *type, *args[32];
     struct proc_arg *ptr;
-    struct scope *saved;
+    struct scope *saved, *scope;
     size_t i;
     bool ok = true;
 
@@ -470,6 +470,15 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                                            args, proc->args_count);
             } else {
                 bind->type = type_get_invalid();
+            }
+            break;
+
+        case DECL_MODULE:
+            scope = bind->type->module.scope;
+            for (i = 0; i < scope->bindings_count; i++) {
+                if (!checker_resolve_binding(state, &scope->bindings[i])) {
+                    ok = false;
+                }
             }
             break;
 
@@ -794,6 +803,12 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     if (type->tag == TYPE_INVALID) {
         expr->expr.type = type_get_invalid();
         return true;
+    }
+
+    if (type->tag == TYPE_MODULE) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Not implemented yet\n");
+        return false;
     }
 
     /*
@@ -1322,7 +1337,10 @@ checker_decl_register(struct checker *state, struct decl *decl)
     struct decl_proc *proc;
     struct decl_struct *strukt;
     struct decl_type *d_type;
+    struct decl_module *mod;
+    struct scope *saved, *scope;
     struct type *type;
+    size_t i;
     bool ok = true;
 
     switch (decl->tag) {
@@ -1365,26 +1383,73 @@ checker_decl_register(struct checker *state, struct decl *decl)
             scope_push(state->curr_scope, d_type->sym, type, decl, true);
             return ok;
 
+        case DECL_MODULE:
+            mod = (struct decl_module *)decl;
+
+            if (scope_lookup_local(state->curr_scope, mod->sym, false)) {
+                TYCHK_ERROR(state, decl->span,
+                            "Redefinition of module '%s'\n", mod->sym->str);
+                ok = false;
+            }
+
+            scope = scope_make(mod->sym, state->curr_scope);
+            scope_push(state->curr_scope, mod->sym,
+                       type_get_module(decl->attr, scope), decl, false);
+
+            saved = state->curr_scope;
+            state->curr_scope = scope;
+
+            for (i = 0; i < mod->items_count; i++) {
+                if (!checker_decl_register(state, mod->items[i])) {
+                    ok = false;
+                }
+            }
+
+            state->curr_scope = saved;
+            return ok;
+
         default:
             unreachable();
     }
 }
 
 static bool
-checker_proc_body(struct checker *state, struct decl *decl)
+checker_validate(struct checker *state, struct decl *decl)
 {
+    struct decl_module *mod;
     struct decl_proc *proc;
     struct proc_arg *ptr;
-    bool ok;
+    struct scope *saved;
+    struct binding *bind;
+    size_t i;
+    bool ok = true;
+
+    if (decl->tag == DECL_MODULE) {
+        mod = (struct decl_module *)decl;
+        bind = scope_lookup_local(state->curr_scope, mod->sym, false);
+
+        if (!bind || bind->type->tag != TYPE_MODULE)
+            return false;
+
+        saved = state->curr_scope;
+        state->curr_scope = bind->type->module.scope;
+
+        for (i = 0; i < mod->items_count; i++) {
+            if (!checker_validate(state, mod->items[i]))
+                ok = false;
+        }
+
+        state->curr_scope = saved;
+        return ok;
+    }
 
     if (decl->tag != DECL_PROC)
         return true;
 
-    proc = (struct decl_proc *)decl;
-
      /*
      * Proc without a body should not be checked...
      */
+    proc = (struct decl_proc *)decl;
     if (!proc->body)
         return true;
 
@@ -1413,41 +1478,35 @@ bool
 checker_module(struct checker *state, struct decl *decl)
 {
     struct decl_module *mod;
-    struct scope *file_scope;
-    size_t i;
+    struct binding *file_bind;
     bool ok = true;
 
     assert(decl->tag == DECL_MODULE);
     mod = (struct decl_module *)decl;
 
-    file_scope = scope_make(NULL, state->root_scope);
-    state->curr_scope = file_scope;
+    /*
+     * Register all declarations recursively
+     */
+    if (!checker_decl_register(state, decl)) {
+        ok = false;
+    }
+
+    file_bind = scope_lookup_local(state->root_scope, mod->sym, false);
+    if (!file_bind)
+        return false;
 
     /*
-     * Register module declarations
+     * Resolve bindings starting from the principal module
      */
-    for (i = 0; i < mod->items_count; i++) {
-        if (!checker_decl_register(state, mod->items[i])) {
-            ok = false;
-        }
+    if (!checker_resolve_binding(state, file_bind)) {
+        ok = false;
     }
 
     /*
-     * Resolve (recursively) all the bindings in scope
+     * Validate the body of declarations
      */
-    for (i = 0; i < file_scope->bindings_count; i++) {
-        if (!checker_resolve_binding(state, &file_scope->bindings[i])) {
-            ok = false;
-        }
-    }
-
-    /*
-     * Validate procedure bodies
-     */
-    for (i = 0; i < mod->items_count; i++) {
-        if (!checker_proc_body(state, mod->items[i])) {
-            ok = false;
-        }
+    if (!checker_validate(state, decl)) {
+        ok = false;
     }
 
     return ok;
