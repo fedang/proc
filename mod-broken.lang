@@ -1,0 +1,22 @@
+module X {
+    // this is fine
+}
+
+
+proc type_mismatches() {
+    var text: int = "hello"
+    var math = text + 5
+    var empty: void
+    empty = 10
+}
+
+struct K {
+    a: int
+}
+
+proc struks() {
+    var x = K {
+        a = "a"; b = 10
+    }
+    var y = x
+}

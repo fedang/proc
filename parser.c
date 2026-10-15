@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <assert.h>
+#include <ctype.h>
 
 #include "parser.h"
 #include "report.h"
@@ -1188,6 +1188,57 @@ parser_decl(struct parser *state, struct decl **decl)
     return false;
 }
 
+static struct symbol *
+parser_module_name(struct parser *state)
+{
+    const char *base, *dot, *ptr;
+
+    /*
+     * Find the last directory separator
+     */
+    for (base = ptr = state->src->path; *ptr != '\0'; ptr++) {
+        if (*ptr == '/' || *ptr == '\\') {
+            base = ptr + 1;
+        }
+    }
+
+    /*
+     * Find the first dot after the base name
+     */
+    for (ptr = base, dot = NULL; *ptr != '\0'; ptr++) {
+        if (*ptr == '.') {
+            dot = ptr;
+            break;
+        }
+    }
+
+    if (!dot) {
+        dot = ptr;
+    }
+
+    if (dot == base) {
+        report_error(state->src, NULL,
+                     "Empty or hidden filenames are not allowed as module names\n");
+        return symbol_invalid_mod;
+    }
+
+    if (!isalpha(*base) && *base != '_') {
+        report_error(state->src, NULL,
+                     "File name can only start with a letter or underscore\n");
+        return symbol_invalid_mod;
+    }
+
+    for (ptr = base + 1; ptr < dot; ptr++) {
+        if (!isalnum(*ptr) && *ptr != '_') {
+            report_error(state->src, NULL,
+                         "File name can only contain alphanumerics and underscores\n");
+            return symbol_invalid_mod;
+        }
+    }
+
+    return symbol_intern(base, dot - base);
+}
+
 bool
 parser_module(struct parser *state, struct decl **decl)
 {
@@ -1212,6 +1263,6 @@ parser_module(struct parser *state, struct decl **decl)
         }
     }
 
-    *decl = decl_make_module(symbol_make("module"), NULL, items, count);
+    *decl = decl_make_module(parser_module_name(state), NULL, items, count);
     return state->perfect;
 }

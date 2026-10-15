@@ -357,7 +357,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
-            if (macro->name == symbol_type_of) {
+            if (macro->name == symbol_typeof) {
                 if (macro->body || macro->args_count != 1) {
                     TYCHK_ERROR(state, expr->span,
                                 "Expected 1 argument and no block\n");
@@ -1041,14 +1041,14 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
     if (expr->macro.tag != MACRO_INVALID)
         return true;
 
-    if (expr->name == symbol_type_of) {
+    if (expr->name == symbol_typeof) {
         TYCHK_ERROR(state, expr->expr.span,
                     "'@%s' produces a type and cannot be used as a value\n",
                     expr->name->str);
         return false;
     }
 
-    if (expr->name == symbol_size_of || expr->name == symbol_align_of) {
+    if (expr->name == symbol_sizeof || expr->name == symbol_alignof) {
         if (expr->body || expr->args_count != 1) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Expected 1 argument and no block\n");
@@ -1070,7 +1070,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             return false;
         }
 
-        if (expr->name == symbol_size_of) {
+        if (expr->name == symbol_sizeof) {
             expr->macro.tag = MACRO_SIZEOF;
             expr->macro.value = type_sizeof(type);
         } else {
@@ -1593,6 +1593,10 @@ checker_module(struct checker *state, struct decl *decl)
      * Validate the body of declarations
      */
     if (!checker_validate(state, decl)) {
+        ok = false;
+    }
+
+    if (mod->sym == symbol_invalid_mod) {
         ok = false;
     }
 

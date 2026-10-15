@@ -10,7 +10,7 @@ static struct symbol sym_pool[MAX_SYMBOLS];
 
 static size_t sym_count;
 
-#define X(sym) \
+#define X(sym, _) \
     struct symbol *symbol_ ## sym;
 SYMBOL_LIST(X)
 #undef X
@@ -51,8 +51,8 @@ void
 symbol_init(void)
 {
 
-#define X(sym) \
-    symbol_ ## sym = symbol_make(#sym);
+#define X(sym, str) \
+    symbol_ ## sym = symbol_make(#str);
     SYMBOL_LIST(X)
 #undef X
 }
