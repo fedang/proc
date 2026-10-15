@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "checker.h"
 #include "report.h"
@@ -208,6 +209,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
     struct type *type;
     struct expr_ident *ident;
     struct expr_unop *unop;
+    struct expr_access *access;
     struct expr_array *array;
     struct expr_macro *macro;
     int64_t count;
@@ -217,6 +219,21 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             ident = (struct expr_ident *)expr;
 
             bind = scope_lookup(state->curr_scope, ident->sym, true);
+            if (!bind) {
+                /*
+                 * Modules are stored as values, try the other namespace
+                 */
+                bind = scope_lookup(state->curr_scope, ident->sym, false);
+                if (bind) {
+                    if (!checker_resolve_binding(state, bind))
+                        return NULL;
+
+                    if (bind->type->tag != TYPE_MODULE) {
+                        bind = NULL;
+                    }
+                }
+            }
+
             if (!bind) {
                 TYCHK_ERROR(state, expr->span,
                             "Unknown type '%s'\n", ident->sym->str);
@@ -258,6 +275,53 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             TYCHK_ERROR(state, expr->span,
                         "Array types are [type, count], not type[count]\n");
             return NULL;
+
+        case EXPR_ACCESS:
+            access = (struct expr_access *)expr;
+            type = checker_eval_raw(state, access->op);
+            if (!type)
+                return NULL;
+
+            if (type->tag == TYPE_INVALID)
+                return type_get_invalid();
+
+            if (type->tag != TYPE_MODULE) {
+                TYCHK_ERROR(state, expr->span,
+                            "Expected a module in type path\n");
+                return NULL;
+            }
+
+            bind = scope_lookup_local(type->module.scope, access->field, true);
+            if (!bind) {
+                bind = scope_lookup_local(type->module.scope, access->field, false);
+                if (bind) {
+                    if (!checker_resolve_binding(state, bind))
+                        return NULL;
+
+                    if (bind->type->tag != TYPE_MODULE) {
+                        bind = NULL;
+                    }
+                }
+            }
+
+            if (!bind) {
+                TYCHK_ERROR(state, expr->span,
+                            "Module has no type named '%s'\n", access->field->str);
+                return NULL;
+            }
+
+            if (bind->status == RESOLVE_PENDING && !bind->type) {
+                TYCHK_ERROR(state, expr->span,
+                            "Cyclic definition involving '%s'\n", bind->sym->str);
+                return NULL;
+            }
+
+            if (!bind->type) {
+                if (!checker_resolve_binding(state, bind))
+                    return NULL;
+            }
+
+            return bind->type;
 
         case EXPR_ARRAY:
             array = (struct expr_array *)expr;
@@ -551,6 +615,7 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
         return false;
 
     expr->expr.type = bind->type;
+    expr->link_sym = bind->link_sym;
     return true;
 }
 
@@ -793,6 +858,7 @@ static bool
 checker_expr_access(struct checker *state, struct expr_access *expr)
 {
     struct type *type;
+    struct binding *bind;
     size_t i;
 
     if (!checker_expr(state, expr->op))
@@ -806,9 +872,20 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     }
 
     if (type->tag == TYPE_MODULE) {
-        TYCHK_ERROR(state, expr->expr.span,
-                    "Not implemented yet\n");
-        return false;
+        bind = scope_lookup_local(type->module.scope, expr->field, false);
+        if (!bind) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Module '%s' has no value member '%s'\n",
+                        expr->op->span.start, expr->field->str);
+            return false;
+        }
+
+        if (!checker_resolve_binding(state, bind))
+            return false;
+
+        expr->expr.type = bind->type;
+        expr->link_sym = bind->link_sym;
+        return true;
     }
 
     /*
@@ -1339,6 +1416,7 @@ checker_decl_register(struct checker *state, struct decl *decl)
     struct decl_type *d_type;
     struct decl_module *mod;
     struct scope *saved, *scope;
+    struct binding *bind;
     struct type *type;
     size_t i;
     bool ok = true;
@@ -1352,7 +1430,14 @@ checker_decl_register(struct checker *state, struct decl *decl)
                 ok = false;
             }
 
-            scope_push(state->curr_scope, proc->sym, NULL, decl, false);
+            bind = scope_push(state->curr_scope, proc->sym, NULL, decl, false);
+
+            // XXX: do this with attrs/extern
+            if (!proc->body || !strcmp(proc->sym->str, "main")) {
+                bind->link_sym = proc->sym;
+            }
+
+            proc->link_sym = bind->link_sym;
             return ok;
 
         case DECL_STRUCT:
@@ -1365,7 +1450,9 @@ checker_decl_register(struct checker *state, struct decl *decl)
 
             type = type_get_struct(decl->attr, strukt->sym,
                                    strukt->fields, strukt->fields_count);
-            scope_push(state->curr_scope, strukt->sym, type, decl, true);
+            bind = scope_push(state->curr_scope, strukt->sym, type, decl, true);
+            strukt->link_sym = bind->link_sym;
+            type->strukt.name = bind->link_sym;
             return ok;
 
         case DECL_TYPE:

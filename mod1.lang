@@ -1,0 +1,13 @@
+module Lib {
+    module Math {
+        proc add(a: int, b: int): int { return a + b }
+    }
+}
+
+proc main(argc: int, argv: **u8): int {
+    var m = Lib.Math
+    print32(m.add(10, 20))
+    return 0
+}
+
+proc print32(_: int)

@@ -51,7 +51,7 @@ irgen_val(struct irgen *state, struct irval val)
             break;
 
         case IRVAL_GLOBAL:
-            IR_EMITF(state, "@%s", val.global);
+            IR_EMITF(state, "@\"%s\"", val.global);
             break;
 
         case IRVAL_STRING:
@@ -104,7 +104,7 @@ irgen_type(struct irgen *state, struct type *type)
 
         case TYPE_STRUCT:
             if (type->strukt.name) {
-                IR_EMITF(state, "%%%s", type->strukt.name->str);
+                IR_EMITF(state, "%%\"%s\"", type->strukt.name->str);
             } else {
                 /*
                  * Anonymous structs
@@ -409,15 +409,12 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
     switch (expr->tag) {
         case EXPR_IDENT:
             ident = (struct expr_ident *)expr;
+            if (ident->link_sym)
+                return IRVAL_GLOBAL(ident->link_sym->str);
 
             for (i = state->locals_count; i > 0; i--) {
                 if (state->locals[i - 1].sym == ident->sym)
                     return state->locals[i - 1].val;
-            }
-
-            for (i = 0; i < state->globals_count; i++) {
-                if (state->globals[i].sym == ident->sym)
-                    return state->globals[i].val;
             }
 
             assert(false && "undefined vars slipped through!");
@@ -460,8 +457,10 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
 
         case EXPR_ACCESS:
             access = (struct expr_access *)expr;
-            type = access->op->type;
+            if (access->link_sym)
+                return IRVAL_GLOBAL(access->link_sym->str);
 
+            type = access->op->type;
             if (type->tag == TYPE_PTR) {
                 ptr = irgen_expr(state, access->op);
                 type = type->pointer;
@@ -1256,7 +1255,7 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
     if (!decl->body) {
         IR_EMITF(state, "\ndeclare ");
         irgen_type_ret(state, decl->out);
-        IR_EMITF(state, " @%s(", decl->sym->str);
+        IR_EMITF(state, " @\"%s\"(", decl->link_sym->str);
 
         for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
             if (type_is_zst(ptr->type))
@@ -1279,7 +1278,7 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 
     IR_EMITF(state, "\ndefine ");
     irgen_type_ret(state, decl->out);
-    IR_EMITF(state, " @%s(", decl->sym->str);
+    IR_EMITF(state, " @\"%s\"(", decl->link_sym->str);
 
     for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
         if (type_is_zst(ptr->type))
@@ -1329,7 +1328,7 @@ irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
 {
     size_t i;
 
-    IR_EMITF(state, "\n%%%s = type { ", decl->sym->str);
+    IR_EMITF(state, "\n%%\"%s\" = type { ", decl->link_sym->str);
     for (i = 0; i < decl->fields_count; i++) {
         if (i != 0)
             IR_EMITF(state, ", ");
@@ -1339,56 +1338,71 @@ irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
     IR_EMITF(state, " }\n");
 }
 
-void
-irgen_decl(struct irgen *state, struct decl *decl)
+static void
+irgen_decl_types(struct irgen *state, struct decl *decl)
 {
+    struct decl_module *mod;
+    size_t i;
+
+    switch (decl->tag) {
+        case DECL_STRUCT:
+            irgen_decl_struct(state, (struct decl_struct *)decl);
+            break;
+
+        case DECL_MODULE:
+            mod = (struct decl_module *)decl;
+            for (i = 0; i < mod->items_count; i++) {
+                irgen_decl_types(state, mod->items[i]);
+            }
+            break;
+
+        default:
+            /* No IR to generate */
+            break;
+    }
+}
+
+static void
+irgen_decl_bodies(struct irgen *state, struct decl *decl)
+{
+    struct decl_module *mod;
+    size_t i;
+
     switch (decl->tag) {
         case DECL_PROC:
             irgen_decl_proc(state, (struct decl_proc *)decl);
             break;
 
-        case DECL_STRUCT:
-            irgen_decl_struct(state, (struct decl_struct *)decl);
+        case DECL_MODULE:
+            mod = (struct decl_module *)decl;
+            for (i = 0; i < mod->items_count; i++) {
+                irgen_decl_bodies(state, mod->items[i]);
+            }
             break;
 
         default:
-            unreachable();
+            /* No IR to generate */
+            break;
     }
 }
 
 bool
 irgen_module(struct irgen *state, struct decl *decl)
 {
-    struct decl_module *mod;
-    struct symbol *sym;
     size_t i, j, len;
     uint8_t c;
 
     assert(decl->tag == DECL_MODULE);
-    mod = (struct decl_module *)decl;
 
     IR_EMITF(state, "target triple = \"x86_64-pc-linux-gnu\"\n");
 
-    for (i = 0; i < mod->items_count; i++) {
-        if (mod->items[i]->tag == DECL_STRUCT) {
-            irgen_decl(state, mod->items[i]);
-            continue;
-        }
+    irgen_decl_types(state, decl);
 
-        if (mod->items[i]->tag == DECL_PROC) {
-            sym = ((struct decl_proc *)mod->items[i])->sym;
-            assert(state->globals_count < 256 && "too many globals!");
-            state->globals[state->globals_count].sym = sym;
-            state->globals[state->globals_count].val = IRVAL_GLOBAL(sym->str);
-            state->globals_count++;
-        }
-    }
+    irgen_decl_bodies(state, decl);
 
-    for (i = 0; i < mod->items_count; i++) {
-        if (mod->items[i]->tag == DECL_PROC)
-            irgen_decl(state, mod->items[i]);
-    }
-
+    /*
+     * Emit collected string literals
+     */
     for (i = 0; i < state->strings_count; i++) {
         len = strlen(state->strings[i]);
         IR_EMITF(state, "\n@.str.%zu = private unnamed_addr constant [%zu x i8] c\"",
@@ -1396,6 +1410,8 @@ irgen_module(struct irgen *state, struct decl *decl)
 
         for (j = 0; j < len; j++) {
             c = state->strings[i][j];
+
+            // XXX
             if (c >= 32 && c <= 126 && c != '"' && c != '\\') {
                 IR_EMITC(state, c);
             } else {

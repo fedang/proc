@@ -15,6 +15,7 @@ enum resolve_status {
 
 struct binding {
     struct symbol *sym;
+    struct symbol *link_sym;
     struct scope *scope;
     enum resolve_status status;
     bool is_type;
@@ -26,6 +27,7 @@ struct binding {
 struct scope {
     struct scope *parent;
     struct symbol *name;
+    struct symbol *prefix;
     struct binding bindings[256];
     size_t bindings_count;
 };

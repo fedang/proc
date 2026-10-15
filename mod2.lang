@@ -1,0 +1,19 @@
+module Ping {
+    proc ping(n: int) {
+        if n > 0 { Pong.pong(n - 1) }
+    }
+}
+
+module Pong {
+    proc pong(n: int) {
+        print32(n)
+        Ping.ping(n - 1)
+    }
+}
+
+proc main(argc: int, argv: **u8): int {
+    Ping.ping(5)
+    return 0
+}
+
+proc print32(_: int)

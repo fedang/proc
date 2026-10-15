@@ -100,7 +100,8 @@ static inline bool
 type_is_sized(const struct type *type)
 {
     return type->tag != TYPE_PROC
-        && type->tag != TYPE_OPAQUE;
+        && type->tag != TYPE_OPAQUE
+        && type->tag != TYPE_MODULE;
 }
 
 static inline bool

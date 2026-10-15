@@ -111,6 +111,7 @@ struct expr_literal {
 struct expr_ident {
     struct expr expr;
     struct symbol *sym;
+    struct symbol *link_sym;
 };
 
 struct expr_binop {
@@ -144,6 +145,7 @@ struct expr_access {
     struct expr *op;
     struct symbol *field;
     unsigned index;
+    struct symbol *link_sym;
 };
 
 struct expr_array {

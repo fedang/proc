@@ -1,0 +1,29 @@
+struct Vector { x: int; y: int; z: int }
+
+module Physics {
+    struct Vector { x: int; y: int }
+
+    proc make_vec(): Vector {
+        var v: Vector
+        v.x = 1
+        v.y = 2
+        return v
+    }
+
+    module Quaternion {
+        type Quat
+    }
+}
+
+proc main(argc: int, argv: **u8): int {
+    var global_v: Vector
+    var phys_v: Physics.Vector
+    //var err: Physics
+    var nested: *Physics.Quaternion.Quat
+
+    print32(@cast(int, @size_of(@type_of(global_v))))
+    print32(@cast(int, @size_of(@type_of(phys_v))))
+    return 0
+}
+
+proc print32(_: int)

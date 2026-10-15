@@ -1,6 +1,22 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "scope.h"
+
+static struct symbol *
+scope_mangle(struct scope *scope, struct symbol *name)
+{
+    char buf[1024];
+    size_t len;
+
+    if (!scope || !scope->prefix)
+        return name;
+
+    len = snprintf(buf, sizeof(buf), "%s.%s", scope->prefix->str, name->str);
+    assert(len < sizeof(buf) && "name too long");
+
+    return symbol_intern(buf, len);
+}
 
 struct scope *
 scope_make(struct symbol *name, struct scope *parent)
@@ -8,6 +24,7 @@ scope_make(struct symbol *name, struct scope *parent)
     struct scope *scope = calloc(1, sizeof(struct scope));
     scope->name = name;
     scope->parent = parent;
+    scope->prefix = scope_mangle(parent, name);
     return scope;
 }
 
@@ -21,6 +38,7 @@ scope_push(struct scope *scope, struct symbol *sym,
     bind = &scope->bindings[scope->bindings_count++];
 
     bind->sym = sym;
+    bind->link_sym = scope_mangle(scope, sym);
     bind->status = decl ? RESOLVE_NONE : RESOLVE_DONE;
     bind->scope = scope;
     bind->is_type = is_type;
