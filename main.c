@@ -45,7 +45,8 @@ main(int argc, const char **argv)
     if (!options_init(&opts, argc, argv))
         return 1;
 
-    if (!source_open(&src, opts.inputs[0])) {
+    source_init(&src, opts.inputs[0], NULL);
+    if (!source_load(&src)) {
         report_error(&src, NULL, "Failed to read input file %s\n",
                      opts.inputs[0]);
         return 1;
