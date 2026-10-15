@@ -10,32 +10,57 @@
 static struct symbol *
 source_module_name(struct source *src)
 {
-    const char *base, *dot, *ptr;
+    const char *base, *end, *ptr, *dir;
+    size_t len;
 
     /*
      * Find the last directory separator
      */
     for (base = ptr = src->path; *ptr != '\0'; ptr++) {
-        if (*ptr == '/' || *ptr == '\\') {
+        if (*ptr == '/') {
             base = ptr + 1;
         }
     }
 
     /*
-     * Find the first dot after the base name
+     * If the file is called "module" it uses the name of the folder
      */
-    for (ptr = base, dot = NULL; *ptr != '\0'; ptr++) {
-        if (*ptr == '.') {
-            dot = ptr;
-            break;
+    if (strcmp(base, "module.lang") == 0) {
+        if (base == src->path) {
+            report_error(src, NULL,
+                         "'module.lang' must be inside a named directory\n");
+            return symbol_invalid_mod;
+        }
+
+        dir = base - 1;
+        while (dir > src->path && dir[-1] == '/') {
+            dir--;
+        }
+
+        ptr = dir;
+        while (ptr > src->path && ptr[-1] != '/') {
+            ptr--;
+        }
+
+        base = ptr;
+        end = dir;
+    } else {
+        /*
+         * Ordinary files use their basename before the dot
+         */
+        for (end = base; *end != '\0'; end++) {
+            if (*end == '.') {
+                break;
+            }
         }
     }
 
-    if (!dot) {
-        dot = ptr;
-    }
+    /*
+     * Validate the derived module name.
+     */
+    len = end - base;
 
-    if (dot == base) {
+    if (len == 0) {
         report_error(src, NULL,
                      "Empty or hidden filenames are not allowed as module names\n");
         return symbol_invalid_mod;
@@ -43,27 +68,38 @@ source_module_name(struct source *src)
 
     if (!isalpha(*base) && *base != '_') {
         report_error(src, NULL,
-                     "File name can only start with a letter or underscore\n");
+                     "Module name must start with a letter or underscore\n");
         return symbol_invalid_mod;
     }
 
-    for (ptr = base + 1; ptr < dot; ptr++) {
+    for (ptr = base + 1; ptr < end; ptr++) {
         if (!isalnum(*ptr) && *ptr != '_') {
             report_error(src, NULL,
-                         "File name can only contain alphanumerics and underscores\n");
+                         "Module name can only contain alphanumerics and underscores\n");
             return symbol_invalid_mod;
         }
     }
 
-    return symbol_intern(base, dot - base);
+    if (len == 6 && !memcmp(base, "module", 6)) {
+        report_error(src, NULL,
+                     "Module name 'module' is reserved\n");
+        return symbol_invalid_mod;
+    }
+
+    return symbol_intern(base, len);
 }
 
 void
 source_init(struct source *src, const char *path, struct symbol *name)
 {
-    src->path = path;
-    src->str = NULL;
-    src->len = 0;
+    size_t len;
+
+    memset(src, 0, sizeof(struct source));
+
+    len = strlen(path) + 1;
+    src->path = malloc(len);
+    memcpy(src->path, path, len);
+
     src->name = name ? name : source_module_name(src);
 }
 

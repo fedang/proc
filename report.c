@@ -24,6 +24,9 @@ report_source_span(const struct source *src, const struct span *span,
     line_ptr = span->start;
     line = span->start_line;
 
+    assert(src->str && "invalid src");
+    assert(span->start && span->end && span->start <= span->end && "invalid span");
+
     while (line_ptr > src->str && *(line_ptr - 1) != '\n') {
         line_ptr--;
     }

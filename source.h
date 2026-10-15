@@ -6,7 +6,7 @@
 #include "symbol.h"
 
 struct source {
-    const char *path;
+    char *path;
     const char *str;
     size_t len;
     /* Associated module name */

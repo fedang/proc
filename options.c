@@ -14,7 +14,7 @@ options_push(const char ***strs, size_t *count, size_t *size, const char *value)
         *strs = realloc(*strs, *size * sizeof(*strs));
         assert(strs && "out of mem");
     }
-    *strs[(*count)++] = value;
+    (*strs)[(*count)++] = value;
 }
 
 bool
