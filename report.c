@@ -105,10 +105,16 @@ report_message(const struct source *src, const struct span *span, int level,
 {
     const char *color, *label;
 
-    fprintf(stderr, TERM_BOLD "%s:", src->path);
+    assert((!span || src) && "either just source or both");
+
+    if (src)
+        fprintf(stderr, TERM_BOLD "%s:", src->path);
 
     if (span)
         fprintf(stderr, "%u:", span->start_line);
+
+    if (src || span)
+        fprintf(stderr, " ");
 
     if (level == REPORT_ERROR) {
         label = "error";
@@ -121,10 +127,10 @@ report_message(const struct source *src, const struct span *span, int level,
         color = TERM_CYAN;
     }
 
-    fprintf(stderr, TERM_NORM " %s%s: " TERM_NORM, color, label);
+    fprintf(stderr, TERM_NORM "%s%s: " TERM_NORM, color, label);
     vfprintf(stderr, fmt, args);
 
-    if (span)
+    if (src && span)
         report_source_span(src, span, color);
 }
 

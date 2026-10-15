@@ -8,10 +8,30 @@
 #include "checker.h"
 #include "irgen.h"
 #include "report.h"
+#include "options.h"
+
+static int
+run_clang(struct options *opts, const char *ir_file)
+{
+    char cmd[1024];
+    int i, cmd_len;
+
+    cmd_len = snprintf(cmd, sizeof(cmd),
+                       "clang %s test.c -O1 -o %s -Wno-override-module",
+                        ir_file, opts->output);
+
+    for (i = 0; i < opts->clang_args_count; i++) {
+        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
+                            " %s", opts->clang_args[i]);
+    }
+
+    return system(cmd);
+}
 
 int
-main(int argc, char **argv)
+main(int argc, const char **argv)
 {
+    struct options opts;
     struct source src;
     struct lexer lexer;
     struct parser parser;
@@ -19,15 +39,15 @@ main(int argc, char **argv)
     struct irgen irgen;
     struct token *tokens;
     struct decl *mod;
-    FILE *out;
+    const char *ir_file;
+    FILE *ir_out;
 
-    if (argc != 2) {
-        printf("Usage: %s file\n", argv[0]);
+    if (!options_init(&opts, argc, argv))
         return 1;
-    }
 
-    if (!source_open(&src, argv[1])) {
-        report_error(&src, NULL, "Failed to read input file %s\n", argv[1]);
+    if (!source_open(&src, opts.inputs[0])) {
+        report_error(&src, NULL, "Failed to read input file %s\n",
+                     opts.inputs[0]);
         return 1;
     }
 
@@ -48,21 +68,22 @@ main(int argc, char **argv)
         return 1;
     }
 
-    out = fopen("test.ll", "wb");
-    if (!out) {
-        report_info(&src, NULL, "Failed to open output file\n");
+    ir_file = "test.ll"; // XXX
+    ir_out = fopen(ir_file, "wb");
+    if (!ir_out) {
+        report_info(&src, NULL, "Failed to open IR output file\n");
         return 1;
     }
 
-    irgen_init(&irgen, &src, out);
+    irgen_init(&irgen, &src, ir_out);
     if (!irgen_module(&irgen, mod)) {
         report_info(&src, NULL, "Failed to generate IR\n");
         return 1;
     }
 
-    fclose(out);
+    fclose(ir_out);
 
-    if (system("clang test.ll test.c -O1 -o test -Wno-override-module")) {
+    if (run_clang(&opts, ir_file)) {
         report_info(&src, NULL, "Failed to compile IR\n");
         return 1;
     }
