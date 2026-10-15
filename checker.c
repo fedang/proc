@@ -46,18 +46,10 @@ checker_init(struct checker *state, struct modcache *cache)
     state->root_scope = root;
     state->curr_scope = root;
 
-    checker_root_push(state, "i8", type_get_int(NULL, 8));
-    checker_root_push(state, "i16", type_get_int(NULL, 16));
-    checker_root_push(state, "i32", type_get_int(NULL, 32));
-    checker_root_push(state, "i64", type_get_int(NULL, 64));
-    checker_root_push(state, "int", type_get_int(NULL, 0));
-    checker_root_push(state, "u8", type_get_uint(NULL, 8));
-    checker_root_push(state, "u16", type_get_uint(NULL, 16));
-    checker_root_push(state, "u32", type_get_uint(NULL, 32));
-    checker_root_push(state, "u64", type_get_uint(NULL, 64));
-    checker_root_push(state, "uint", type_get_uint(NULL, 0));
-    checker_root_push(state, "bool", type_get_bool(NULL));
-    checker_root_push(state, "void", type_get_void(NULL));
+#define X(type, init) \
+    checker_root_push(state, #type, init);
+    TYPE_LIST(X)
+#undef X
 }
 
 /*

@@ -9,6 +9,22 @@
 #define INT_SIZE (sizeof(int))
 #define PTR_SIZE (sizeof(void *))
 
+#define TYPE_LIST(X) \
+    /* Primitives */ \
+    X(i8, type_get_int(NULL, 8)) \
+    X(i16, type_get_int(NULL, 16)) \
+    X(i32, type_get_int(NULL, 32)) \
+    X(i64, type_get_int(NULL, 64)) \
+    X(int, type_get_int(NULL, 0)) \
+    X(u8, type_get_uint(NULL, 8)) \
+    X(u16, type_get_uint(NULL, 16)) \
+    X(u32, type_get_uint(NULL, 32)) \
+    X(u64, type_get_uint(NULL, 64)) \
+    X(uint, type_get_uint(NULL, 0)) \
+    X(bool, type_get_bool(NULL)) \
+    X(void, type_get_void(NULL)) \
+    /* End */
+
 enum type_tag {
     TYPE_INVALID,
     TYPE_RAW,
