@@ -1246,12 +1246,25 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 {
     struct proc_arg *ptr;
     struct irval slot;
-    unsigned reg, k;
+    unsigned reg, i, k;
 
     /*
      * External declaration
      */
     if (!decl->body) {
+        /*
+         * TODO: Move this into a helper for when we have globals
+         * Also add a dedicated check to see if all bindings have the same type
+         */
+        for (i = 0; i < state->externs_count; i++) {
+            if (state->externs[i] == decl->link_sym)
+                return;
+        }
+
+        assert(state->externs_count < 256 && "too many externs!");
+        state->externs[state->externs_count] = decl->link_sym;
+        state->externs_count++;
+
         IR_EMITF(state, "\ndeclare ");
         irgen_type_ret(state, decl->out);
         IR_EMITF(state, " @\"%s\"(", decl->link_sym->str);

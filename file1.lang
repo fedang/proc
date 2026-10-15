@@ -2,10 +2,10 @@
 
 proc main() {
     //file2.hello()
-    //puts("yola")
+    puts("yola")
 }
 
-//proc puts(_: *u8)
+proc puts(_: *u8)
 
 proc myfun() {
 }

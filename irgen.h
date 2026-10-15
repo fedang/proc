@@ -42,14 +42,14 @@ struct irgen {
     FILE *out;
     unsigned regs;
     unsigned labels;
-
     bool terminated;
     unsigned in_block;
     unsigned loop_cond;
     unsigned loop_exit;
-
     struct irvar locals[256];
     unsigned locals_count;
+    struct symbol *externs[256];
+    unsigned externs_count;
     const char *strings[256];
     unsigned strings_count;
 };
