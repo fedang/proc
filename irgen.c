@@ -1342,7 +1342,9 @@ irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
 {
     size_t i;
 
-    IR_EMITF(state, "\n%%\"%s\" = type { ", decl->link_sym->str);
+    IR_EMITF(state, "\n%%\"%s\" = type { ",
+             decl->type->strukt.link_name->str);
+
     for (i = 0; i < decl->fields_count; i++) {
         if (i != 0)
             IR_EMITF(state, ", ");

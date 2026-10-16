@@ -1575,12 +1575,14 @@ checker_register_decl(struct checker *state, struct decl *decl)
                 ok = false;
             }
 
-            type = type_get_struct(decl->attr, strukt->sym,
-                                   strukt->fields, strukt->fields_count);
-            bind = scope_push(state->curr_scope, strukt->sym, type, decl, true);
+            if (!strukt->type) {
+                strukt->type = type_get_struct(decl->attr, strukt->sym,
+                                               strukt->fields,
+                                               strukt->fields_count);
+            }
 
-            strukt->link_sym = bind->link_sym;
-            type->strukt.link_name = bind->link_sym;
+            bind = scope_push(state->curr_scope, strukt->sym, strukt->type, decl, true);
+            strukt->type->strukt.link_name = bind->link_sym;
             return ok;
 
         case DECL_TYPE:
