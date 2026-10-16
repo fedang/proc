@@ -42,6 +42,7 @@ struct decl_proc {
 struct decl_struct {
     struct decl decl;
     struct symbol *sym;
+    struct symbol *link_sym;
     struct struct_field *fields;
     size_t fields_count;
     struct type *type;

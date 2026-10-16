@@ -170,12 +170,14 @@ type_get_slice(struct attr *attr, struct type *item)
 }
 
 struct type *
-type_get_struct(struct attr *attr, struct symbol *name,
+type_get_struct(struct attr *attr, struct decl *decl, struct symbol *name,
                 struct struct_field *fields, size_t fields_count)
 {
     struct type *type;
     size_t i, j;
     bool found;
+
+    assert(!decl || decl->tag == DECL_STRUCT);
 
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
@@ -183,24 +185,36 @@ type_get_struct(struct attr *attr, struct symbol *name,
         if (type->tag != TYPE_STRUCT || type->attr != attr)
             continue;
 
-        if (type->strukt.name == name
-                && type->strukt.fields_count == fields_count) {
-            found = true;
+        if ((struct decl *)type->strukt.decl != decl)
+            continue;
 
-            for (j = 0; j < fields_count; j++) {
-                if (fields[j].name != type->strukt.fields[j].name
-                        || fields[j].type != type->strukt.fields[j].type) {
-                    found = false;
-                    break;
-                }
+        /*
+         * Nominal structs are identified by their declaration
+         */
+        if (decl)
+            return type;
+
+        /*
+         * Do a purely structural comparison of the anonymous ones
+         */
+        if (type->strukt.fields_count != fields_count)
+            continue;
+
+        found = true;
+        for (j = 0; j < fields_count; j++) {
+            if (fields[j].name != type->strukt.fields[j].name
+                    || fields[j].type != type->strukt.fields[j].type) {
+                found = false;
+                break;
             }
-
-            if (found)
-                return type;
         }
+
+        if (found)
+            return type;
     }
 
     type = type_get_fresh(attr, TYPE_STRUCT);
+    type->strukt.decl = (struct decl_struct *)decl;
     type->strukt.name = name;
     type->strukt.fields = fields;
     type->strukt.fields_count = fields_count;
@@ -250,20 +264,27 @@ type_get_proc(struct attr *attr, struct type *out,
 }
 
 struct type *
-type_get_opaque(struct attr *attr, struct symbol *name)
+type_get_opaque(struct attr *attr, struct decl *decl, struct symbol *name)
 {
     struct type *type;
     size_t i;
 
+    assert(!decl || decl->tag == DECL_TYPE);
+
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
+
+        /*
+         * Opaque types are identified by their declaration
+         */
         if (type->tag == TYPE_OPAQUE && type->attr == attr
-                && type->opaque.name == name) {
+                && (struct decl *)type->opaque.decl == decl) {
             return type;
         }
     }
 
     type = type_get_fresh(attr, TYPE_OPAQUE);
+    type->opaque.decl = (struct decl_type *)decl;
     type->opaque.name = name;
     return type;
 }

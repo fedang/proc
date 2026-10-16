@@ -102,8 +102,8 @@ irgen_type(struct irgen *state, struct type *type)
             break;
 
         case TYPE_STRUCT:
-            if (type->strukt.link_name) {
-                IR_EMITF(state, "%%\"%s\"", type->strukt.link_name->str);
+            if (type->strukt.decl) {
+                IR_EMITF(state, "%%\"%s\"", type->strukt.decl->link_sym->str);
             } else {
                 /*
                  * Anonymous structs
@@ -1342,9 +1342,7 @@ irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
 {
     size_t i;
 
-    IR_EMITF(state, "\n%%\"%s\" = type { ",
-             decl->type->strukt.link_name->str);
-
+    IR_EMITF(state, "\n%%\"%s\" = type { ", decl->link_sym->str);
     for (i = 0; i < decl->fields_count; i++) {
         if (i != 0)
             IR_EMITF(state, ", ");

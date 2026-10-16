@@ -1576,13 +1576,13 @@ checker_register_decl(struct checker *state, struct decl *decl)
             }
 
             if (!strukt->type) {
-                strukt->type = type_get_struct(decl->attr, strukt->sym,
+                strukt->type = type_get_struct(decl->attr, decl, strukt->sym,
                                                strukt->fields,
                                                strukt->fields_count);
             }
 
             bind = scope_push(state->curr_scope, strukt->sym, strukt->type, decl, true);
-            strukt->type->strukt.link_name = bind->link_sym;
+            strukt->link_sym = bind->link_sym;
             return ok;
 
         case DECL_TYPE:
@@ -1597,7 +1597,9 @@ checker_register_decl(struct checker *state, struct decl *decl)
             /*
              * If no alias type is given, treat as opaque
              */
-            type = d_type->type ? NULL : type_get_opaque(decl->attr, d_type->sym);
+            type = d_type->type
+                 ? NULL
+                 : type_get_opaque(decl->attr, decl, d_type->sym);
             scope_push(state->curr_scope, d_type->sym, type, decl, true);
             return ok;
 

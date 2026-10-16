@@ -50,6 +50,8 @@ struct struct_field {
 
 struct scope;
 
+struct decl;
+
 struct type {
     struct attr *attr;
     enum type_tag tag;
@@ -65,8 +67,8 @@ struct type {
             struct type *item;
         } slice;
         struct {
+            struct decl_struct *decl;
             struct symbol *name;
-            struct symbol *link_name;
             struct struct_field *fields;
             size_t fields_count;
         } strukt;
@@ -76,6 +78,7 @@ struct type {
             size_t args_count;
         } proc;
         struct {
+            struct decl_type *decl;
             struct symbol *name;
         } opaque;
         struct {
@@ -147,13 +150,15 @@ struct type *type_get_array(struct attr *attr, struct type *item, size_t count);
 
 struct type *type_get_slice(struct attr *attr, struct type *item);
 
-struct type *type_get_struct(struct attr *attr, struct symbol *name,
-                             struct struct_field *fields, size_t fields_count);
+struct type *type_get_struct(struct attr *attr, struct decl *decl,
+                             struct symbol *name, struct struct_field *fields,
+                             size_t fields_count);
 
 struct type *type_get_proc(struct attr *attr, struct type *out,
                            struct type **args, size_t args_count);
 
-struct type *type_get_opaque(struct attr *attr, struct symbol *name);
+struct type *type_get_opaque(struct attr *attr, struct decl *decl,
+                             struct symbol *name);
 
 struct type *type_get_module(struct attr *attr, struct scope *scope);
 
