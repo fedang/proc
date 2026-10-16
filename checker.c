@@ -1408,6 +1408,97 @@ checker_proc_returns(struct stmt *stmt)
 /*
  * Declarations
  */
+static bool checker_decl_register(struct checker *state, struct decl *decl);
+
+static bool checker_file_register(struct checker *state, struct modfile *file);
+
+static bool
+checker_decl_import(struct checker *state, struct decl_import *decl)
+{
+    struct symbol *mod;
+    struct type *type;
+    struct binding *bind;
+
+    if (decl->expr->tag == EXPR_ACCESS) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Only simple imports are supported for now\n");
+        return false;
+    }
+
+    if (decl->expr->tag != EXPR_IDENT)
+        return false;
+
+    mod = ((struct expr_ident *)decl->expr)->sym;
+
+    bind = scope_lookup_local(state->curr_scope, mod, false);
+    if (!bind) {
+        struct modfile *file = NULL;
+        if (!modcache_import(state->cache, mod, state->cache->rootdir, &file)) {
+            TYCHK_ERROR(state, decl->decl.span,
+                        "Cannot find module '%s'\n", mod->str);
+            return false;
+        }
+        if (!checker_file_register(state, file))
+            return false;
+
+        /*
+         * Extract the actual binding from file->scope
+         */
+        bind = scope_lookup_local(file->scope, ((struct decl_module *)file->decl)->sym, false);
+        if (!bind) {
+            TYCHK_ERROR(state, decl->decl.span,
+                        "Module '%s' was not registered correctly\n", mod->str);
+            return false;
+        }
+        type = bind->type;
+        if (type->tag != TYPE_MODULE) {
+            TYCHK_ERROR(state, decl->decl.span,
+                        "'%s' is not a module\n", mod->str);
+            return false;
+        }
+    } else {
+        type = bind->type;
+        if (type->tag != TYPE_MODULE) {
+            TYCHK_ERROR(state, decl->decl.span,
+                        "'%s' is not a module\n", mod->str);
+            return false;
+        }
+    }
+
+    if (scope_lookup_local(state->curr_scope, mod, false)) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Redefinition of module '%s'\n", mod->str);
+        return false;
+    }
+
+    bind = scope_push(state->curr_scope, mod, type, NULL, false);
+    bind->status = RESOLVE_DONE;
+    return true;
+}
+
+static bool
+checker_module_register(struct checker *state, struct decl_module *decl)
+{
+    size_t i;
+    bool ok = true;
+
+    for (i = 0; i < decl->items_count; i++) {
+        if (decl->items[i]->tag != DECL_IMPORT) {
+            if (!checker_decl_register(state, decl->items[i]))
+                ok = false;
+        }
+    }
+
+    for (i = 0; i < decl->items_count; i++) {
+        if (decl->items[i]->tag == DECL_IMPORT) {
+            if (!checker_decl_import(state, (struct decl_import *)decl->items[i]))
+                ok = false;
+        }
+    }
+
+    return ok;
+}
+
 static bool
 checker_decl_register(struct checker *state, struct decl *decl)
 {
@@ -1419,7 +1510,6 @@ checker_decl_register(struct checker *state, struct decl *decl)
     struct binding *bind;
     struct symbol *prefix;
     struct type *type;
-    size_t i;
     bool ok = true;
 
     switch (decl->tag) {
@@ -1496,10 +1586,8 @@ checker_decl_register(struct checker *state, struct decl *decl)
             saved = state->curr_scope;
             state->curr_scope = scope;
 
-            for (i = 0; i < mod->items_count; i++) {
-                if (!checker_decl_register(state, mod->items[i])) {
-                    ok = false;
-                }
+            if (!checker_module_register(state, mod)) {
+                ok = false;
             }
 
             state->curr_scope = saved;
@@ -1514,8 +1602,8 @@ static bool
 checker_file_register(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
-    struct scope *saved;
-    size_t i;
+    struct scope *saved_scope;
+    struct source *saved_src;
     bool ok = true;
 
     if (file->registered)
@@ -1528,17 +1616,17 @@ checker_file_register(struct checker *state, struct modfile *file)
         file->scope = scope_make(mod->sym, mod->prefix, state->root_scope);
     }
 
-    saved = state->curr_scope;
+    saved_src = state->src;
+    saved_scope = state->curr_scope;
+    state->src = &file->src;
     state->curr_scope = file->scope;
 
-    state->src = &file->src;
-    for (i = 0; i < mod->items_count; i++) {
-        if (!checker_decl_register(state, mod->items[i])) {
-            ok = false;
-        }
+    if (!checker_decl_register(state, file->decl)) {
+        ok = false;
     }
 
-    state->curr_scope = saved;
+    state->src = saved_src;
+    state->curr_scope = saved_scope;
     return ok;
 }
 
@@ -1609,21 +1697,15 @@ checker_decl_validate(struct checker *state, struct decl *decl)
 static bool
 checker_file_validate(struct checker *state, struct modfile *file)
 {
-    struct decl_module *mod;
     struct scope *saved;
-    size_t i;
     bool ok = true;
 
-    mod = (struct decl_module *)file->decl;
     state->src = &file->src;
-
     saved = state->curr_scope;
     state->curr_scope = file->scope;
 
-    for (i = 0; i < mod->items_count; i++) {
-        if (!checker_decl_validate(state, mod->items[i])) {
-            ok = false;
-        }
+    if (!checker_decl_validate(state, file->decl)) {
+        ok = false;
     }
 
     state->curr_scope = saved;

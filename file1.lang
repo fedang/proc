@@ -1,7 +1,7 @@
-//import file2
+import file2
 
 proc main():int {
-    //file2.hello()
+    file2.hello()
     puts("yola")
     return 0
 }
