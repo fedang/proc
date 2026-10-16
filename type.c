@@ -369,3 +369,98 @@ type_alignof(const struct type *type)
             unreachable();
     }
 }
+
+void
+type_format(FILE *out, const struct type *type)
+{
+    size_t i;
+
+    assert(type);
+    switch (type->tag) {
+        case TYPE_INVALID:
+            fprintf(out, "<invalid>");
+            break;
+
+        case TYPE_RAW:
+            fprintf(out, "<unresolved>");
+            break;
+
+        case TYPE_BOOL:
+            fprintf(out, "bool");
+            break;
+
+        case TYPE_VOID:
+            fprintf(out, "void");
+            break;
+
+        case TYPE_INT:
+            if (type->bit_size)
+                fprintf(out, "i%zu", type->bit_size);
+            else
+                fprintf(out, "int");
+            break;
+
+        case TYPE_UINT:
+            if (type->bit_size)
+                fprintf(out, "u%zu", type->bit_size);
+            else
+                fprintf(out, "uint");
+            break;
+
+        case TYPE_PTR:
+            fprintf(out, "*");
+            type_format(out, type->pointer);
+            break;
+
+        case TYPE_ARRAY:
+            fprintf(out, "[");
+            type_format(out, type->array.item);
+            fprintf(out, ", %zu]", type->array.count);
+            break;
+
+        case TYPE_SLICE:
+            fprintf(out, "[");
+            type_format(out, type->slice.item);
+            fprintf(out, "]");
+            break;
+
+        case TYPE_OPAQUE:
+            fprintf(out, "%.*s", (int)type->opaque.name->len,
+                    type->opaque.name->str);
+            break;
+
+        case TYPE_STRUCT:
+            if (type->strukt.name) {
+                fprintf(out, "%.*s", (int)type->strukt.name->len,
+                        type->strukt.name->str);
+            } else {
+                fprintf(out, "struct { ");
+                for (i = 0; i < type->strukt.fields_count; i++) {
+                    if (i > 0) fprintf(out, ", ");
+                    fprintf(out, "%.*s: ", (int)type->strukt.fields[i].name->len,
+                                           type->strukt.fields[i].name->str);
+                    type_format(out, type->strukt.fields[i].type);
+                }
+                fprintf(out, " }");
+            }
+            break;
+
+        case TYPE_PROC:
+            fprintf(out, "proc(");
+            for (i = 0; i < type->proc.args_count; i++) {
+                if (i > 0)
+                    fprintf(out, ", ");
+                type_format(out, type->proc.args[i]);
+            }
+            fprintf(out, ") ");
+
+            if (type->proc.out->tag != TYPE_VOID) {
+                fprintf(out, "-> ");
+                type_format(out, type->proc.out);
+            }
+            break;
+
+        default:
+            unreachable();
+    }
+}

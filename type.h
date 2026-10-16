@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <assert.h>
 
@@ -155,5 +156,7 @@ struct type *type_get_proc(struct attr *attr, struct type *out,
 struct type *type_get_opaque(struct attr *attr, struct symbol *name);
 
 struct type *type_get_module(struct attr *attr, struct scope *scope);
+
+void type_format(FILE *out, const struct type *type);
 
 #endif

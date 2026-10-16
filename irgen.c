@@ -513,6 +513,8 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
                     }
                 }
 
+                assert(j != strukt->expr.type->strukt.fields_count && "not found!");
+
                 val = irgen_expr(state, strukt->fields[i].value);
                 if (type_is_zst(strukt->fields[i].value->type))
                     continue;

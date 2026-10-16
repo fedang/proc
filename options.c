@@ -20,7 +20,7 @@ options_push(const char ***strs, size_t *count, size_t *size, const char *value)
 bool
 options_init(struct options *opts, int argc, const char **argv)
 {
-    size_t i;
+    int i;
 
     memset(opts, 0, sizeof(struct options));
     opts->output = "a.out";

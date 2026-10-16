@@ -2,7 +2,8 @@ SRC = $(wildcard *.c)
 OBJ = $(SRC:.c=.o)
 BIN = comp
 
-CFLAGS  += -Wall -O0 -g3 -std=c11 -pedantic
+CFLAGS  += -Wall -Wextra -Wno-unused-parameter -Wno-maybe-uninitialized
+CFLAGS	+= -O1 -g3 -std=c99
 LDFLAGS +=
 
 all: $(BIN)

@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "report.h"
+#include "type.h"
 
 #define REPORT_ERROR    0
 #define REPORT_WARNING  1
@@ -10,16 +12,103 @@
 #define TERM_NORM   "\033[0m"
 #define TERM_BOLD   "\033[1m"
 #define TERM_RED    "\033[1;31m"
-#define TERM_MAGENTA "\033[1;35m"
-#define TERM_CYAN "\033[1;36m"
+#define TERM_GREEN  "\033[1;32m"
+#define TERM_MAG    "\033[1;35m"
+#define TERM_CYAN   "\033[1;36m"
+
+static void
+report_format(FILE *out, const char *fmt, va_list args)
+{
+    struct symbol *sym;
+    struct span *span;
+
+    while (*fmt) {
+        if (*fmt != '%') {
+            fputc(*fmt++, out);
+            continue;
+        }
+
+        fmt++;
+        if (*fmt == '%') {
+            fputc('%', out);
+            fmt++;
+            continue;
+        }
+
+        if (fmt[0] == 'p') {
+            if (fmt[1] == 'T') {
+                fprintf(out, "%s", TERM_GREEN);
+                type_format(out, va_arg(args, struct type *));
+                fprintf(out, "%s", TERM_NORM);
+                fmt += 2;
+                continue;
+            }
+
+            if (fmt[1] == 'S') {
+                sym = va_arg(args, struct symbol *);
+                fprintf(out, "%s", TERM_BOLD);
+
+                if (sym) {
+                    fprintf(out, "%.*s", (int)sym->len, sym->str);
+                } else {
+                    fprintf(out, "<null>");
+                }
+
+                fprintf(out, "%s", TERM_NORM);
+                fmt += 2;
+                continue;
+            }
+
+            if (fmt[1] == 'L') {
+                span = va_arg(args, struct span *);
+                if (span && span->start && span->end) {
+                    fprintf(out, "%.*s",
+                            (int)(span->end - span->start), span->start);
+                } else {
+                    fprintf(out, "<null>");
+                }
+                fmt += 2;
+                continue;
+            }
+
+            // XXX: Maybe make this invalid?
+            fprintf(out, "%p", va_arg(args, void *));
+            fmt++;
+            continue;
+        }
+
+#define FMT_SPEC(spec, type) \
+        if (strncmp(fmt, spec, sizeof(spec) - 1) == 0) { \
+            fprintf(out, "%" spec, va_arg(args, type)); \
+            fmt += sizeof(spec) - 1; \
+            continue; \
+        }
+
+        FMT_SPEC("zu", size_t)
+        FMT_SPEC("ld", long)
+        FMT_SPEC("lu", unsigned long)
+        FMT_SPEC("d",  int)
+        FMT_SPEC("i",  int)
+        FMT_SPEC("u",  unsigned)
+        FMT_SPEC("x",  unsigned)
+        FMT_SPEC("s",  const char *)
+        FMT_SPEC("c",  int)
+        FMT_SPEC("p",  void *)
+#undef FMT_SPEC
+
+        fputc('%', out);
+        fputc(fmt[0], out);
+        fmt++;
+    }
+}
 
 static void
 report_source_span(const struct source *src, const struct span *span,
                    const char *color)
 {
     const char *line_ptr, *line_end, *tmp;
-    unsigned line;
     bool in_color, in_span;
+    unsigned line;
 
     line_ptr = span->start;
     line = span->start_line;
@@ -124,14 +213,16 @@ report_message(const struct source *src, const struct span *span, int level,
         color = TERM_RED;
     } else if (level == REPORT_WARNING) {
         label = "warning";
-        color = TERM_MAGENTA;
+        color = TERM_MAG;
     } else if (level == REPORT_INFO) {
         label = "info";
         color = TERM_CYAN;
+    } else {
+        unreachable();
     }
 
     fprintf(stderr, TERM_NORM "%s%s: " TERM_NORM, color, label);
-    vfprintf(stderr, fmt, args);
+    report_format(stderr, fmt, args);
 
     if (src && span)
         report_source_span(src, span, color);

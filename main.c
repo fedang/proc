@@ -14,7 +14,7 @@ static int
 run_clang(struct options *opts, const char *ir_file)
 {
     char cmd[1024];
-    int i, cmd_len;
+    size_t i, cmd_len;
 
     cmd_len = snprintf(cmd, sizeof(cmd),
                        "clang %s test.c -O1 -o %s -Wno-override-module",
