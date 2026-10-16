@@ -102,8 +102,8 @@ irgen_type(struct irgen *state, struct type *type)
             break;
 
         case TYPE_STRUCT:
-            if (type->strukt.name) {
-                IR_EMITF(state, "%%\"%s\"", type->strukt.name->str);
+            if (type->strukt.link_name) {
+                IR_EMITF(state, "%%\"%s\"", type->strukt.link_name->str);
             } else {
                 /*
                  * Anonymous structs

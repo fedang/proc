@@ -4,12 +4,15 @@
 #include <stdbool.h>
 
 #include "source.h"
+#include "scope.h"
 #include "decl.h"
 
 struct modfile {
     struct source src;
     struct decl *decl;
     char *abs_path;
+    struct scope *scope;
+    bool registered;
 };
 
 struct modcache {

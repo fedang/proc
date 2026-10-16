@@ -1,8 +1,9 @@
 //import file2
 
-proc main() {
+proc main():int {
     //file2.hello()
     puts("yola")
+    return 0
 }
 
 proc puts(_: *u8)

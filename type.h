@@ -65,6 +65,7 @@ struct type {
         } slice;
         struct {
             struct symbol *name;
+            struct symbol *link_name;
             struct struct_field *fields;
             size_t fields_count;
         } strukt;

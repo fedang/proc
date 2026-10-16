@@ -1452,8 +1452,9 @@ checker_decl_register(struct checker *state, struct decl *decl)
             type = type_get_struct(decl->attr, strukt->sym,
                                    strukt->fields, strukt->fields_count);
             bind = scope_push(state->curr_scope, strukt->sym, type, decl, true);
+
             strukt->link_sym = bind->link_sym;
-            type->strukt.name = bind->link_sym;
+            type->strukt.link_name = bind->link_sym;
             return ok;
 
         case DECL_TYPE:
@@ -1510,7 +1511,39 @@ checker_decl_register(struct checker *state, struct decl *decl)
 }
 
 static bool
-checker_validate(struct checker *state, struct decl *decl)
+checker_file_register(struct checker *state, struct modfile *file)
+{
+    struct decl_module *mod;
+    struct scope *saved;
+    size_t i;
+    bool ok = true;
+
+    if (file->registered)
+        return true;
+
+    mod = (struct decl_module *)file->decl;
+    file->registered = true;
+
+    if (!file->scope) {
+        file->scope = scope_make(mod->sym, mod->prefix, state->root_scope);
+    }
+
+    saved = state->curr_scope;
+    state->curr_scope = file->scope;
+
+    state->src = &file->src;
+    for (i = 0; i < mod->items_count; i++) {
+        if (!checker_decl_register(state, mod->items[i])) {
+            ok = false;
+        }
+    }
+
+    state->curr_scope = saved;
+    return ok;
+}
+
+static bool
+checker_decl_validate(struct checker *state, struct decl *decl)
 {
     struct decl_module *mod;
     struct decl_proc *proc;
@@ -1524,14 +1557,17 @@ checker_validate(struct checker *state, struct decl *decl)
         mod = (struct decl_module *)decl;
         bind = scope_lookup_local(state->curr_scope, mod->sym, false);
 
-        if (!bind || bind->type->tag != TYPE_MODULE)
+        if (!bind || !bind->type || bind->type->tag != TYPE_MODULE) {
+            TYCHK_ERROR(state, decl->span,
+                        "Module '%s' was not registered\n", mod->sym->str);
             return false;
+        }
 
         saved = state->curr_scope;
         state->curr_scope = bind->type->module.scope;
 
         for (i = 0; i < mod->items_count; i++) {
-            if (!checker_validate(state, mod->items[i]))
+            if (!checker_decl_validate(state, mod->items[i]))
                 ok = false;
         }
 
@@ -1570,20 +1606,43 @@ checker_validate(struct checker *state, struct decl *decl)
     return ok;
 }
 
+static bool
+checker_file_validate(struct checker *state, struct modfile *file)
+{
+    struct decl_module *mod;
+    struct scope *saved;
+    size_t i;
+    bool ok = true;
+
+    mod = (struct decl_module *)file->decl;
+    state->src = &file->src;
+
+    saved = state->curr_scope;
+    state->curr_scope = file->scope;
+
+    for (i = 0; i < mod->items_count; i++) {
+        if (!checker_decl_validate(state, mod->items[i])) {
+            ok = false;
+        }
+    }
+
+    state->curr_scope = saved;
+    return ok;
+}
+
 bool
 checker_modcache(struct checker *state)
 {
-    struct decl_module *mod;
-    struct binding *file_bind;
-    size_t i;
+    struct modfile *file;
+    size_t i, j;
     bool ok = true;
 
     /*
      * Register all declarations recursively (the list grows as we go)
      */
     for (i = 0; i < state->cache->mods_count; i++) {
-        state->src = &state->cache->mods[i].src;
-        if (!checker_decl_register(state, state->cache->mods[i].decl)) {
+        file = &state->cache->mods[i];
+        if (!checker_file_register(state, file)) {
             ok = false;
         }
     }
@@ -1592,16 +1651,13 @@ checker_modcache(struct checker *state)
      * Resolve bindings starting from the root modules
      */
     for (i = 0; i < state->cache->mods_count; i++) {
-        mod = (struct decl_module *)state->cache->mods[i].decl;
-        state->src = &state->cache->mods[i].src;
+        file = &state->cache->mods[i];
+        state->src = &file->src;
 
-        file_bind = scope_lookup_local(state->root_scope, mod->sym, false);
-        if (!file_bind) {
-            report_error(NULL, NULL,
-                         "Module '%s' was not registered\n", mod->sym->str);
-            ok = false;
-        } else if (!checker_resolve_binding(state, file_bind)) {
-            ok = false;
+        for (j = 0; j < file->scope->bindings_count; j++) {
+            if (!checker_resolve_binding(state, &file->scope->bindings[j])) {
+                ok = false;
+            }
         }
     }
 
@@ -1609,8 +1665,8 @@ checker_modcache(struct checker *state)
      * Validate AST bodies (proc, modules, etc)
      */
     for (i = 0; i < state->cache->mods_count; i++) {
-        state->src = &state->cache->mods[i].src;
-        if (!checker_validate(state, state->cache->mods[i].decl)) {
+        file = &state->cache->mods[i];
+        if (!checker_file_validate(state, file)) {
             ok = false;
         }
     }
