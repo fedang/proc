@@ -44,7 +44,7 @@ main(int argc, const char **argv)
 
     symbol_init();
 
-    modcache_init(&cache);
+    modcache_init(&cache, ".");
 
     /*
      * Load all the root modules asked by the user

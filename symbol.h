@@ -27,8 +27,6 @@
     X(typeof, type_of) \
     X(cast, cast) \
     X(slice, slice) \
-    /* Misc */ \
-    X(invalid_mod, <invalid>) \
     /* End */
 
 struct symbol {

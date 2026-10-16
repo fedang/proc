@@ -56,6 +56,7 @@ struct decl_type {
 struct decl_module {
     struct decl decl;
     struct symbol *sym;
+    struct symbol *prefix;
     struct type *sig;
     struct decl **items;
     size_t items_count;

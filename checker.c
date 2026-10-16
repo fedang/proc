@@ -1408,40 +1408,6 @@ checker_proc_returns(struct stmt *stmt)
 /*
  * Declarations
  */
-static struct symbol *
-checker_compute_prefix(const char *path)
-{
-    char buf[1024];
-    const char *ptr;
-    size_t len;
-    char *c;
-
-    if (!path)
-        return NULL;
-
-    ptr = path;
-    while (!strncmp(ptr, "./", 2)) {
-        ptr += 2;
-    }
-
-    strncpy(buf, ptr, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-
-    len = strlen(buf);
-    if (len >= 12 && strcmp(buf + len - 12, "/module.lang") == 0) {
-        buf[len - 12] = '\0';
-    } else if (len >= 5 && strcmp(buf + len - 5, ".lang") == 0) {
-        buf[len - 5] = '\0';
-    }
-
-    for (c = buf; *c; c++) {
-        if (*c == '/' || *c == '\\')
-            *c = '.';
-    }
-
-    return symbol_make(buf);
-}
-
 static bool
 checker_decl_register(struct checker *state, struct decl *decl)
 {
@@ -1518,11 +1484,9 @@ checker_decl_register(struct checker *state, struct decl *decl)
              * Principal modules get their prefix from their path,
              * while module declarations inherit it from the enclosing scope
              */
-            if (state->curr_scope == state->root_scope && state->src) {
-                prefix = checker_compute_prefix(state->src->path);
-            } else {
-                prefix = scope_mangle(mod->sym, state->curr_scope->prefix);
-            }
+            prefix = mod->prefix
+                   ? mod->prefix
+                   : scope_mangle(mod->sym, state->curr_scope->prefix);
 
             scope = scope_make(mod->sym, prefix, state->curr_scope);
             scope_push(state->curr_scope, mod->sym,
