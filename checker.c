@@ -182,8 +182,8 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 
                 default:
                     TYCHK_ERROR(state, expr->span,
-                                "Macro '@%s' cannot be evaluated at compile time\n",
-                                macro->name->str);
+                                "Macro '@%pS' cannot be evaluated at compile time\n",
+                                macro->name);
                     return false;
             }
         }
@@ -229,7 +229,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             if (!bind) {
                 TYCHK_ERROR(state, expr->span,
-                            "Unknown type '%s'\n", ident->sym->str);
+                            "Unknown type '%pS'\n",
+                            ident->sym);
                 return NULL;
             }
 
@@ -238,7 +239,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
              */
             if (bind->status == RESOLVE_PENDING && !bind->type) {
                 TYCHK_ERROR(state, expr->span,
-                            "Cyclic definition involving '%s'\n", bind->sym->str);
+                            "Cyclic definition involving '%pS'\n",
+                            bind->sym);
                 return NULL;
             }
 
@@ -266,7 +268,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
         case EXPR_INDEX:
             // Offer a tip to confused users
             TYCHK_ERROR(state, expr->span,
-                        "Array types are [type, count], not type[count]\n");
+                        "Array types are '[type, count]', not 'type[count]'\n");
             return NULL;
 
         case EXPR_ACCESS:
@@ -280,7 +282,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             if (type->tag != TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span,
-                            "Expected a module in type path\n");
+                            "Expected a module for member access, but got '%pT'\n",
+                            type);
                 return NULL;
             }
 
@@ -299,13 +302,15 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             if (!bind) {
                 TYCHK_ERROR(state, expr->span,
-                            "Module has no type named '%s'\n", access->field->str);
+                            "Module '%pS' has no member named '%pS'\n",
+                            type->module.scope->name, access->field);
                 return NULL;
             }
 
             if (bind->status == RESOLVE_PENDING && !bind->type) {
                 TYCHK_ERROR(state, expr->span,
-                            "Cyclic definition involving '%s'\n", bind->sym->str);
+                            "Cyclic definition involving '%pS'\n",
+                            bind->sym);
                 return NULL;
             }
 
@@ -320,7 +325,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             array = (struct expr_array *)expr;
             if (array->args_count != 1 && array->args_count != 2) {
                 TYCHK_ERROR(state, expr->span,
-                            "Expected [type] or [type, count] for array/slice\n");
+                            "Expected '[type]' or '[type, count]' for array/slice\n");
                 return NULL;
             }
 
@@ -330,7 +335,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             if (!type_is_sized(type)) {
                 TYCHK_ERROR(state, array->args[0]->span,
-                            "Invalid element type\n");
+                            "Array element type '%pT' is unsized\n",
+                            type);
                 return NULL;
             }
 
@@ -364,8 +370,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             TYCHK_ERROR(state, expr->span,
-                        "Macro '@%s' cannot be used as a type\n",
-                        macro->name->str);
+                        "Macro '@%pS' cannot be used as a type\n",
+                        macro->name);
             return NULL;
 
         default:
@@ -467,7 +473,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             return true;
 
         TYCHK_ERROR(state, bind->decl->span,
-                    "Cyclic definition involving '%s'\n", bind->sym->str);
+                    "Cyclic definition involving '%pS'\n",
+                    bind->sym);
         return false;
     }
 
@@ -492,8 +499,9 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                     ok = false;
                 } else if (!type_is_sized(type->strukt.fields[i].type)) {
                     TYCHK_ERROR(state, bind->decl->span,
-                                "Struct field '%s' must have a sized type\n",
-                                type->strukt.fields[i].name->str);
+                                "Struct field '%pS' has unsized type '%pT'\n",
+                                type->strukt.fields[i].name,
+                                type->strukt.fields[i].type);
                     ok = false;
                     type->strukt.fields[i].type = type_get_invalid();
                 }
@@ -511,7 +519,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                 ok = false;
             } else if (!type_is_sized(proc->out)) {
                 TYCHK_ERROR(state, proc->decl.span,
-                            "Return type must be a sized type\n");
+                            "Procedure '%pS' has unsized return type '%pT'\n",
+                            proc->sym, proc->out);
                 ok = false;
                 proc->out = type_get_invalid();
             }
@@ -521,7 +530,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                     ok = false;
                 } else if (!type_is_sized(ptr->type)) {
                     TYCHK_ERROR(state, proc->decl.span,
-                                "Parameter must be a sized type\n");
+                                "Parameter '%pS' has unsized type '%pT', consider using a pointer instead\n",
+                                ptr->sym, ptr->type);
                     ok = false;
                     ptr->type = type_get_invalid();
                 }
@@ -607,7 +617,8 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
     bind = scope_lookup(state->curr_scope, expr->sym, false);
     if (!bind) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "Undefined variable '%s'\n", expr->sym->str);
+                    "Undefined variable '%pS'\n",
+                    expr->sym);
         return false;
     }
 
@@ -633,19 +644,22 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
 
     if (!checker_cmp(state, expr->op_lhs->type, expr->op_rhs->type)) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "Binop operands have different types\n");
+                    "Cannot apply binary operator to '%pT' and '%pT'\n",
+                    expr->op_lhs->type, expr->op_rhs->type);
         return false;
     }
 
     if (expr->binop >= BINOP_SET && expr->binop <= BINOP_MOD_SET) {
         if (!expr_is_lvalue(expr->op_lhs)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Binop left operand is not an lvalue\n");
+                        "Assignments require an lvalue as left operand\n");
             return false;
         }
 
         if (!type_is_sized(expr->op_lhs->type)) {
-            TYCHK_ERROR(state, expr->expr.span, "Cannot assign to unsized type\n");
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Assignments disallowed on unsized type '%pT'\n",
+                        expr->op_lhs->type);
             return false;
         }
     }
@@ -655,7 +669,8 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
         case BINOP_BOOL_AND:
             if (expr->op_lhs->type->tag != TYPE_BOOL) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Expected bool operands for and/or\n");
+                            "Logical operators require 'bool' operands, but got '%pT'\n",
+                            expr->op_lhs->type);
                 return false;
             }
             expr->expr.type = type_get_bool(NULL);
@@ -666,7 +681,8 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
             if (!type_is_scalar(expr->op_lhs->type)
                     && expr->op_lhs->type->tag != TYPE_BOOL) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Invalid operand types for equality\n");
+                            "Equality operator requires scalar type, but got '%pT'\n",
+                            expr->op_lhs->type);
                 return false;
             }
             expr->expr.type = type_get_bool(NULL);
@@ -678,7 +694,8 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
         case BINOP_LTEQ:
             if (!type_is_scalar(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Invalid operand types for comparison\n");
+                            "Comparison operator requires scalar type, but got '%pT'\n",
+                            expr->op_lhs->type);
                 return false;
             }
             expr->expr.type = type_get_bool(NULL);
@@ -690,7 +707,8 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
         default:
             if (!type_is_integer(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Expected integer operands for arithmetic/bitwise operator\n");
+                            "Operator requires integer type, but got '%pT'\n",
+                            expr->op_lhs->type);
                 return false;
             }
             expr->expr.type = expr->op_lhs->type;
@@ -713,7 +731,7 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
     if (expr->unop == UNOP_ADDROF) {
         if (!expr_is_lvalue(expr->op)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Unop operand is not an lvalue\n");
+                        "Address-of operator requires an lvalue\n");
             return false;
         }
     }
@@ -727,7 +745,8 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
         case UNOP_DEREF:
             if (expr->op->type->tag != TYPE_PTR) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Only pointer types can be dereferenced\n");
+                            "Cannot dereference non-pointer type '%pT'\n",
+                            expr->op->type);
                 return false;
             }
 
@@ -741,7 +760,8 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
         case UNOP_NOT:
             if (expr->op->type->tag != TYPE_BOOL) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Only bool values can be negated\n");
+                            "Expected 'bool' type, but got '%pT'\n",
+                            expr->op->type);
                 return false;
             }
 
@@ -751,7 +771,8 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
         case UNOP_NEG:
             if (!type_is_integer(expr->op->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Only integers can be negated\n");
+                            "Expected integer type, but got '%pT'\n",
+                            expr->op->type);
                 return false;
             }
 
@@ -790,13 +811,14 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
 
     if (proc->tag != TYPE_PROC) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "Call target is not a proc\n");
+                    "Expected procedure type, but got '%pT'\n",
+                    proc);
         return false;
     }
 
     if (proc->proc.args_count != expr->args_count) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "Call argument count does not match (expected %d, got %d)\n",
+                    "Procedure expects %zu arguments, but %zu were provided\n",
                     proc->proc.args_count, expr->args_count);
         return false;
     }
@@ -807,7 +829,8 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
 
         if (!checker_cmp(state, proc->proc.args[i], expr->args[i]->type)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Call argument type does not match proc\n");
+                        "Argument type mismatch, got '%pT' instead of '%pT'\n",
+                        expr->args[i]->type, proc->proc.args[i]);
             return false;
         }
     }
@@ -830,7 +853,8 @@ checker_expr_index(struct checker *state, struct expr_index *expr)
 
     if (!type_is_integer(expr->index->type)) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "Invalid index type\n");
+                    "Expected index of integer type, but got '%pT'\n",
+                    expr->index->type);
         return false;
     }
 
@@ -850,7 +874,8 @@ checker_expr_index(struct checker *state, struct expr_index *expr)
     }
 
     TYCHK_ERROR(state, expr->expr.span,
-                "Invalid type used for indexing\n");
+                "Cannot index into type '%pT'\n",
+                expr->op->type);
     return false;
 }
 
@@ -875,8 +900,8 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
         bind = scope_lookup_local(type->module.scope, expr->field, false);
         if (!bind) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Module '%s' has no value member '%s'\n",
-                        expr->op->span.start, expr->field->str);
+                        "Module '%pS' has no member named '%pS'\n",
+                        type->module.scope->name, expr->field);
             return false;
         }
 
@@ -905,7 +930,8 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
         }
 
         TYCHK_ERROR(state, expr->expr.span,
-                    "Slice has no field named '%s'\n", expr->field->str);
+                    "Slices have no field named '%pS'\n",
+                    expr->field);
         return false;
     }
 
@@ -918,7 +944,8 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
 
     if (type->tag != TYPE_STRUCT) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "Tried to access a field from a non-struct type\n");
+                    "Cannot access field '%pS' on non-struct type '%pT'\n",
+                    expr->field, type);
         return false;
     }
 
@@ -931,7 +958,8 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     }
 
     TYCHK_ERROR(state, expr->expr.span,
-                "Found no field named '%s'\n", expr->field->str);
+                "Struct has no field named '%pS'\n",
+                expr->field);
     return false;
 }
 
@@ -941,6 +969,7 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
     struct type *type;
     size_t i;
 
+    // XXX
     if (expr->args_count == 0) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Empty array literal is not allowed\n");
@@ -958,7 +987,8 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
 
     if (!type_is_sized(type)) {
         TYCHK_ERROR(state, expr->args[0]->span,
-                    "Invalid array element type\n");
+                    "Array element has unsized type '%pT'\n",
+                    type);
         return false;
     }
 
@@ -968,7 +998,8 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
 
         if (!checker_cmp(state, type, expr->args[i]->type)) {
             TYCHK_ERROR(state, expr->args[i]->span,
-                        "Array literal elements have mismatched types\n");
+                        "Elements have mismatched types '%pT' and '%pT'\n",
+                        type, expr->args[i]->type);
             return false;
         }
     }
@@ -995,7 +1026,8 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
 
     if (type->tag != TYPE_STRUCT) {
         TYCHK_ERROR(state, expr->op->span,
-                    "Expected struct type for literal\n");
+                    "Expected struct type for literal, but got '%pT'\n",
+                    type);
         return false;
     }
 
@@ -1014,7 +1046,10 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
                 if (!checker_cmp(state, type->strukt.fields[j].type,
                                  expr->fields[i].value->type)) {
                     TYCHK_ERROR(state, expr->fields[i].value->span,
-                                "Field '%s' type mismatch\n", expr->fields[i].field->str);
+                                "Field '%pS' type mismatch, got '%pT' instead of '%pT'\n",
+                                expr->fields[i].field,
+                                expr->fields[i].value->type,
+                                type->strukt.fields[j].type);
                     ok = false;
                 }
                 found = true;
@@ -1024,8 +1059,8 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
 
         if (!found) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Struct '%s' has no field named '%s'\n",
-                        type->strukt.name->str, expr->fields[i].field->str);
+                        "Type '%pT' has no field named '%pS'\n",
+                        type, expr->fields[i].field);
             ok = false;
         }
     }
@@ -1043,8 +1078,8 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
 
     if (expr->name == symbol_typeof) {
         TYCHK_ERROR(state, expr->expr.span,
-                    "'@%s' produces a type and cannot be used as a value\n",
-                    expr->name->str);
+                    "'@%pS' produces a type and cannot be used as a value\n",
+                    expr->name);
         return false;
     }
 
@@ -1066,7 +1101,8 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
 
         if (!type_is_sized(type)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Expected a sized type\n");
+                        "Expected a sized type, but got '%pT'\n",
+                        type);
             return false;
         }
 
@@ -1103,7 +1139,8 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
 
         if (!type_is_scalar(expr->args[1]->type) || !type_is_scalar(type)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Cast can only be used with scalar types\n");
+                        "Unsupported non-scalar cast from type '%pT' to '%pT'\n",
+                        expr->args[1]->type, type);
             return false;
         }
 
@@ -1123,7 +1160,6 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             return false;
 
         arg = expr->args[0]->type;
-
         if (arg->tag == TYPE_INVALID) {
             expr->expr.type = type_get_invalid();
             return true;
@@ -1135,7 +1171,8 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             type = arg->pointer->array.item;
         } else {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Expected an array or pointer to array\n");
+                        "Expected an array or pointer to array, but got '%pT'\n",
+                        arg);
             return false;
         }
 
@@ -1145,7 +1182,8 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
     }
 
     TYCHK_ERROR(state, expr->expr.span,
-                "Unknown builtin macro '@%s'\n", expr->name->str);
+                "Unknown builtin macro '@%pS'\n",
+                expr->name);
     return false;
 }
 
@@ -1216,20 +1254,22 @@ checker_stmt_var(struct checker *state, struct stmt_var *stmt)
             stmt->type = stmt->value->type;
         } else if (!checker_cmp(state, stmt->type, stmt->value->type)) {
             TYCHK_ERROR(state, stmt->stmt.span,
-                        "Type mismatch in variable assignment\n");
+                        "Cannot initialize variable of type '%pT' with type '%pT'\n",
+                        stmt->type, stmt->value->type);
             ok = false;
         }
     }
 
     if (!stmt->type) {
         TYCHK_ERROR(state, stmt->stmt.span,
-                    "Cannot infer type for variable '%s'\n", stmt->sym->str);
+                    "Cannot infer type for variable '%pS', explicit annotation needed\n",
+                    stmt->sym);
         ok = false;
         stmt->type = type_get_invalid();
     } else if (stmt->type->tag != TYPE_INVALID && !type_is_sized(stmt->type)) {
         TYCHK_ERROR(state, stmt->stmt.span,
-                    "Variable '%s' cannot have an unsized type (use a pointer)\n",
-                    stmt->sym->str);
+                    "Variable '%pS' has unsized type '%pT', consider using a pointer instead\n",
+                    stmt->sym, stmt->type);
         ok = false;
         stmt->type = type_get_invalid();
     }
@@ -1272,7 +1312,8 @@ checker_stmt_if(struct checker *state, struct stmt_if *stmt)
 
     if (!checker_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
         TYCHK_ERROR(state, stmt->stmt.span,
-                    "If condition is not of type bool\n");
+                    "Condition must be 'bool', but got '%pT'\n",
+                    stmt->cond->type);
         return false;
     }
 
@@ -1291,7 +1332,8 @@ checker_stmt_return(struct checker *state, struct stmt_return *stmt)
     if (!stmt->expr) {
         if (!checker_cmp(state, state->ret_type, type_get_void(NULL))) {
             TYCHK_ERROR(state, stmt->stmt.span,
-                        "Expected return value\n");
+                        "Expected return value of type '%pT'\n",
+                        state->ret_type);
             return false;
         }
     } else {
@@ -1300,7 +1342,8 @@ checker_stmt_return(struct checker *state, struct stmt_return *stmt)
 
         if (!checker_cmp(state, stmt->expr->type, state->ret_type)) {
             TYCHK_ERROR(state, stmt->stmt.span,
-                        "Return value type does not match\n");
+                        "Cannot return type '%pT' from procedure expecting '%pT'\n",
+                        stmt->expr->type, state->ret_type);
             return false;
         }
     }
@@ -1318,7 +1361,8 @@ checker_stmt_while(struct checker *state, struct stmt_while *stmt)
 
     if (!checker_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
         TYCHK_ERROR(state, stmt->stmt.span,
-                    "While condition is not of type bool\n");
+                    "Condition must be 'bool', but got '%pT'\n",
+                    stmt->cond->type);
         return false;
     }
 
@@ -1435,7 +1479,8 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
         struct modfile *file = NULL;
         if (!modcache_import(state->cache, mod, state->cache->rootdir, &file)) {
             TYCHK_ERROR(state, decl->decl.span,
-                        "Cannot find module '%s'\n", mod->str);
+                        "Cannot find module '%pS'\n",
+                        mod);
             return false;
         }
         if (!checker_register_file(state, file))
@@ -1448,13 +1493,15 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
 
     if (!type || type->tag != TYPE_MODULE) {
         TYCHK_ERROR(state, decl->decl.span,
-                    "'%s' is not a module\n", mod->str);
+                    "'%pS' is not a module\n",
+                    mod);
         return false;
     }
 
     if (scope_lookup_local(state->curr_scope, mod, false)) {
         TYCHK_ERROR(state, decl->decl.span,
-                    "Redefinition of module '%s'\n", mod->str);
+                    "Redefinition of module '%pS'\n",
+                    mod);
         return false;
     }
 
@@ -1504,7 +1551,8 @@ checker_register_decl(struct checker *state, struct decl *decl)
             proc = (struct decl_proc *)decl;
             if (scope_lookup_local(state->curr_scope, proc->sym, false)) {
                 TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%s'\n", proc->sym->str);
+                            "Redefinition of symbol '%pS'\n",
+                            proc->sym);
                 ok = false;
             }
 
@@ -1522,7 +1570,8 @@ checker_register_decl(struct checker *state, struct decl *decl)
             strukt = (struct decl_struct *)decl;
             if (scope_lookup_local(state->curr_scope, strukt->sym, true)) {
                 TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%s'\n", strukt->sym->str);
+                            "Redefinition of symbol '%pS'\n",
+                            strukt->sym);
                 ok = false;
             }
 
@@ -1538,7 +1587,8 @@ checker_register_decl(struct checker *state, struct decl *decl)
             d_type = (struct decl_type *)decl;
             if (scope_lookup_local(state->curr_scope, d_type->sym, true)) {
                 TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%s'\n", d_type->sym->str);
+                            "Redefinition of symbol '%pS'\n",
+                            d_type->sym);
                 ok = false;
             }
 
@@ -1554,7 +1604,8 @@ checker_register_decl(struct checker *state, struct decl *decl)
 
             if (scope_lookup_local(state->curr_scope, mod->sym, false)) {
                 TYCHK_ERROR(state, decl->span,
-                            "Redefinition of module '%s'\n", mod->sym->str);
+                            "Redefinition of symbol '%pS'\n",
+                            mod->sym);
                 ok = false;
             }
 
@@ -1634,7 +1685,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
         mod = (struct decl_module *)decl;
         if (!mod->type || mod->type->tag != TYPE_MODULE) {
             TYCHK_ERROR(state, decl->span,
-                        "Module '%s' was not registered\n", mod->sym->str);
+                        "Module '%pS' was not registered\n",
+                        mod->sym);
             return false;
         }
 
@@ -1673,8 +1725,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
     if (ok && proc->out->tag != TYPE_VOID && !checker_proc_returns(proc->body)) {
         TYCHK_ERROR(state, decl->span,
-                    "Procedure '%s' does not return a value on all branches\n",
-                    proc->sym->str);
+                    "Procedure '%pS' does not return a value on all branches\n",
+                    proc->sym);
         ok = false;
     }
 
