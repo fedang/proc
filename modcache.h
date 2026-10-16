@@ -11,7 +11,6 @@ struct modfile {
     struct source src;
     struct decl *decl;
     char *abs_path;
-    struct scope *scope;
     bool registered;
 };
 

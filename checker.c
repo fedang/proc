@@ -55,7 +55,7 @@ checker_init(struct checker *state, struct modcache *cache)
 /*
  * Compile time evaluation
  */
-static bool checker_resolve(struct checker *state, struct type **type);
+static bool checker_resolve_type(struct checker *state, struct type **type);
 
 static bool checker_resolve_binding(struct checker *state, struct binding *bind);
 
@@ -325,7 +325,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             type = checker_eval_raw(state, array->args[0]);
-            if (!type || !checker_resolve(state, &type))
+            if (!type || !checker_resolve_type(state, &type))
                 return NULL;
 
             if (!type_is_sized(type)) {
@@ -376,7 +376,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 }
 
 static bool
-checker_resolve(struct checker *state, struct type **type_ptr)
+checker_resolve_type(struct checker *state, struct type **type_ptr)
 {
     struct type *type;
     struct binding *bind;
@@ -407,11 +407,11 @@ checker_resolve(struct checker *state, struct type **type_ptr)
             return true;
 
         case TYPE_ARRAY:
-            ok = checker_resolve(state, &type->array.item);
+            ok = checker_resolve_type(state, &type->array.item);
             break;
 
         case TYPE_SLICE:
-            ok = checker_resolve(state, &type->slice.item);
+            ok = checker_resolve_type(state, &type->slice.item);
             break;
 
         case TYPE_STRUCT:
@@ -422,12 +422,12 @@ checker_resolve(struct checker *state, struct type **type_ptr)
             break;
 
         case TYPE_PROC:
-            if (!checker_resolve(state, &type->proc.out)) {
+            if (!checker_resolve_type(state, &type->proc.out)) {
                 ok = false;
             }
 
             for (i = 0; i < type->proc.args_count; i++) {
-                if (!checker_resolve(state, &type->proc.args[i])) {
+                if (!checker_resolve_type(state, &type->proc.args[i])) {
                     ok = false;
                 }
             }
@@ -481,14 +481,14 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             if (!d_type->type)
                 break;
 
-            ok = checker_resolve(state, &d_type->type);
+            ok = checker_resolve_type(state, &d_type->type);
             bind->type = d_type->type;
             break;
 
         case DECL_STRUCT:
             type = bind->type;
             for (i = 0; i < type->strukt.fields_count; i++) {
-                if (!checker_resolve(state, &type->strukt.fields[i].type)) {
+                if (!checker_resolve_type(state, &type->strukt.fields[i].type)) {
                     ok = false;
                 } else if (!type_is_sized(type->strukt.fields[i].type)) {
                     TYCHK_ERROR(state, bind->decl->span,
@@ -507,7 +507,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                 proc->out = type_get_void(proc->decl.attr);
             }
 
-            if (!checker_resolve(state, &proc->out)) {
+            if (!checker_resolve_type(state, &proc->out)) {
                 ok = false;
             } else if (!type_is_sized(proc->out)) {
                 TYCHK_ERROR(state, proc->decl.span,
@@ -517,7 +517,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             }
 
             for (i = 0, ptr = proc->args; ptr != NULL; ptr = ptr->next) {
-                if (!checker_resolve(state, &ptr->type)) {
+                if (!checker_resolve_type(state, &ptr->type)) {
                     ok = false;
                 } else if (!type_is_sized(ptr->type)) {
                     TYCHK_ERROR(state, proc->decl.span,
@@ -1202,7 +1202,7 @@ checker_stmt_var(struct checker *state, struct stmt_var *stmt)
      * The user could have provided an explicit type
      */
     if (stmt->type) {
-        if (!checker_resolve(state, &stmt->type)) {
+        if (!checker_resolve_type(state, &stmt->type)) {
             ok = false;
         }
     }
@@ -1408,9 +1408,9 @@ checker_proc_returns(struct stmt *stmt)
 /*
  * Declarations
  */
-static bool checker_decl_register(struct checker *state, struct decl *decl);
+static bool checker_register_decl(struct checker *state, struct decl *decl);
 
-static bool checker_file_register(struct checker *state, struct modfile *file);
+static bool checker_register_file(struct checker *state, struct modfile *file);
 
 static bool
 checker_decl_import(struct checker *state, struct decl_import *decl)
@@ -1438,31 +1438,18 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
                         "Cannot find module '%s'\n", mod->str);
             return false;
         }
-        if (!checker_file_register(state, file))
+        if (!checker_register_file(state, file))
             return false;
 
-        /*
-         * Extract the actual binding from file->scope
-         */
-        bind = scope_lookup_local(file->scope, ((struct decl_module *)file->decl)->sym, false);
-        if (!bind) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "Module '%s' was not registered correctly\n", mod->str);
-            return false;
-        }
-        type = bind->type;
-        if (type->tag != TYPE_MODULE) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "'%s' is not a module\n", mod->str);
-            return false;
-        }
+        type = ((struct decl_module *)file->decl)->type;
     } else {
         type = bind->type;
-        if (type->tag != TYPE_MODULE) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "'%s' is not a module\n", mod->str);
-            return false;
-        }
+    }
+
+    if (!type || type->tag != TYPE_MODULE) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "'%s' is not a module\n", mod->str);
+        return false;
     }
 
     if (scope_lookup_local(state->curr_scope, mod, false)) {
@@ -1477,14 +1464,14 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
 }
 
 static bool
-checker_module_register(struct checker *state, struct decl_module *decl)
+checker_register_module(struct checker *state, struct decl_module *decl)
 {
     size_t i;
     bool ok = true;
 
     for (i = 0; i < decl->items_count; i++) {
         if (decl->items[i]->tag != DECL_IMPORT) {
-            if (!checker_decl_register(state, decl->items[i]))
+            if (!checker_register_decl(state, decl->items[i]))
                 ok = false;
         }
     }
@@ -1500,7 +1487,7 @@ checker_module_register(struct checker *state, struct decl_module *decl)
 }
 
 static bool
-checker_decl_register(struct checker *state, struct decl *decl)
+checker_register_decl(struct checker *state, struct decl *decl)
 {
     struct decl_proc *proc;
     struct decl_struct *strukt;
@@ -1579,14 +1566,17 @@ checker_decl_register(struct checker *state, struct decl *decl)
                    ? mod->prefix
                    : scope_mangle(mod->sym, state->curr_scope->prefix);
 
-            scope = scope_make(mod->sym, prefix, state->curr_scope);
-            scope_push(state->curr_scope, mod->sym,
-                       type_get_module(decl->attr, scope), decl, false);
+            if (!mod->type) {
+                scope = scope_make(mod->sym, prefix, state->curr_scope);
+                mod->type = type_get_module(decl->attr, scope);
+            }
+
+            scope_push(state->curr_scope, mod->sym, mod->type, decl, false);
 
             saved = state->curr_scope;
-            state->curr_scope = scope;
+            state->curr_scope = mod->type->module.scope;
 
-            if (!checker_module_register(state, mod)) {
+            if (!checker_register_module(state, mod)) {
                 ok = false;
             }
 
@@ -1599,31 +1589,31 @@ checker_decl_register(struct checker *state, struct decl *decl)
 }
 
 static bool
-checker_file_register(struct checker *state, struct modfile *file)
+checker_register_file(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
-    struct scope *saved_scope;
+    struct scope *saved_scope, *scope;
     struct source *saved_src;
     bool ok = true;
 
     if (file->registered)
         return true;
 
-    mod = (struct decl_module *)file->decl;
     file->registered = true;
 
-    if (!file->scope) {
-        file->scope = scope_make(mod->sym, mod->prefix, state->root_scope);
+    mod = (struct decl_module *)file->decl;
+    if (!mod->type) {
+        scope = scope_make(mod->sym, mod->prefix, state->root_scope);
+        mod->type = type_get_module(mod->decl.attr, scope);
     }
 
     saved_src = state->src;
     saved_scope = state->curr_scope;
-    state->src = &file->src;
-    state->curr_scope = file->scope;
 
-    if (!checker_decl_register(state, file->decl)) {
-        ok = false;
-    }
+    state->src = &file->src;
+    state->curr_scope = mod->type->module.scope;
+
+    ok = checker_register_module(state, mod);
 
     state->src = saved_src;
     state->curr_scope = saved_scope;
@@ -1631,31 +1621,28 @@ checker_file_register(struct checker *state, struct modfile *file)
 }
 
 static bool
-checker_decl_validate(struct checker *state, struct decl *decl)
+checker_validate_decl(struct checker *state, struct decl *decl)
 {
     struct decl_module *mod;
     struct decl_proc *proc;
     struct proc_arg *ptr;
     struct scope *saved;
-    struct binding *bind;
     size_t i;
     bool ok = true;
 
     if (decl->tag == DECL_MODULE) {
         mod = (struct decl_module *)decl;
-        bind = scope_lookup_local(state->curr_scope, mod->sym, false);
-
-        if (!bind || !bind->type || bind->type->tag != TYPE_MODULE) {
+        if (!mod->type || mod->type->tag != TYPE_MODULE) {
             TYCHK_ERROR(state, decl->span,
                         "Module '%s' was not registered\n", mod->sym->str);
             return false;
         }
 
         saved = state->curr_scope;
-        state->curr_scope = bind->type->module.scope;
+        state->curr_scope = mod->type->module.scope;
 
         for (i = 0; i < mod->items_count; i++) {
-            if (!checker_decl_validate(state, mod->items[i]))
+            if (!checker_validate_decl(state, mod->items[i]))
                 ok = false;
         }
 
@@ -1695,20 +1682,42 @@ checker_decl_validate(struct checker *state, struct decl *decl)
 }
 
 static bool
-checker_file_validate(struct checker *state, struct modfile *file)
+checker_validate_file(struct checker *state, struct modfile *file)
 {
-    struct scope *saved;
+    struct source *saved_src;
+    bool ok;
+
+    saved_src = state->src;
+    state->src = &file->src;
+
+    ok = checker_validate_decl(state, file->decl);
+
+    state->src = saved_src;
+    return ok;
+}
+
+static bool
+checker_resolve_file(struct checker *state, struct modfile *file)
+{
+    struct decl_module *mod;
+    struct scope *scope;
+    struct source *saved_src;
+    size_t i;
     bool ok = true;
 
-    state->src = &file->src;
-    saved = state->curr_scope;
-    state->curr_scope = file->scope;
+    mod = (struct decl_module *)file->decl;
+    assert(mod->type && "impossible?");
+    scope = mod->type->module.scope;
 
-    if (!checker_decl_validate(state, file->decl)) {
-        ok = false;
+    saved_src = state->src;
+    state->src = &file->src;
+
+    for (i = 0; i < scope->bindings_count; i++) {
+        if (!checker_resolve_binding(state, &scope->bindings[i]))
+            ok = false;
     }
 
-    state->curr_scope = saved;
+    state->src = saved_src;
     return ok;
 }
 
@@ -1716,7 +1725,7 @@ bool
 checker_modcache(struct checker *state)
 {
     struct modfile *file;
-    size_t i, j;
+    size_t i;
     bool ok = true;
 
     /*
@@ -1724,7 +1733,7 @@ checker_modcache(struct checker *state)
      */
     for (i = 0; i < state->cache->mods_count; i++) {
         file = &state->cache->mods[i];
-        if (!checker_file_register(state, file)) {
+        if (!checker_register_file(state, file)) {
             ok = false;
         }
     }
@@ -1734,12 +1743,8 @@ checker_modcache(struct checker *state)
      */
     for (i = 0; i < state->cache->mods_count; i++) {
         file = &state->cache->mods[i];
-        state->src = &file->src;
-
-        for (j = 0; j < file->scope->bindings_count; j++) {
-            if (!checker_resolve_binding(state, &file->scope->bindings[j])) {
-                ok = false;
-            }
+        if (!checker_resolve_file(state, file)) {
+            ok = false;
         }
     }
 
@@ -1748,7 +1753,7 @@ checker_modcache(struct checker *state)
      */
     for (i = 0; i < state->cache->mods_count; i++) {
         file = &state->cache->mods[i];
-        if (!checker_file_validate(state, file)) {
+        if (!checker_validate_file(state, file)) {
             ok = false;
         }
     }

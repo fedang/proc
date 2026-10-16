@@ -60,6 +60,7 @@ struct decl_module {
     struct type *sig;
     struct decl **items;
     size_t items_count;
+    struct type *type;
     bool no_body;
 };
 
