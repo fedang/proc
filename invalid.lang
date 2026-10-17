@@ -91,3 +91,9 @@ proc anon_bad_type(x: struct { a = 1 }) {
     var r = SS { a; b = 1 }
     var s = SS { a: int }
 }
+
+proc ints() {
+    var x: int = 1
+    var y: i32 = 2
+    x + y
+}

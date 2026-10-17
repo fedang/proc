@@ -57,7 +57,7 @@ struct type {
     enum type_tag tag;
     union {
         struct expr *raw;
-        size_t bit_size;
+        size_t bit_width;
         struct type *pointer;
         struct {
             struct type *item;
@@ -102,11 +102,19 @@ static inline bool
 type_is_scalar(const struct type *type)
 {
     return type_is_integer(type)
+        || type->tag == TYPE_PTR
+        || type->tag == TYPE_BOOL;
+}
+
+static inline bool
+type_is_ordered(const struct type *type)
+{
+    return type_is_integer(type)
         || type->tag == TYPE_PTR;
 }
 
 static inline size_t
-type_integer_bits(const struct type *type)
+type_bit_width(const struct type *type)
 {
     if (type->tag == TYPE_BOOL)
         return 1;
@@ -114,7 +122,9 @@ type_integer_bits(const struct type *type)
         return PTR_SIZE * 8;
 
     assert(type_is_integer(type));
-    return type->bit_size;
+    return type->bit_width
+         ? type->bit_width
+         : INT_SIZE * 8;
 }
 
 static inline bool
@@ -140,9 +150,9 @@ struct type *type_get_bool(struct attr *attr);
 
 struct type *type_get_void(struct attr *attr);
 
-struct type *type_get_int(struct attr *attr, size_t bit_size);
+struct type *type_get_int(struct attr *attr, size_t bit_width);
 
-struct type *type_get_uint(struct attr *attr, size_t bit_size);
+struct type *type_get_uint(struct attr *attr, size_t bit_width);
 
 struct type *type_get_ptr(struct attr *attr, struct type *pointer);
 

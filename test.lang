@@ -37,6 +37,20 @@ proc zero_test() : @type_of(1) {
     var zero: zst
     var v: void
 
+    if @cast(bool, 1) {
+        puts("cast true")
+    }
+    else {
+        puts("cast false")
+    }
+
+    if @cast(bool, &v) {
+        puts("cast true")
+    }
+    else {
+        puts("cast false")
+    }
+
     var arr: [void, 12]
 
     if @size_of(zst) != @size_of(empty) || @size_of(void) != @size_of(empty) {

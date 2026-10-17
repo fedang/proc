@@ -26,25 +26,22 @@ type_get_fresh(struct attr *attr, enum type_tag tag)
 }
 
 static struct type *
-type_get_xint(struct attr *attr, size_t bit_size, enum type_tag tag)
+type_get_xint(struct attr *attr, size_t bit_width, enum type_tag tag)
 {
     struct type *type;
     size_t i;
-
-    if (bit_size == 0)
-        bit_size = INT_SIZE * 8;
 
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
 
         if (type->tag == tag && type->attr == attr
-                && type->bit_size == bit_size) {
+                && type->bit_width == bit_width) {
             return type;
         }
     }
 
     type = type_get_fresh(attr, tag);
-    type->bit_size = bit_size;
+    type->bit_width = bit_width;
     return type;
 }
 
@@ -98,15 +95,15 @@ type_get_void(struct attr *attr)
 }
 
 struct type *
-type_get_int(struct attr *attr, size_t bit_size)
+type_get_int(struct attr *attr, size_t bit_width)
 {
-    return type_get_xint(attr, bit_size, TYPE_INT);
+    return type_get_xint(attr, bit_width, TYPE_INT);
 }
 
 struct type *
-type_get_uint(struct attr *attr, size_t bit_size)
+type_get_uint(struct attr *attr, size_t bit_width)
 {
-    return type_get_xint(attr, bit_size, TYPE_UINT);
+    return type_get_xint(attr, bit_width, TYPE_UINT);
 }
 
 struct type *
@@ -328,7 +325,7 @@ type_sizeof(const struct type *type)
 
         case TYPE_INT:
         case TYPE_UINT:
-            return type_integer_bits(type) / 8;
+            return type_bit_width(type) / 8;
 
         case TYPE_PTR:
             return PTR_SIZE;
@@ -369,7 +366,7 @@ type_alignof(const struct type *type)
 
         case TYPE_INT:
         case TYPE_UINT:
-            return type_integer_bits(type) / 8;
+            return type_bit_width(type) / 8;
 
         case TYPE_PTR:
         case TYPE_SLICE:
@@ -415,15 +412,15 @@ type_format(FILE *out, const struct type *type)
             break;
 
         case TYPE_INT:
-            if (type->bit_size)
-                fprintf(out, "i%zu", type->bit_size);
+            if (type->bit_width)
+                fprintf(out, "i%zu", type->bit_width);
             else
                 fprintf(out, "int");
             break;
 
         case TYPE_UINT:
-            if (type->bit_size)
-                fprintf(out, "u%zu", type->bit_size);
+            if (type->bit_width)
+                fprintf(out, "u%zu", type->bit_width);
             else
                 fprintf(out, "uint");
             break;

@@ -73,13 +73,10 @@ irgen_type(struct irgen *state, struct type *type)
     assert(type && "expected valid type");
 
     switch (type->tag) {
+        case TYPE_BOOL:
         case TYPE_INT:
         case TYPE_UINT:
-            IR_EMITF(state, "i%zu", type_integer_bits(type));
-            break;
-
-        case TYPE_BOOL:
-            IR_EMITF(state, "i1");
+            IR_EMITF(state, "i%zu", type_bit_width(type));
             break;
 
         case TYPE_VOID:
@@ -804,8 +801,8 @@ irgen_cast_instr(const struct type *src, const struct type *dst)
     if (dst_ptr)
         return "inttoptr";
 
-    src_bits = type_integer_bits(src);
-    dst_bits = type_integer_bits(dst);
+    src_bits = type_bit_width(src);
+    dst_bits = type_bit_width(dst);
 
     if (src_bits == dst_bits)
         return NULL;

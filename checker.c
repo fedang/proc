@@ -765,8 +765,7 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
 
         case BINOP_EQ:
         case BINOP_NOTEQ:
-            if (!type_is_scalar(expr->op_lhs->type)
-                    && expr->op_lhs->type->tag != TYPE_BOOL) {
+            if (!type_is_scalar(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
                             "Equality operator requires scalar type, but got '%pT'\n",
                             expr->op_lhs->type);
@@ -779,9 +778,9 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
         case BINOP_GTEQ:
         case BINOP_LT:
         case BINOP_LTEQ:
-            if (!type_is_scalar(expr->op_lhs->type)) {
+            if (!type_is_ordered(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Comparison operator requires scalar type, but got '%pT'\n",
+                            "Comparison operator requires ordered type, but got '%pT'\n",
                             expr->op_lhs->type);
                 return false;
             }
