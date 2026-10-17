@@ -67,3 +67,27 @@ type A = B
 type B = A
 
 type Alias = XYZ
+
+proc anon(x: struct {a;b;}) {
+    var y = struct {
+        a = 1
+        b = 1
+        a = 2 // double field! structurally wrong for anon structs
+    }
+}
+
+struct SS {
+    a:int
+    b:int
+}
+
+proc anon_bad_type(x: struct { a = 1 }) {
+    var p: struct { a }
+    var q = struct { a }
+    var r = struct { a; b = 1 }
+    var s = struct { a: int }
+
+    var q = SS { a }
+    var r = SS { a; b = 1 }
+    var s = SS { a: int }
+}

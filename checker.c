@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "checker.h"
@@ -237,8 +238,11 @@ checker_eval_raw(struct checker *state, struct expr *expr)
     struct expr_unop *unop;
     struct expr_access *access;
     struct expr_array *array;
+    struct expr_struct *strukt;
+    struct struct_field *fields;
     struct expr_macro *macro;
     int64_t count;
+    size_t i, j;
 
     switch (expr->tag) {
         case EXPR_IDENT:
@@ -368,6 +372,63 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             return type_get_array(NULL, type, count);
+
+        case EXPR_STRUCT:
+            strukt = (struct expr_struct *)expr;
+            if (strukt->op != NULL) {
+                TYCHK_ERROR(state, expr->span,
+                            "Named struct literal is not a type\n");
+                return NULL;
+            }
+
+            for (i = 0; i < strukt->fields_count; i++) {
+                if (!strukt->fields[i].value) {
+                    TYCHK_ERROR(state, strukt->fields[i].field->expr.span,
+                                "Field '%pS' of anonymous struct type has no type\n",
+                                strukt->fields[i].field->sym);
+                    return NULL;
+                }
+
+                if (!strukt->fields[i].colon) {
+                    TYCHK_ERROR(state, expr->span,
+                                "Struct type must use ':' instead of '='\n");
+                    return NULL;
+                }
+
+                /*
+                 * Iterate fields to prevent invalid duplicates
+                 */
+                for (j = 0; j < i; j++) {
+                    if (strukt->fields[j].field->sym == strukt->fields[i].field->sym) {
+                        TYCHK_ERROR(state, strukt->fields[i].field->expr.span,
+                                    "Field '%pS' declared more than once\n",
+                                    strukt->fields[i].field->sym);
+                        return NULL;
+                    }
+                }
+            }
+
+            // XXX: leaks
+            fields = calloc(strukt->fields_count, sizeof(struct struct_field));
+
+            for (i = 0; i < strukt->fields_count; i++) {
+                fields[i].name = strukt->fields[i].field->sym;
+                fields[i].type = checker_eval_raw(state, strukt->fields[i].value);
+                fields[i].index = i;
+
+                if (!fields[i].type)
+                    return NULL;
+
+                if (!type_is_sized(fields[i].type)) {
+                    TYCHK_ERROR(state, strukt->fields[i].value->span,
+                                "Anonymous struct field '%pS' has unsized type '%pT'\n",
+                                fields[i].name, fields[i].type);
+                    return NULL;
+                }
+            }
+
+            return type_get_struct(NULL, NULL, NULL,
+                                   fields, strukt->fields_count);
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
@@ -1038,10 +1099,62 @@ static bool
 checker_expr_struct(struct checker *state, struct expr_struct *expr)
 {
     struct type *type;
-    struct struct_field *field;
+    struct struct_field *fields;
     size_t i, j;
-    bool ok;
+    bool ok = true;
 
+    /*
+     * Anonymous struct literals
+     */
+    if (!expr->op) {
+        // XXX: leaks
+        fields = calloc(expr->fields_count, sizeof(struct struct_field));
+
+        for (i = 0; i < expr->fields_count; i++) {
+            if (expr->fields[i].colon && expr->fields[i].value) {
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Struct literals use '=', not ':'\n");
+                ok = false;
+                continue;
+            }
+
+            /*
+             * Iterate fields to prevent invalid duplicates
+             */
+            for (j = 0; j < i; j++) {
+                if (expr->fields[j].field->sym == expr->fields[i].field->sym) {
+                    TYCHK_ERROR(state, expr->fields[i].field->expr.span,
+                                "Field '%pS' initialized more than once\n",
+                                expr->fields[i].field->sym);
+                    ok = false;
+                    break;
+                }
+            }
+
+            if (!expr->fields[i].value) {
+                expr->fields[i].value = &expr->fields[i].field->expr;
+            }
+
+            if (!checker_expr(state, expr->fields[i].value)) {
+                ok = false;
+                expr->fields[i].value->type = type_get_invalid();
+            }
+
+            fields[i].name  = expr->fields[i].field->sym;
+            fields[i].type  = expr->fields[i].value->type;
+            fields[i].index = i;
+        }
+
+        type = ok
+             ? type_get_struct(NULL, NULL, NULL, fields, expr->fields_count)
+             : type_get_invalid();
+        expr->expr.type = type;
+        return ok;
+    }
+
+    /*
+     * Named struct literals
+     */
     type = checker_eval_raw(state, expr->op);
     if (!type)
         return false;
@@ -1062,19 +1175,37 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
     ok = true;
 
     for (i = 0; i < expr->fields_count; i++) {
-        field = NULL;
+        fields = NULL;
 
-        for (j = 0; j < type->strukt.fields_count; j++) {
-            if (type->strukt.fields[j].name == expr->fields[i].field->sym) {
-                field = &type->strukt.fields[j];
+        if (expr->fields[i].colon && expr->fields[i].value) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Struct literals use '=', not ':'\n");
+            ok = false;
+            continue;
+        }
+
+        for (j = 0; j < i; j++) {
+            if (expr->fields[j].field->sym == expr->fields[i].field->sym) {
+                TYCHK_ERROR(state, expr->fields[i].field->expr.span,
+                            "Field '%pS' initialized more than once\n",
+                            expr->fields[i].field->sym);
+                ok = false;
                 break;
             }
         }
 
-        if (!field) {
+        for (j = 0; j < type->strukt.fields_count; j++) {
+            if (type->strukt.fields[j].name == expr->fields[i].field->sym) {
+                fields = &type->strukt.fields[j];
+                break;
+            }
+        }
+
+        if (!fields) {
             TYCHK_ERROR(state, expr->fields[i].field->expr.span,
                         "Struct '%pT' has no field named '%pS'\n",
                         type, expr->fields[i].field->sym);
+
             if (type->strukt.decl) {
                 TYCHK_INFO(state, type->strukt.decl->decl.span,
                            "Struct '%pT' was declared here\n",
@@ -1097,12 +1228,12 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
             expr->fields[i].value->type = type_get_invalid();
         }
 
-        if (!checker_cmp(state, field->type, expr->fields[i].value->type)) {
+        if (!checker_cmp(state, fields->type, expr->fields[i].value->type)) {
             TYCHK_ERROR(state, expr->fields[i].value->span,
                         "Field '%pS' type mismatch, got '%pT' instead of '%pT'\n",
                         expr->fields[i].field->sym,
                         expr->fields[i].value->type,
-                        field->type);
+                        fields->type);
             ok = false;
         }
     }
@@ -1290,6 +1421,8 @@ checker_stmt_var(struct checker *state, struct stmt_var *stmt)
     if (stmt->value) {
         if (!checker_expr(state, stmt->value)) {
             ok = false;
+            if (!stmt->value->type)
+                stmt->value->type = type_get_invalid();
         }
 
         if (!stmt->type) {

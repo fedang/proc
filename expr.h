@@ -73,6 +73,7 @@ enum unop_tag {
 struct struct_init {
     struct expr_ident *field;
     struct expr *value;
+    bool colon;
 };
 
 enum macro_tag {

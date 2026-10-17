@@ -188,6 +188,10 @@ parser_type(struct parser *state, struct type **type)
 /*
  * Expressions
  */
+static bool parser_stmt_block(struct parser *state, struct stmt **stmt);
+
+static bool parser_expr(struct parser *state, struct expr **expr);
+
 static bool
 parser_escape_string(struct parser *state, const char **string)
 {
@@ -239,7 +243,56 @@ parser_escape_string(struct parser *state, const char **string)
     return true;
 }
 
-static bool parser_stmt_block(struct parser *state, struct stmt **stmt);
+static bool
+parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
+{
+    struct expr *lhs, *rhs;
+    struct struct_init fields[32];
+    struct symbol *field;
+    bool saved_parens, saved_noblock, colon;
+    unsigned count;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = true;
+    state->no_block = false;
+
+    count = 0;
+    while (!parser_match(state, TOKEN_RBRACE)) {
+        if (!parser_check_sym(state, &field, "Expected field name"))
+            return false;
+
+        lhs = expr_make_ident(field);
+        expr_set_span(lhs, parser_prev(state)->span);
+
+        rhs = NULL;
+        colon = parser_curr(state)->tag == TOKEN_COLON;
+
+        if (parser_match(state, TOKEN_EQ) || parser_match(state, TOKEN_COLON)) {
+            if (!parser_expr(state, &rhs))
+                return false;
+
+            if (!parser_check_end(state, "Expected newline or ';' after field assignment"))
+                return false;
+        } else {
+            if (!parser_check_end(state, "Expected separator or terminator after field name"))
+                return false;
+        }
+
+        assert(count < 32 && "too many fields");
+        fields[count].field = (struct expr_ident *)lhs;
+        fields[count].value = rhs;
+        fields[count].colon = colon;
+        count++;
+    }
+
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+
+    *expr = expr_make_struct(op, count);
+    memcpy(((struct expr_struct *)*expr)->fields, fields, count * sizeof(struct struct_init));
+    return true;
+}
 
 static bool
 parser_expr_simple(struct parser *state, struct expr **expr)
@@ -270,8 +323,16 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     }
 
     if (parser_match_sym(state, &sym)) {
-        // TODO: Check for disallowed keywords?
-        *expr = expr_make_ident(sym);
+        if (sym == symbol_struct) {
+            if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after 'struct'"))
+                return false;
+
+            if (!parser_expr_struct(state, NULL, expr))
+                return false;
+        } else {
+            // TODO: Check for disallowed keywords?
+            *expr = expr_make_ident(sym);
+        }
         goto done;
     }
 
@@ -492,10 +553,9 @@ parser_expr(struct parser *state, struct expr **expr)
 static bool
 parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
 {
-    struct expr *lhs, *rhs, *args[32];
-    struct struct_init fields[32];
-    enum token_tag op_tag;
+    struct expr *rhs, *args[32];
     struct symbol *field;
+    enum token_tag op_tag;
     unsigned prec, count, i;
     bool saved_parens, saved_noblock;
     struct span start;
@@ -574,42 +634,9 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
         }
 
         if (op_tag == TOKEN_LBRACE) {
-            saved_parens = state->parens;
-            saved_noblock = state->no_block;
-            state->parens = true;
-            state->no_block = false;
+            if (!parser_expr_struct(state, *expr, expr))
+                return false;
 
-            count = 0;
-            while (!parser_match(state, TOKEN_RBRACE)) {
-                if (!parser_check_sym(state, &field, "Expected field name"))
-                    return false;
-
-                lhs = expr_make_ident(field);
-                expr_set_span(lhs, parser_prev(state)->span);
-
-                rhs = NULL;
-                if (parser_match(state, TOKEN_EQ)) {
-                    if (!parser_expr(state, &rhs))
-                        return false;
-
-                    if (!parser_check_end(state, "Expected newline or ';' after field assignment"))
-                        return false;
-                } else {
-                    if (!parser_check_end(state, "Expected '=' or terminator after field name"))
-                        return false;
-                }
-
-                assert(count < 32 && "too many fields");
-                fields[count].field = (struct expr_ident *)lhs;
-                fields[count].value = rhs;
-                count++;
-            }
-
-            state->parens = saved_parens;
-            state->no_block = saved_noblock;
-
-            *expr = expr_make_struct(*expr, count);
-            memcpy(((struct expr_struct *)*expr)->fields, fields, count * sizeof(struct struct_init));
             expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
             continue;
         }

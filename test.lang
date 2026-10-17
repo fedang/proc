@@ -198,3 +198,11 @@ proc sliced(s: [int]) {
         i += @cast(i64, 1)
     }
 }
+
+proc anon (x: struct { a : int; b: int}) {
+    var y = struct {
+        a = 10
+        b = 20
+    }
+    y = x
+}
