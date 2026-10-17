@@ -507,7 +507,7 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
             for (i = 0; i < strukt->fields_count; i++) {
                 for (j = 0; j < strukt->expr.type->strukt.fields_count; j++) {
                     if (strukt->expr.type->strukt.fields[j].name
-                            == strukt->fields[i].field) {
+                            == strukt->fields[i].field->sym) {
                         field_index = strukt->expr.type->strukt.fields[j].index;
                         break;
                     }

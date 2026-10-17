@@ -385,7 +385,6 @@ static bool
 checker_resolve_type(struct checker *state, struct type **type_ptr)
 {
     struct type *type;
-    struct binding *bind;
     size_t i;
     bool ok;
 
@@ -409,7 +408,9 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
             break;
 
         case TYPE_PTR:
-            // Delay resolution of the inner type
+            /*
+             * Delay resolution of the inner type
+             */
             return true;
 
         case TYPE_ARRAY:
@@ -421,10 +422,9 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
             break;
 
         case TYPE_STRUCT:
-            bind = scope_lookup(state->curr_scope, type->strukt.name, true);
-            if (bind && bind->status != RESOLVE_DONE) {
-                ok = checker_resolve_binding(state, bind);
-            }
+            /*
+             * Struct types should already be resolved by checker_eval_raw
+             */
             break;
 
         case TYPE_PROC:
@@ -1012,8 +1012,9 @@ static bool
 checker_expr_struct(struct checker *state, struct expr_struct *expr)
 {
     struct type *type;
+    struct struct_field *field;
     size_t i, j;
-    bool found, ok;
+    bool ok;
 
     type = checker_eval_raw(state, expr->op);
     if (!type)
@@ -1035,32 +1036,42 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
     ok = true;
 
     for (i = 0; i < expr->fields_count; i++) {
+        field = NULL;
+
+        for (j = 0; j < type->strukt.fields_count; j++) {
+            if (type->strukt.fields[j].name == expr->fields[i].field->sym) {
+                field = &type->strukt.fields[j];
+                break;
+            }
+        }
+
+        if (!field) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Type '%pT' has no field named '%pS'\n",
+                        type, expr->fields[i].field->sym);
+            ok = false;
+            continue;
+        }
+
+        // XXX: Maybe customize the error for this?
+        if (!expr->fields[i].value) {
+            /*
+             * Synthesize value if we don't get an explicit expression
+             */
+            expr->fields[i].value = &expr->fields[i].field->expr;
+        }
+
         if (!checker_expr(state, expr->fields[i].value)) {
             ok = false;
             expr->fields[i].value->type = type_get_invalid();
         }
 
-        found = false;
-        for (j = 0; j < type->strukt.fields_count; j++) {
-            if (type->strukt.fields[j].name == expr->fields[i].field) {
-                if (!checker_cmp(state, type->strukt.fields[j].type,
-                                 expr->fields[i].value->type)) {
-                    TYCHK_ERROR(state, expr->fields[i].value->span,
-                                "Field '%pS' type mismatch, got '%pT' instead of '%pT'\n",
-                                expr->fields[i].field,
-                                expr->fields[i].value->type,
-                                type->strukt.fields[j].type);
-                    ok = false;
-                }
-                found = true;
-                break;
-            }
-        }
-
-        if (!found) {
-            TYCHK_ERROR(state, expr->expr.span,
-                        "Type '%pT' has no field named '%pS'\n",
-                        type, expr->fields[i].field);
+        if (!checker_cmp(state, field->type, expr->fields[i].value->type)) {
+            TYCHK_ERROR(state, expr->fields[i].value->span,
+                        "Field '%pS' type mismatch, got '%pT' instead of '%pT'\n",
+                        expr->fields[i].field->sym,
+                        expr->fields[i].value->type,
+                        field->type);
             ok = false;
         }
     }
@@ -1463,14 +1474,11 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
     struct type *type;
     struct binding *bind;
 
-    if (decl->expr->tag == EXPR_ACCESS) {
+    if (decl->expr->tag != EXPR_IDENT) {
         TYCHK_ERROR(state, decl->decl.span,
                     "Only simple imports are supported for now\n");
         return false;
     }
-
-    if (decl->expr->tag != EXPR_IDENT)
-        return false;
 
     mod = ((struct expr_ident *)decl->expr)->sym;
 

@@ -71,7 +71,7 @@ enum unop_tag {
 };
 
 struct struct_init {
-    struct symbol *field;
+    struct expr_ident *field;
     struct expr *value;
 };
 

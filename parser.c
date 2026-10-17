@@ -492,7 +492,7 @@ parser_expr(struct parser *state, struct expr **expr)
 static bool
 parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
 {
-    struct expr *rhs, *args[32];
+    struct expr *lhs, *rhs, *args[32];
     struct struct_init fields[32];
     enum token_tag op_tag;
     struct symbol *field;
@@ -584,19 +584,25 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
                 if (!parser_check_sym(state, &field, "Expected field name"))
                     return false;
 
-                if (!parser_check(state, TOKEN_EQ, "Expected '=' after field name"))
-                    return false;
+                lhs = expr_make_ident(field);
+                expr_set_span(lhs, parser_prev(state)->span);
 
-                if (!parser_expr(state, &rhs))
-                    return false;
+                rhs = NULL;
+                if (parser_match(state, TOKEN_EQ)) {
+                    if (!parser_expr(state, &rhs))
+                        return false;
+
+                    if (!parser_check_end(state, "Expected newline or ';' after field assignment"))
+                        return false;
+                } else {
+                    if (!parser_check_end(state, "Expected '=' or terminator after field name"))
+                        return false;
+                }
 
                 assert(count < 32 && "too many fields");
-                fields[count].field = field;
+                fields[count].field = (struct expr_ident *)lhs;
                 fields[count].value = rhs;
                 count++;
-
-                if (!parser_check_end(state, "Expected newline or ';' after field assignment"))
-                    return false;
             }
 
             state->parens = saved_parens;
