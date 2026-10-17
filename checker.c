@@ -7,6 +7,12 @@
 #define TYCHK_ERROR(state, span, ...) \
     report_error((state)->src, &(span), __VA_ARGS__)
 
+#define TYCHK_WARN(state, span, ...) \
+    report_warning((state)->src, &(span), __VA_ARGS__)
+
+#define TYCHK_INFO(state, span, ...) \
+    report_info((state)->src, &(span), __VA_ARGS__)
+
 static void
 checker_root_push(struct checker *state, const char *name, struct type *type)
 {
@@ -196,6 +202,33 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 }
 
 static struct type *
+checker_binding_type(struct checker *state, struct binding *bind,
+                     struct span span)
+{
+    /*
+     * If we don't have a type yet, this is cyclic
+     */
+    if (bind->status == RESOLVE_PENDING && !bind->type) {
+        TYCHK_ERROR(state, span,
+                    "Cyclic definition involving symbol '%pS'\n",
+                    bind->sym);
+        if (bind->decl) {
+            TYCHK_INFO(state, bind->decl->span,
+                       "Symbol '%pS' was originally declared here\n",
+                       bind->sym);
+        }
+        return NULL;
+    }
+
+    if (!bind->type) {
+        if (!checker_resolve_binding(state, bind))
+            return NULL;
+    }
+
+    return bind->type;
+}
+
+static struct type *
 checker_eval_raw(struct checker *state, struct expr *expr)
 {
     struct binding *bind;
@@ -234,22 +267,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            /*
-             * If we don't have a type yet, this is cyclic
-             */
-            if (bind->status == RESOLVE_PENDING && !bind->type) {
-                TYCHK_ERROR(state, expr->span,
-                            "Cyclic definition involving '%pS'\n",
-                            bind->sym);
-                return NULL;
-            }
-
-            if (!bind->type) {
-                if (!checker_resolve_binding(state, bind))
-                    return NULL;
-            }
-
-            return bind->type;
+            return checker_binding_type(state, bind, expr->span);
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -263,10 +281,19 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             if (!type)
                 return NULL;
 
+            if (type->tag == TYPE_MODULE) {
+                TYCHK_ERROR(state, expr->span,
+                            "Cannot make a pointer type from module '%pS'\n",
+                            type->module.scope->name);
+                return NULL;
+            }
+
             return type_get_ptr(NULL, type);
 
         case EXPR_INDEX:
-            // Offer a tip to confused users
+            /*
+             * Offer a tip to confused users
+             */
             TYCHK_ERROR(state, expr->span,
                         "Array types are '[type, count]', not 'type[count]'\n");
             return NULL;
@@ -307,19 +334,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            if (bind->status == RESOLVE_PENDING && !bind->type) {
-                TYCHK_ERROR(state, expr->span,
-                            "Cyclic definition involving '%pS'\n",
-                            bind->sym);
-                return NULL;
-            }
-
-            if (!bind->type) {
-                if (!checker_resolve_binding(state, bind))
-                    return NULL;
-            }
-
-            return bind->type;
+            return checker_binding_type(state, bind, expr->span);
 
         case EXPR_ARRAY:
             array = (struct expr_array *)expr;
@@ -473,7 +488,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             return true;
 
         TYCHK_ERROR(state, bind->decl->span,
-                    "Cyclic definition involving '%pS'\n",
+                    "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
         return false;
     }
@@ -488,7 +503,16 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             if (!d_type->type)
                 break;
 
-            ok = checker_resolve_type(state, &d_type->type);
+            if (!checker_resolve_type(state, &d_type->type)) {
+                ok = false;
+            } else if (d_type->type->tag == TYPE_MODULE) {
+                TYCHK_ERROR(state, bind->decl->span,
+                            "Cannot alias type '%pS' to module '%pS'\n",
+                            bind->sym, d_type->type->module.scope->name);
+                ok = false;
+                d_type->type = type_get_invalid();
+            }
+
             bind->type = d_type->type;
             break;
 
@@ -605,6 +629,7 @@ static bool
 checker_expr_ident(struct checker *state, struct expr_ident *expr)
 {
     struct binding *bind;
+    struct type *type;
     size_t i;
 
     for (i = state->locals_count; i > 0; i--) {
@@ -622,10 +647,11 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
         return false;
     }
 
-    if (!checker_resolve_binding(state, bind))
+    type = checker_binding_type(state, bind, expr->expr.span);
+    if (!type)
         return false;
 
-    expr->expr.type = bind->type;
+    expr->expr.type = type;
     expr->link_sym = bind->link_sym;
     return true;
 }
@@ -1046,9 +1072,14 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
         }
 
         if (!field) {
-            TYCHK_ERROR(state, expr->expr.span,
-                        "Type '%pT' has no field named '%pS'\n",
+            TYCHK_ERROR(state, expr->fields[i].field->expr.span,
+                        "Struct '%pT' has no field named '%pS'\n",
                         type, expr->fields[i].field->sym);
+            if (type->strukt.decl) {
+                TYCHK_INFO(state, type->strukt.decl->decl.span,
+                           "Struct '%pT' was declared here\n",
+                           type);
+            }
             ok = false;
             continue;
         }

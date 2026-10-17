@@ -51,4 +51,19 @@ proc struks() {
         a = "a"; b = 10
     }
     var y = x
+
+    1 + XYZ
+
+    var sus: XYZ
+    var sus2: *XYZ
 }
+
+module XYZ {
+}
+
+import XYZ
+
+type A = B
+type B = A
+
+type Alias = XYZ

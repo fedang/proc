@@ -481,6 +481,10 @@ type_format(FILE *out, const struct type *type)
             }
             break;
 
+        case TYPE_MODULE:
+            fprintf(out, "<module>");
+            break;
+
         default:
             unreachable();
     }

@@ -13,5 +13,5 @@ proc myfun() {
 
 module A {
     proc foo() { }
-    type T = *A
+ //   type T = *A
 }
