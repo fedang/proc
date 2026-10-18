@@ -541,6 +541,7 @@ irgen_expr_literal(struct irgen *state, struct expr_literal *expr)
 {
     switch (expr->literal) {
         case LIT_INTEGER:
+        case LIT_BOOL:
             return IRVAL_INT(expr->integer);
 
         case LIT_STRING:

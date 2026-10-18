@@ -330,6 +330,8 @@ parser_expr_simple(struct parser *state, struct expr **expr)
 
             if (!parser_expr_struct(state, NULL, expr))
                 return false;
+        } else if (sym == symbol_true || sym == symbol_false) {
+            *expr = expr_make_literal(LIT_BOOL, sym == symbol_true);
         } else {
             // TODO: Check for disallowed keywords?
             *expr = expr_make_ident(sym);

@@ -262,4 +262,10 @@ proc list() {
 
     var x = 10
     var y: int= struct { a = x; b = 10 }.a
+
+    if true {
+    } else {
+        if false {
+        }
+    }
 }

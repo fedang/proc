@@ -19,6 +19,8 @@
     X(sig, sig) \
     X(import, import) \
     /* Special idents */ \
+    X(true, true) \
+    X(false, false) \
     X(len, len) \
     X(ptr, ptr) \
     /* Builtins */ \

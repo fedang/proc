@@ -1006,6 +1006,10 @@ checker_expr_literal(struct checker *state, struct expr_literal *expr)
             expr->expr.type = type_get_ptr(NULL, type_get_uint(NULL, 8));
             break;
 
+        case LIT_BOOL:
+            expr->expr.type = type_get_bool(NULL);
+            break;
+
         default:
             unreachable();
     }

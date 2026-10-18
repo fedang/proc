@@ -27,6 +27,7 @@ enum literal_tag {
     LIT_INVALID,
     LIT_INTEGER,
     LIT_STRING,
+    LIT_BOOL,
 };
 
 enum binop_tag {

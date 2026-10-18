@@ -22,6 +22,7 @@ expr_make_literal(enum literal_tag literal, intptr_t value)
 
     switch (literal) {
         case LIT_INTEGER:
+        case LIT_BOOL:
             expr->integer = value;
             break;
 
@@ -182,18 +183,24 @@ expr_is_lvalue(const struct expr *expr)
 bool
 expr_is_mem(const struct expr *expr)
 {
+    const struct expr_index *index;
     const struct expr_access *access;
     const struct expr_macro *macro;
 
     switch (expr->tag) {
         case EXPR_IDENT:
-        case EXPR_INDEX:
         case EXPR_ARRAY:
         case EXPR_STRUCT:
             return true;
 
         case EXPR_UNOP:
             return ((const struct expr_unop *)expr)->unop == UNOP_DEREF;
+
+        case EXPR_INDEX:
+            index = (const struct expr_index *)expr;
+            if (index->op->type && index->op->type->tag == TYPE_PTR)
+                return true;
+            return expr_is_mem(index->op);
 
         case EXPR_ACCESS:
             access = (const struct expr_access *)expr;

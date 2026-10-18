@@ -1,0 +1,33 @@
+proc bools() {
+    var t: bool = true
+    var f: bool = false
+    var t2 = true
+    var f2 = false
+
+    if true { }
+    if false { } else { }
+
+    if true == true { }
+    if true != false { }
+    if t && !f { }
+    if t || f { }
+
+    var i: int = @cast(int, true)      // 1
+    var j: int = @cast(int, false)     // 0
+
+    var back: bool = @cast(bool, 1)
+    var back2: bool = @cast(bool, 0)
+}
+
+proc err_bool_arithmetic() {
+    true + 1
+    var x: int = true
+}
+
+proc err_bool_as_size() {
+    var a: [int, true]
+}
+
+proc err_bool_as_ident() {
+    var true = 1
+}
