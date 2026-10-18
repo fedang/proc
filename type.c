@@ -465,7 +465,9 @@ type_format(FILE *out, const struct type *type)
             } else {
                 fprintf(out, "struct { ");
                 for (i = 0; i < type->strukt.fields_count; i++) {
-                    if (i > 0) fprintf(out, ", ");
+                    if (i > 0)
+                        fprintf(out, "; ");
+
                     fprintf(out, "%.*s: ", (int)type->strukt.fields[i].name->len,
                                            type->strukt.fields[i].name->str);
                     type_format(out, type->strukt.fields[i].type);

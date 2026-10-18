@@ -63,6 +63,43 @@ proc mixed_cast() {
     var c2 = @cast(i64, @size_of(int))
 }
 
+proc st() {
+    var x : struct { y: uint } = struct { y = 10 }
+}
+
+proc anon_structs() {
+    var a = struct { x = 1 }                       // struct { x: int }
+    var b: struct { x: u32 } = struct { x = 1 }    // struct { x: u32 }
+    var c: struct { x: u32 } = struct { x = 1; y = 2 }  // error: field mismatch
+
+    @slice([1,2,3]).ptr[0]
+    var x: uint = struct { a = 1 }.a
+    struct { a = 1 }.a
+    struct { a = struct { b = 1 }; b = 10 }.a
+
+    // fail, too deep
+    var x: uint = struct { a = struct { b = 1 } }.a.b
+}
+
+proc index_composites() {
+    var a = [[1, 2], [3, 4]][0]              // [int, 2]
+    var b: [u32, 2] = [[1, 2], [3, 4]][0]    // [u32, 2]
+    var c = (&[1, 2, 3])[0]                  // [int, 3]
+    var d: [u32, 3] = (&[1, 2, 3])[0]        // [u32, 3]
+    var e = [[1, 2], [3, 4]][0][0]           // int
+    var f: u32 = [[1, 2], [3, 4]][0][0]      // u32
+    var x = [[1, 2], [3, 4]][0]
+    var y: [u32, 2] = [[1, 2], [3, 4]][0]
+    var z = (&[1, 2, 3])[0]
+    var w: [u32, 3] = (&[1, 2, 3])[0]
+}
+
+proc cast_truncates() {
+    var a = @cast(u8, 5000000000)
+    var b: u32 = @cast(u32, 5000000000)
+    var c: *u8 = @cast(*u8, 5000000000)
+}
+
 // KNOWN INVALID BELOW
 proc err_untyped_to_bool() {
     var b: bool = 1

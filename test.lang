@@ -254,3 +254,12 @@ proc ptrs() {
 
     //var x = 1+"a"
 }
+
+proc list() {
+    var l = [1,2,3]
+    var x = l
+    var y: [int, 3] = l
+
+    var x = 10
+    var y :int= struct { a = x; b = 10 }.a
+}

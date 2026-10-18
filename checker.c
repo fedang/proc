@@ -716,9 +716,12 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
     struct expr_binop *binop;
     struct expr_array *array;
     struct expr_index *index;
+    struct expr_access *access;
+    struct expr_struct *strukt;
     struct expr_macro *macro;
-    struct type *type, *inner;
-    size_t i;
+    struct type *type, *inner, *coerce;
+    struct struct_field *fields;
+    size_t i, j;
 
     if (!expr->type || type_is_invalid(expr->type))
         return true;
@@ -732,7 +735,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
     if (expr->type->tag == TYPE_ANY_INT && target && !type_is_integer(target))
         return false;
 
-#define COERCE_PROPAGATE(state, child, target) \
+#define COERCE_PROPAGATE(child, target) \
     do { \
         if (!checker_expr_coerce(state, (child), (target))) { \
             if (type_is_invalid((child)->type)) \
@@ -770,7 +773,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
                 type = type_get_ptr(NULL, target);
             }
 
-            COERCE_PROPAGATE(state, unop->op, type);
+            COERCE_PROPAGATE(unop->op, type);
 
             if (expr->type->tag == TYPE_ANY_INT) {
                 expr->type = target ? target : type_get_int(NULL, 0);
@@ -784,8 +787,8 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
         case EXPR_BINOP:
             binop = (struct expr_binop *)expr;
             if (expr->type->tag == TYPE_ANY_INT) {
-                COERCE_PROPAGATE(state, binop->op_lhs, target);
-                COERCE_PROPAGATE(state, binop->op_rhs, target);
+                COERCE_PROPAGATE(binop->op_lhs, target);
+                COERCE_PROPAGATE(binop->op_rhs, target);
                 expr->type = target ? target : type_get_int(NULL, 0);
             }
             break;
@@ -803,7 +806,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
             }
 
             for (i = 0; i < array->args_count; i++) {
-                COERCE_PROPAGATE(state, array->args[i], type);
+                COERCE_PROPAGATE(array->args[i], type);
             }
 
             expr->type = target
@@ -816,22 +819,107 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
             index = (struct expr_index *)expr;
 
             type = NULL;
-            if (expr->type->tag == TYPE_ANY_INT) {
-                if (target) {
-                    if (index->op->type->tag == TYPE_ARRAY) {
-                        type = type_get_array(NULL, target, index->op->type->array.count);
-                    } else if (index->op->type->tag == TYPE_SLICE) {
-                        type = type_get_slice(NULL, target);
-                    }
+            if (target) {
+                inner = index->op->type;
+                if (inner->tag == TYPE_ARRAY) {
+                    type = type_get_array(NULL, target, inner->array.count);
+                } else if (inner->tag == TYPE_SLICE) {
+                    type = type_get_slice(NULL, target);
+                } else if (inner->tag == TYPE_PTR &&
+                           (inner->pointer->tag == TYPE_ARRAY ||
+                            inner->pointer->tag == TYPE_SLICE)) {
+                    type = type_get_ptr(NULL, target);
                 }
+            }
 
-                COERCE_PROPAGATE(state, index->op, type);
-                expr->type = target ? target : type_get_int(NULL, 0);
+            COERCE_PROPAGATE(index->op, type);
+
+            if (index->op->type->tag == TYPE_ARRAY) {
+                expr->type = index->op->type->array.item;
+            } else if (index->op->type->tag == TYPE_SLICE) {
+                expr->type = index->op->type->slice.item;
+            } else {
+                expr->type = index->op->type->pointer;
             }
             break;
 
-        // TODO
-        //case EXPR_STRUCT:
+        case EXPR_ACCESS:
+            access = (struct expr_access *)expr;
+
+            // XXX: Currently does not unify the inner type with target
+            COERCE_PROPAGATE(access->op, NULL);
+
+            inner = access->op->type;
+            while (inner->tag == TYPE_PTR)
+                inner = inner->pointer;
+
+            if (inner->tag == TYPE_STRUCT &&
+                access->index < inner->strukt.fields_count) {
+                expr->type = inner->strukt.fields[access->index].type;
+            } else if (inner->tag == TYPE_SLICE) {
+                expr->type = access->index == 0
+                           ? type_get_ptr(NULL, inner->slice.item)
+                           : type_get_int(NULL, 64);
+            }
+            break;
+
+        case EXPR_STRUCT: {
+            strukt = (struct expr_struct *)expr;
+
+            /*
+             * Only try to coerce anonymous structs
+             */
+            if (strukt->op != NULL)
+                break;
+
+            if (target) {
+                if (target->tag != TYPE_STRUCT)
+                    break;
+
+                if (target->strukt.fields_count != strukt->fields_count)
+                    break;
+            }
+
+            for (i = 0; i < strukt->fields_count; i++) {
+                coerce = NULL;
+                if (target) {
+                    for (j = 0; j < target->strukt.fields_count; j++) {
+                        if (target->strukt.fields[j].name
+                                == strukt->fields[i].field->sym) {
+                            coerce = target->strukt.fields[j].type;
+                            break;
+                        }
+                    }
+
+                    if (!coerce)
+                        return false;
+                }
+
+                if (!checker_expr_coerce(state, strukt->fields[i].value, coerce)) {
+                    if (!type_is_invalid(strukt->fields[i].value->type)) {
+                        TYCHK_ERROR(state, strukt->fields[i].value->span,
+                                    "Field '%pS' cannot be coerced to type '%pT'\n",
+                                    strukt->fields[i].field->sym, coerce);
+                    }
+                    expr->type = type_get_invalid();
+                    return false;
+                }
+            }
+
+            if (target) {
+                expr->type = target;
+            } else {
+                fields = calloc(strukt->fields_count, sizeof(*fields));
+                for (i = 0; i < strukt->fields_count; i++) {
+                    fields[i].name  = strukt->fields[i].field->sym;
+                    fields[i].type  = strukt->fields[i].value->type;
+                    fields[i].index = i;
+                }
+                expr->type = type_get_struct(NULL, NULL, NULL,
+                                             fields, strukt->fields_count);
+            }
+            break;
+        }
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
@@ -859,19 +947,19 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
                 }
 
                 if (inner->array.item->tag == TYPE_ANY_INT) {
-                    type = type_get_array(NULL, inner->array.item,
-                                          inner->array.count);
+                    coerce = type_get_array(NULL, type,
+                                            inner->array.count);
 
                     if (macro->args[0]->type->tag == TYPE_PTR) {
-                        type = type_get_ptr(NULL, type);
+                        coerce = type_get_ptr(NULL, coerce);
                     }
 
-                    COERCE_PROPAGATE(state, macro->args[0], type);
+                    COERCE_PROPAGATE(macro->args[0], coerce);
                 }
 
                 expr->type = target ? target : type_get_slice(NULL, type);
             } else if (macro->macro.tag == MACRO_EXPR) {
-                COERCE_PROPAGATE(state, macro->macro.expr, target);
+                COERCE_PROPAGATE(macro->macro.expr, target);
                 expr->type = macro->macro.expr->type;
             } else if (expr->type->tag == TYPE_ANY_INT) {
                 expr->type = target ? target : type_get_int(NULL, 0);
@@ -1104,10 +1192,9 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
         return false;
 
     if (expr->unop == UNOP_ADDROF) {
-        // TODO: should be is_mem
-        if (!expr_is_lvalue(expr->op)) {
+        if (!expr_is_mem(expr->op)) {
             TYCHK_ERROR(state, expr->expr.span,
-                        "Address-of operator requires an lvalue\n");
+                        "Address-of operator requires a memory location\n");
             return false;
         }
     }
@@ -1458,18 +1545,16 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
                 expr->fields[i].value = &expr->fields[i].field->expr;
             }
 
-            if (!checker_expr_typed(state, expr->fields[i].value, NULL)) {
-                if (!type_is_invalid(expr->fields[i].value->type)) {
-                    TYCHK_ERROR(state, expr->fields[i].value->span,
-                                "Cannot infer type of field '%pS'\n",
-                                expr->fields[i].field->sym);
-                    expr->fields[i].value->type = type_get_invalid();
-                }
+            /*
+             * Leave untyped literals here and coerce the whole struct later on
+             */
+            if (!checker_expr(state, expr->fields[i].value)) {
+                expr->fields[i].value->type = type_get_invalid();
                 ok = false;
             }
 
-            fields[i].name  = expr->fields[i].field->sym;
-            fields[i].type  = expr->fields[i].value->type;
+            fields[i].name = expr->fields[i].field->sym;
+            fields[i].type = expr->fields[i].value->type;
             fields[i].index = i;
         }
 
