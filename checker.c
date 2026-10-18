@@ -825,9 +825,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
                     type = type_get_array(NULL, target, inner->array.count);
                 } else if (inner->tag == TYPE_SLICE) {
                     type = type_get_slice(NULL, target);
-                } else if (inner->tag == TYPE_PTR &&
-                           (inner->pointer->tag == TYPE_ARRAY ||
-                            inner->pointer->tag == TYPE_SLICE)) {
+                } else if (inner->tag == TYPE_PTR) {
                     type = type_get_ptr(NULL, target);
                 }
             }
@@ -873,7 +871,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
                 break;
 
             if (target) {
-                if (target->tag != TYPE_STRUCT)
+                if (target->tag != TYPE_STRUCT || target->strukt.decl != NULL)
                     break;
 
                 if (target->strukt.fields_count != strukt->fields_count)
@@ -897,6 +895,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
 
                 if (!checker_expr_coerce(state, strukt->fields[i].value, coerce)) {
                     if (!type_is_invalid(strukt->fields[i].value->type)) {
+                        assert(coerce && "impossible?");
                         TYCHK_ERROR(state, strukt->fields[i].value->span,
                                     "Field '%pS' cannot be coerced to type '%pT'\n",
                                     strukt->fields[i].field->sym, coerce);
@@ -933,31 +932,29 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
                 if (inner->tag != TYPE_ARRAY)
                     break;
 
-                type = inner->array.item;
+                type = NULL;
                 if (target) {
                     if (target->tag != TYPE_SLICE)
                         break;
-
-                    if (type->tag == TYPE_ANY_INT)
-                        type = target->slice.item;
-                    else if (type != target->slice.item)
-                        break;
-                } else if (type->tag == TYPE_ANY_INT) {
-                    type = type_get_int(NULL, 0);
+                    type = target->slice.item;
                 }
 
-                if (inner->array.item->tag == TYPE_ANY_INT) {
-                    coerce = type_get_array(NULL, type,
-                                            inner->array.count);
-
-                    if (macro->args[0]->type->tag == TYPE_PTR) {
-                        coerce = type_get_ptr(NULL, coerce);
-                    }
-
-                    COERCE_PROPAGATE(macro->args[0], coerce);
+                coerce = type
+                       ? type_get_array(NULL, type, inner->array.count)
+                       : NULL;
+                if (coerce && macro->args[0]->type->tag == TYPE_PTR) {
+                    coerce = type_get_ptr(NULL, coerce);
                 }
 
-                expr->type = target ? target : type_get_slice(NULL, type);
+                COERCE_PROPAGATE(macro->args[0], coerce);
+
+                inner = macro->args[0]->type;
+                if (inner->tag == TYPE_PTR)
+                    inner = inner->pointer;
+
+                expr->type = target
+                           ? target
+                           : type_get_slice(NULL, inner->array.item);
             } else if (macro->macro.tag == MACRO_EXPR) {
                 COERCE_PROPAGATE(macro->macro.expr, target);
                 expr->type = macro->macro.expr->type;
@@ -1050,8 +1047,6 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
 static bool
 checker_expr_binop(struct checker *state, struct expr_binop *expr)
 {
-    bool lhs_untyped, rhs_untyped;
-
     if (!checker_expr(state, expr->op_lhs) ||
         !checker_expr(state, expr->op_rhs))
         return false;
@@ -1062,31 +1057,20 @@ checker_expr_binop(struct checker *state, struct expr_binop *expr)
         return true;
     }
 
-    lhs_untyped = expr->op_lhs->type->tag == TYPE_ANY_INT;
-    rhs_untyped = expr->op_rhs->type->tag == TYPE_ANY_INT;
-
-    if (lhs_untyped && rhs_untyped) {
-        /*
-         * No coercion needed, propagate generic integer
-         */
-    } else if (lhs_untyped) {
+    /*
+     * Try to coerce the operands into each other
+     */
+    if (!checker_expr_coerce(state, expr->op_rhs, expr->op_lhs->type)) {
         if (!checker_expr_coerce(state, expr->op_lhs, expr->op_rhs->type)) {
-            if (!type_is_invalid(expr->op_lhs->type))
-                goto err;
+            if (!type_is_invalid(expr->op_lhs->type) &&
+                !type_is_invalid(expr->op_rhs->type)) {
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Cannot apply binary operator to '%pT' and '%pT'\n",
+                            expr->op_lhs->type, expr->op_rhs->type);
+            }
+            expr->expr.type = type_get_invalid();
             return false;
         }
-    } else if (rhs_untyped) {
-        if (!checker_expr_coerce(state, expr->op_rhs, expr->op_lhs->type)) {
-            if (!type_is_invalid(expr->op_rhs->type))
-                goto err;
-            return false;
-        }
-    } else if (!checker_cmp(state, expr->op_lhs->type, expr->op_rhs->type)) {
-err:
-        TYCHK_ERROR(state, expr->expr.span,
-                    "Cannot apply binary operator to '%pT' and '%pT'\n",
-                    expr->op_lhs->type, expr->op_rhs->type);
-        return false;
     }
 
     /*
@@ -1096,6 +1080,7 @@ err:
         if (!expr_is_lvalue(expr->op_lhs)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Assignments require an lvalue as left operand\n");
+            expr->expr.type = type_get_invalid();
             return false;
         }
 
@@ -1103,6 +1088,7 @@ err:
             TYCHK_ERROR(state, expr->expr.span,
                         "Assignments disallowed on unsized type '%pT'\n",
                         expr->op_lhs->type);
+            expr->expr.type = type_get_invalid();
             return false;
         }
     }
@@ -1114,6 +1100,7 @@ err:
                 TYCHK_ERROR(state, expr->expr.span,
                             "Logical operators require 'bool' operands, but got '%pT'\n",
                             expr->op_lhs->type);
+                expr->expr.type = type_get_invalid();
                 return false;
             }
             expr->expr.type = type_get_bool(NULL);
@@ -1125,6 +1112,7 @@ err:
                 TYCHK_ERROR(state, expr->expr.span,
                             "Equality operator requires scalar type, but got '%pT'\n",
                             expr->op_lhs->type);
+                expr->expr.type = type_get_invalid();
                 return false;
             }
             expr->expr.type = type_get_bool(NULL);
@@ -1138,6 +1126,7 @@ err:
                 TYCHK_ERROR(state, expr->expr.span,
                             "Comparison operator requires ordered type, but got '%pT'\n",
                             expr->op_lhs->type);
+                expr->expr.type = type_get_invalid();
                 return false;
             }
             expr->expr.type = type_get_bool(NULL);
@@ -1151,6 +1140,7 @@ err:
                 TYCHK_ERROR(state, expr->expr.span,
                             "Operator requires integer type, but got '%pT'\n",
                             expr->op_lhs->type);
+                expr->expr.type = type_get_invalid();
                 return false;
             }
             expr->expr.type = expr->op_lhs->type;
@@ -1162,15 +1152,16 @@ err:
     }
 
     /*
-     * If both operands were untyped but the result is a concrete type
-     * we need to coerce the operands to their default types
+     * When the result is a concrete type we need to make sure
+     * there are no lingering untyped sub-expressions
      */
-    if (lhs_untyped && rhs_untyped && expr->expr.type->tag != TYPE_ANY_INT) {
+    if (expr->expr.type->tag != TYPE_ANY_INT) {
         if (!checker_expr_coerce(state, expr->op_lhs, NULL)) {
             if (!type_is_invalid(expr->op_lhs->type)) {
                 TYCHK_ERROR(state, expr->op_lhs->span,
                             "Cannot infer type of left operand\n");
             }
+            expr->expr.type = type_get_invalid();
             return false;
         }
         if (!checker_expr_coerce(state, expr->op_rhs, NULL)) {
@@ -1178,6 +1169,7 @@ err:
                 TYCHK_ERROR(state, expr->op_rhs->span,
                             "Cannot infer type of right operand\n");
             }
+            expr->expr.type = type_get_invalid();
             return false;
         }
     }
@@ -1255,8 +1247,13 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
     struct type *proc;
     size_t i;
 
-    if (!checker_expr(state, expr->op))
+    if (!checker_expr_typed(state, expr->op, NULL)) {
+        if (!type_is_invalid(expr->op->type)) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Cannot infer type of callee expression\n");
+        }
         return false;
+    }
 
     proc = expr->op->type;
     if (type_is_invalid(proc)) {
@@ -1440,15 +1437,18 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
     struct type *type;
     size_t i, j;
 
-    // XXX
+    // XXX: Allow [] in the future?
     if (expr->args_count == 0) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Empty array literal is not allowed\n");
+        expr->expr.type = type_get_invalid();
         return false;
     }
 
-    if (!checker_expr(state, expr->args[0]))
+    if (!checker_expr(state, expr->args[0])) {
+        expr->expr.type = type_get_invalid();
         return false;
+    }
 
     type = expr->args[0]->type;
     if (type_is_invalid(type)) {
@@ -1460,45 +1460,47 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
         TYCHK_ERROR(state, expr->args[0]->span,
                     "Array element has unsized type '%pT'\n",
                     type);
+        expr->expr.type = type_get_invalid();
         return false;
     }
 
     for (i = 1; i < expr->args_count; i++) {
-        if (!checker_expr(state, expr->args[i]))
-            return false;
-
-        if (type->tag == TYPE_ANY_INT && expr->args[i]->type->tag != TYPE_ANY_INT) {
-            /*
-             * First type is untyped while this element is not,
-             * we need to coerce everything to the latter
-             */
-            for (j = 0; j < i; j++) {
-                if (!checker_expr_coerce(state, expr->args[j], expr->args[i]->type)) {
-                    if (!type_is_invalid(expr->args[j]->type)) {
-                        TYCHK_ERROR(state, expr->args[j]->span,
-                                    "Elements have mismatched types '%pT' and '%pT'\n",
-                                    expr->args[j]->type, expr->args[i]->type);
-                    }
-                    return false;
-                }
-            }
-            type = expr->args[i]->type;
-        } else if (type->tag != TYPE_ANY_INT && expr->args[i]->type->tag == TYPE_ANY_INT) {
-            if (!checker_expr_coerce(state, expr->args[i], type)) {
-                if (!type_is_invalid(expr->args[i]->type)) {
-                    TYCHK_ERROR(state, expr->args[i]->span,
-                                "Cannot use '%pT' as array element of '%pT'\n",
-                                expr->args[i]->type, type);
-                }
-                return false;
-            }
-        } else if (!checker_cmp(state, type, expr->args[i]->type)) {
-            TYCHK_ERROR(state, expr->args[i]->span,
-                        "Elements have mismatched types '%pT' and '%pT'\n",
-                        type, expr->args[i]->type);
+        if (!checker_expr(state, expr->args[i])) {
             expr->expr.type = type_get_invalid();
             return false;
         }
+
+        if (checker_cmp(state, type, expr->args[i]->type))
+            continue;
+
+        /*
+         * Try coercing the new element to the accumulated type
+         */
+        if (checker_expr_coerce(state, expr->args[i], type))
+            continue;
+
+        if (type_is_invalid(expr->args[i]->type)) {
+            expr->expr.type = type_get_invalid();
+            return false;
+        }
+
+        /*
+         * If the accumulated type was untyped, coerce all previous elements
+         * to this element's type and make this the reference
+         */
+        for (j = 0; j < i; j++) {
+            if (!checker_expr_coerce(state, expr->args[j], expr->args[i]->type)) {
+                if (!type_is_invalid(expr->args[j]->type)) {
+                    TYCHK_ERROR(state, expr->args[j]->span,
+                                "Elements have mismatched types '%pT' and '%pT'\n",
+                                expr->args[j]->type, expr->args[i]->type);
+                }
+                expr->expr.type = type_get_invalid();
+                return false;
+            }
+        }
+
+        type = expr->args[i]->type;
     }
 
     expr->expr.type = type_get_array(NULL, type, expr->args_count);
@@ -1569,8 +1571,10 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
      * Named struct literals
      */
     type = checker_eval_raw(state, expr->op);
-    if (!type)
+    if (!type) {
+        expr->expr.type = type_get_invalid();
         return false;
+    }
 
     if (type_is_invalid(type)) {
         expr->expr.type = type_get_invalid();
@@ -1581,11 +1585,9 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
         TYCHK_ERROR(state, expr->op->span,
                     "Expected struct type for literal, but got '%pT'\n",
                     type);
+        expr->expr.type = type_get_invalid();
         return false;
     }
-
-    expr->expr.type = type;
-    ok = true;
 
     for (i = 0; i < expr->fields_count; i++) {
         fields = NULL;
@@ -1649,6 +1651,7 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
         }
     }
 
+    expr->expr.type = ok ? type : type_get_invalid();
     return ok;
 }
 
@@ -1938,23 +1941,33 @@ checker_stmt_block(struct checker *state, struct stmt_block *stmt)
 static bool
 checker_stmt_if(struct checker *state, struct stmt_if *stmt)
 {
-    if (!checker_expr(state, stmt->cond))
-        return false;
+    bool ok = true;
+
+    if (!checker_expr_typed(state, stmt->cond, NULL)) {
+        if (!type_is_invalid(stmt->cond->type)) {
+            TYCHK_ERROR(state, stmt->cond->span,
+                        "Cannot infer type of condition expression\n");
+            stmt->cond->type = type_get_invalid();
+        }
+        ok = false;
+    }
 
     if (!checker_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
         TYCHK_ERROR(state, stmt->stmt.span,
                     "Condition must be 'bool', but got '%pT'\n",
                     stmt->cond->type);
-        return false;
+        ok = false;
     }
 
-    if (!checker_stmt(state, stmt->b_true))
-        return false;
+    if (!checker_stmt(state, stmt->b_true)) {
+        ok = false;
+    }
 
-    if (stmt->b_false && !checker_stmt(state, stmt->b_false))
-        return false;
+    if (stmt->b_false && !checker_stmt(state, stmt->b_false)) {
+        ok = false;
+    }
 
-    return true;
+    return ok;
 }
 
 static bool
@@ -1983,20 +1996,28 @@ checker_stmt_return(struct checker *state, struct stmt_return *stmt)
 static bool
 checker_stmt_while(struct checker *state, struct stmt_while *stmt)
 {
-    bool ok;
+    bool ok = true;
 
-    if (!checker_expr(state, stmt->cond))
-        return false;
+    if (!checker_expr_typed(state, stmt->cond, NULL)) {
+        if (!type_is_invalid(stmt->cond->type)) {
+            TYCHK_ERROR(state, stmt->cond->span,
+                        "Cannot infer type of condition expression\n");
+            stmt->cond->type = type_get_invalid();
+        }
+        ok = false;
+    }
 
     if (!checker_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
         TYCHK_ERROR(state, stmt->stmt.span,
                     "Condition must be 'bool', but got '%pT'\n",
                     stmt->cond->type);
-        return false;
+        ok = false;
     }
 
     state->loop_depth++;
-    ok = checker_stmt(state, stmt->body);
+    if (!checker_stmt(state, stmt->body)) {
+        ok = false;
+    }
     state->loop_depth--;
     return ok;
 }

@@ -261,5 +261,5 @@ proc list() {
     var y: [int, 3] = l
 
     var x = 10
-    var y :int= struct { a = x; b = 10 }.a
+    var y: int= struct { a = x; b = 10 }.a
 }

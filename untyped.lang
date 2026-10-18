@@ -70,15 +70,10 @@ proc st() {
 proc anon_structs() {
     var a = struct { x = 1 }                       // struct { x: int }
     var b: struct { x: u32 } = struct { x = 1 }    // struct { x: u32 }
-    var c: struct { x: u32 } = struct { x = 1; y = 2 }  // error: field mismatch
 
     @slice([1,2,3]).ptr[0]
     var x: uint = struct { a = 1 }.a
     struct { a = 1 }.a
-    struct { a = struct { b = 1 }; b = 10 }.a
-
-    // fail, too deep
-    var x: uint = struct { a = struct { b = 1 } }.a.b
 }
 
 proc index_composites() {
@@ -98,6 +93,31 @@ proc cast_truncates() {
     var a = @cast(u8, 5000000000)
     var b: u32 = @cast(u32, 5000000000)
     var c: *u8 = @cast(*u8, 5000000000)
+}
+
+proc composite_binops() {
+    var p: *[int, 3] = &[1, 2, 3]
+    *p = [1, 2, 3]
+    if p == &[1, 2, 3] { }
+
+    (&[1, 2] == &[3, 4])
+    (&struct { a = 1 } == &struct { a = 2 })
+}
+
+proc slice_composite() {
+    var s = @slice([[1, 2], [3, 4]])   // [[int, 2]]
+    var t = @slice([struct { a = 1 }]) // [struct { a: int }]
+}
+
+proc cond_composite() {
+    if struct { ok = true; code = 1 }.ok { }
+    while struct { ok = true; code = 1 }.ok { break }
+}
+
+proc mixed_array() {
+    var a: [u32, 2] = [1, 2]
+    var grid1 = [a, [1, 2]]     // [[u32, 2], 2]
+    var grid2 = [[1, 2], a]     // [[u32, 2], 2]
 }
 
 // KNOWN INVALID BELOW
@@ -136,4 +156,49 @@ proc xxx() {
 
     var z: [i32] = @slice(&[1, k, 3])
     var x = (&[1, 2, 3])[0]
+
+    // will fail, too deep
+    struct { a = struct { b = 1 }; b = 10 }.a
+    var x: uint = struct { a = struct { b = 1 } }.a.b
+
+    var c: struct { x: u32 } = struct { x = 1; y = 2 }
+
+    var p: *[int, 3] = &[1, 2, 3]
+    if p == &[1, 2, 3] {  }
+
+
+    var a = struct { x = struct {y=10000000000} }
+}
+
+struct NamedStruct { x: int }
+
+proc err_named_struct_mismatch() {
+    var b: NamedStruct = struct { x = 1 }
+    var a: struct {x: int} = NamedStruct { x = 1 }
+}
+
+proc err_incompatible_elems() {
+    var a: [u32, 2] = [1, 2]
+    var x = [1, 2, a]
+}
+
+proc misc() {
+    var a = [1, 2, 3]
+    a[0] = 5
+
+    var p: *[int, 3] = &[1, 2, 3]
+    *p = [1, 2, 3]
+    if p == &[1, 2, 3] {  }
+
+    (&[1, 2] == &[3, 4]) // PASSES type_is_scalar(TYPE_PTR) and CRASHES IRGEN!
+    (&struct { a = 1 } == &struct { a = 2 }) // PASSES type_is_scalar(TYPE_PTR) and CRASHES IRGEN!
+
+    var s = @slice([[1, 2], [3, 4]])
+    var s = @slice([struct { a = 1 }])
+
+    var x: [u32, 2] = [1,2]
+
+    ([1, 2] == [1, 2])
+    if x == [1,2] {
+    }
 }
