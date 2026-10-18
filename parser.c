@@ -787,7 +787,7 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
     if (!parser_expr_strict(state, &cond))
         return false;
 
-    if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after if condition"))
+    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after if condition"))
         return false;
 
     if (!parser_stmt_block(state, &t_branch))
@@ -797,11 +797,21 @@ parser_stmt_if(struct parser *state, struct stmt **stmt)
     if (parser_peek_sym(state, &sym) && sym == symbol_else) {
         parser_advance(state);
 
-        if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after else"))
-            return false;
+        /*
+         * Desugar the 'else if' in another stmt_if node
+         */
+        if (parser_peek_sym(state, &sym) && sym == symbol_if) {
+            parser_advance(state);
 
-        if (!parser_stmt_block(state, &f_branch))
-            return false;
+            if (!parser_stmt_if(state, &f_branch))
+                return false;
+        } else {
+            if (!parser_check(state, TOKEN_LBRACE, "Expected '{' or 'if' after else"))
+                return false;
+
+            if (!parser_stmt_block(state, &f_branch))
+                return false;
+        }
     }
 
     *stmt = stmt_make_if(cond, t_branch, f_branch);
@@ -821,7 +831,7 @@ parser_stmt_while(struct parser *state, struct stmt **stmt)
     if (!parser_expr_strict(state, &cond))
         return false;
 
-    if (!parser_check(state, TOKEN_LBRACE, "Expect '{' after while condition"))
+    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after while condition"))
         return false;
 
     if (!parser_stmt_block(state, &body))
