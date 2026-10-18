@@ -1,0 +1,102 @@
+proc cast_to_non_integer() {
+    var b1: bool = @cast(bool, 1)
+    var b2: bool = @cast(bool, 0)
+    var b3: bool = @cast(bool, @size_of(int))
+
+    var v: void
+    var p1: *u8 = @cast(*u8, 1)
+    var p2: *void = @cast(*void, &v)
+}
+
+proc cast_to_integer() {
+    var a: u8 = @cast(u8, 1)
+    var b: u64 = @cast(u64, 1)
+    var c: i32 = @cast(i32, @size_of(int))
+}
+
+proc statement_defaults() {
+    1
+    1 + 2
+    1 + 2 + 3
+    -5
+    @size_of(int)
+    @size_of(int) * 2
+    [1, 2, 3]
+    [[1, 2], [3, 4]]
+    @slice([1, 2, 3])
+}
+
+proc nested_arrays() {
+    var a: [[u32, 2], 2] = [[1, 2], [3, 4]]
+    var b = [[1, 2], [3, 4]]
+    var c: [[u64, 3], 2] = [[1, 2, 3], [4, 5, 6]]
+}
+
+proc slice_coercion() {
+    var arr = [1, 2, 3]
+
+    @slice([1, 2, 3])
+    @slice(arr)
+
+    var s1: [u32] = @slice([1, 2, 3])
+    var s2: [int] = @slice(arr)
+
+    var s3 = @slice([1, 2, 3])       // defaults to [int]
+}
+
+proc mixed_integer_binops() {
+    var u: u32 = 1
+    var i: i32 = 2
+
+    var e1 = u + 1
+    var e2 = 1 + u
+    var e3: u64 = @cast(u64, u + 1)
+    var e4: bool = u == 1
+    var e5: bool = 1 == u
+    var e6: bool = @size_of(int) == @size_of(u32)
+    var e7: bool = @size_of(int) == @size_of(int)
+}
+
+proc mixed_cast() {
+    var u: u64 = 1
+    var c1: u32 = @cast(u32, u)
+    var c2 = @cast(i64, @size_of(int))
+}
+
+// KNOWN INVALID BELOW
+proc err_untyped_to_bool() {
+    var b: bool = 1
+}
+
+proc err_untyped_to_ptr() {
+    var p: *u8 = 1
+}
+
+proc err_untyped_plus_string() {
+    var x = 1 + "str"
+}
+
+proc err_string_plus_untyped() {
+    var x = "str" + 1
+}
+
+proc err_return_untyped_as_ptr(): *u8 {
+    return 1
+}
+
+proc xxx() {
+    var x: u8 = (3000000000000 + 1) + 2
+    var x: u8 = -300
+    var x = -3000000000000
+
+    var z = @slice([1, 2, 3])
+    var z: [u32] = @slice([1, 2, 3])
+
+    var k: u32 = 1
+    var z = @slice([1, k, 3])
+    var z: [i32] = @slice([1, k, 3])
+
+
+    var z: [i32] = @slice(&[1, k, 3])
+    var x = (&[1, 2, 3])[0]
+}

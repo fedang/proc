@@ -78,8 +78,15 @@ type_make_raw(struct expr *raw)
 struct type *
 type_get_invalid(void)
 {
-    static struct type invalid = { TYPE_INVALID };
+    static struct type invalid = { .tag = TYPE_INVALID };
     return &invalid;
+}
+
+struct type *
+type_get_any_int(void)
+{
+    static struct type any_int = { .tag = TYPE_ANY_INT };
+    return &any_int;
 }
 
 struct type *
@@ -423,6 +430,10 @@ type_format(FILE *out, const struct type *type)
                 fprintf(out, "u%zu", type->bit_width);
             else
                 fprintf(out, "uint");
+            break;
+
+        case TYPE_ANY_INT:
+            fprintf(out, "<integer>");
             break;
 
         case TYPE_PTR:

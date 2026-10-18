@@ -309,6 +309,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     start = parser_curr(state)->span;
 
     if (parser_match(state, TOKEN_INT)) {
+        // XXX: Does not handle u64 max well
         value = strtol(parser_prev(state)->span.start, NULL, 10);
         *expr = expr_make_literal(LIT_INTEGER, value);
         goto done;

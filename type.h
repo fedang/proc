@@ -33,6 +33,7 @@ enum type_tag {
     TYPE_VOID,
     TYPE_INT,
     TYPE_UINT,
+    TYPE_ANY_INT,
     TYPE_PTR,
     TYPE_ARRAY,
     TYPE_SLICE,
@@ -95,7 +96,8 @@ static inline bool
 type_is_integer(const struct type *type)
 {
     return type->tag == TYPE_INT
-        || type->tag == TYPE_UINT;
+        || type->tag == TYPE_UINT
+        || type->tag == TYPE_ANY_INT;
 }
 
 static inline bool
@@ -113,26 +115,13 @@ type_is_ordered(const struct type *type)
         || type->tag == TYPE_PTR;
 }
 
-static inline size_t
-type_bit_width(const struct type *type)
-{
-    if (type->tag == TYPE_BOOL)
-        return 1;
-    if (type->tag == TYPE_PTR)
-        return PTR_SIZE * 8;
-
-    assert(type_is_integer(type));
-    return type->bit_width
-         ? type->bit_width
-         : INT_SIZE * 8;
-}
-
 static inline bool
 type_is_sized(const struct type *type)
 {
     return type->tag != TYPE_PROC
         && type->tag != TYPE_OPAQUE
-        && type->tag != TYPE_MODULE;
+        && type->tag != TYPE_MODULE
+        && type->tag != TYPE_ANY_INT;
 }
 
 static inline bool
@@ -142,9 +131,33 @@ type_is_zst(const struct type *type)
         && type_sizeof(type) == 0;
 }
 
+static inline bool
+type_is_invalid(const struct type *type)
+{
+    return type->tag == TYPE_INVALID;
+}
+
+static inline size_t
+type_bit_width(const struct type *type)
+{
+    if (type->tag == TYPE_BOOL)
+        return 1;
+    if (type->tag == TYPE_PTR)
+        return PTR_SIZE * 8;
+
+    assert(type_is_integer(type) && "integer/scalar only");
+    assert(type_is_sized(type) && "no unsized");
+
+    return type->bit_width
+         ? type->bit_width
+         : INT_SIZE * 8;
+}
+
 struct type *type_make_raw(struct expr *raw);
 
 struct type *type_get_invalid(void);
+
+struct type *type_get_any_int(void);
 
 struct type *type_get_bool(struct attr *attr);
 

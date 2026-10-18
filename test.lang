@@ -220,3 +220,37 @@ proc anon (x: struct { a : int; b: int}) {
     }
     y = x
 }
+
+proc untyped() {
+    var a: u64 = 1 + 2
+    var b = @size_of(int) * 2
+    var c: u64 = @size_of(int)
+    var d = 1 + 2
+    var u: u32 = 1
+    var e = u + 1
+    var f: u32 = u + 1
+    var arr: [u32, 3] = [1, 2, 3]
+    var arr2 = [1, 2, 3]
+    var mixed = [1, u, 3]
+    var t: @type_of([1, 2, 3])
+    print32(@size_of(int) * 2)
+
+    var x: [int, @size_of(@type_of(1))]
+}
+
+proc ptrs() {
+    //var x = 3000000000000
+    var x: u64 = 3000000000000
+    //var x: *u64 = 3000000000000
+    var x = @cast(u64, 3000000000000)
+    var x = @cast(*u8, 3000000000000)
+
+    var y = 10
+    var x = @cast(*u8, y)
+
+    var x = @cast(u8, 3000)
+
+    var k = [1, 2, 3][1]
+
+    //var x = 1+"a"
+}

@@ -97,3 +97,11 @@ proc ints() {
     var y: i32 = 2
     x + y
 }
+
+proc untyped_errors() {
+    var a: u32 = 1
+    var b: i32 = 2
+    var c = a + b
+    var d: u32 = b
+    var e: [u32, 3] = [1, 2]
+}
