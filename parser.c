@@ -975,6 +975,9 @@ parser_decl_proc(struct parser *state, struct decl **decl)
             return false;
     }
 
+    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+        return false;
+
     *decl = decl_make_proc(sym, out, args, args_count, body);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
@@ -1018,6 +1021,9 @@ parser_decl_struct(struct parser *state, struct decl **decl)
         if (!parser_check_end(state, "Expected newline or ';' after field"))
             return false;
     }
+
+    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+        return false;
 
     copy = malloc(fields_count * sizeof(struct struct_field));
     memcpy(copy, fields, fields_count * sizeof(struct struct_field));
@@ -1102,10 +1108,10 @@ parser_decl_module(struct parser *state, struct decl **decl)
 
         copy = malloc(items_count * sizeof(struct decl *));
         memcpy(copy, items, items_count * sizeof(struct decl *));
-    } else {
-        if (!parser_check_end(state, "Expected newline or ';' after declaration"))
-            return false;
     }
+
+    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+        return false;
 
     *decl = decl_make_module(sym, sig, copy, items_count);
     ((struct decl_module *)*decl)->no_body = no_body;
@@ -1153,10 +1159,10 @@ parser_decl_sig(struct parser *state, struct decl **decl)
 
         copy = malloc(items_count * sizeof(struct decl *));
         memcpy(copy, items, items_count * sizeof(struct decl *));
-    } else {
-        if (!parser_check_end(state, "Expected newline or ';' after declaration"))
-            return false;
     }
+
+    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+        return false;
 
     *decl = decl_make_sig(sym, copy, items_count);
     ((struct decl_sig *)*decl)->no_body = no_body;
