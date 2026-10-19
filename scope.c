@@ -45,6 +45,7 @@ scope_push(struct scope *scope, struct symbol *sym,
     bind->is_public = true;
     bind->decl = decl;
     bind->type = type;
+
     return bind;
 }
 

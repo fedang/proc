@@ -1,0 +1,116 @@
+struct Foo { x: int }
+proc Foo() {
+    var x = NoSuchVar1
+}
+
+struct Bar { x: int }
+proc Bar(): NoSuchReturn { return 0 }
+
+
+
+proc baz(_: *u8)
+proc baz(_: NoSuchArg)
+
+
+
+struct Qux { x: int }
+type Unsized1
+proc Qux(): Unsized1 { return 0 }
+
+
+
+struct Alpha { x: int }
+struct Alpha { y: NoSuchField }
+
+
+
+struct Beta { x: int }
+type Unsized2
+struct Beta { y: Unsized2 }
+
+
+
+type Gamma = int
+type Gamma = NoSuchAlias
+
+
+
+module Delta { }
+type Delta = int
+
+
+module Mod { }
+module Mod {
+    proc A() { var x = NoSuchVar1 }
+    proc B() { var y = NoSuchVar2 }
+}
+
+
+
+module N { }
+module N {
+    struct S { x: NoSuchFieldType }
+}
+
+
+
+module P { }
+module P {
+    module Q {
+        proc X() { var z = NoSuchVar }
+    }
+}
+
+
+
+struct S1 { x: int }
+proc S1() {
+    S1()
+}
+
+
+proc dup(_: *u8) { }
+proc dup(_: *u8) {
+    var x: NoSuchType = 0
+}
+
+
+
+
+proc puts(_: *u8)
+proc uses_puts() {
+    puts(1)
+}
+
+
+
+module Good {
+    proc bad() {
+        var x = NoSuchVar
+    }
+}
+
+
+struct Arg0 { x: int }
+proc Arg0(_: NoSuchType) {
+    return
+}
+
+
+
+proc external(_: *u8)
+proc external(_: *u8)
+
+
+
+struct BothA { x: NoSuchType1 }
+struct BothA { x: NoSuchType2 }
+
+
+module Outer1 { proc shared() { } }
+module Outer2 { proc shared() { } }
+
+
+struct Shared { x: int }
+proc Shared() { }
+proc use_shared(_: Shared) { }

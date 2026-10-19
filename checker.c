@@ -605,10 +605,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
         case DECL_PROC:
             proc = (struct decl_proc *)bind->decl;
 
-            if (!proc->out) {
-                proc->out = type_get_void(proc->decl.attr);
-            }
-
             if (!checker_resolve_type(state, &proc->out)) {
                 ok = false;
             } else if (!type_is_sized(proc->out)) {
@@ -2124,12 +2120,38 @@ static bool checker_register_decl(struct checker *state, struct decl *decl);
 static bool checker_register_file(struct checker *state, struct modfile *file);
 
 static bool
+checker_register_binding(struct checker *state, struct decl *decl,
+                         struct symbol *sym)
+{
+    struct binding *bind;
+
+    /*
+     * Duplicates are reported, but then we push them anyway
+     * This way, we can check their inner nodes in the validate step
+     */
+
+    bind = scope_lookup_local(state->curr_scope, sym);
+    if (!bind)
+        return true;
+
+    TYCHK_ERROR(state, decl->span,
+                "Redefinition of symbol '%pS'\n", sym);
+
+    if (bind->decl) {
+        TYCHK_INFO(state, bind->decl->span,
+                   "Symbol '%pS' was originally declared here\n", sym);
+    }
+    return false;
+}
+
+static bool
 checker_decl_import(struct checker *state, struct decl_import *decl)
 {
     struct symbol *mod;
     struct type *type;
     struct binding *bind;
     struct modfile *file;
+    bool ok = true;
 
     if (decl->expr->tag != EXPR_IDENT) {
         TYCHK_ERROR(state, decl->decl.span,
@@ -2158,21 +2180,15 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
 
     if (!type || type->tag != TYPE_MODULE) {
         TYCHK_ERROR(state, decl->decl.span,
-                    "'%pS' is not a module\n",
-                    mod);
+                    "'%pS' is not a module\n", mod);
         return false;
     }
 
-    if (scope_lookup_local(state->curr_scope, mod)) {
-        TYCHK_ERROR(state, decl->decl.span,
-                    "Redefinition of module '%pS'\n",
-                    mod);
-        return false;
-    }
+    ok = checker_register_binding(state, &decl->decl, mod);
 
     bind = scope_push(state->curr_scope, mod, type, &decl->decl, false);
     bind->status = RESOLVE_DONE;
-    return true;
+    return ok;
 }
 
 static bool
@@ -2214,9 +2230,13 @@ checker_register_decl(struct checker *state, struct decl *decl)
     switch (decl->tag) {
         case DECL_PROC:
             proc = (struct decl_proc *)decl;
-            bind = scope_lookup_local(state->curr_scope, proc->sym);
-            if (bind)
-                goto redef;
+            if (!checker_register_binding(state, decl, proc->sym)) {
+                ok = false;
+            }
+
+            if (!proc->out) {
+                proc->out = type_get_void(NULL);
+            }
 
             bind = scope_push(state->curr_scope, proc->sym, NULL, decl, false);
 
@@ -2226,13 +2246,13 @@ checker_register_decl(struct checker *state, struct decl *decl)
             }
 
             proc->link_sym = bind->link_sym;
-            return true;
+            return ok;
 
         case DECL_STRUCT:
             strukt = (struct decl_struct *)decl;
-            bind = scope_lookup_local(state->curr_scope, strukt->sym);
-            if (bind)
-                goto redef;
+            if (!checker_register_binding(state, decl, strukt->sym)) {
+                ok = false;
+            }
 
             if (!strukt->type) {
                 strukt->type = type_get_struct(decl->attr, decl, strukt->sym,
@@ -2243,13 +2263,13 @@ checker_register_decl(struct checker *state, struct decl *decl)
             bind = scope_push(state->curr_scope, strukt->sym,
                               strukt->type, decl, true);
             strukt->link_sym = bind->link_sym;
-            return true;
+            return ok;
 
         case DECL_TYPE:
             d_type = (struct decl_type *)decl;
-            bind = scope_lookup_local(state->curr_scope, d_type->sym);
-            if (bind)
-                goto redef;
+            if (!checker_register_binding(state, decl, d_type->sym)) {
+                ok = false;
+            }
 
             /*
              * If no alias type is given, treat as opaque
@@ -2259,13 +2279,13 @@ checker_register_decl(struct checker *state, struct decl *decl)
                  : type_get_opaque(decl->attr, decl, d_type->sym);
 
             scope_push(state->curr_scope, d_type->sym, type, decl, true);
-            return true;
+            return ok;
 
         case DECL_MODULE:
             mod = (struct decl_module *)decl;
-            bind = scope_lookup_local(state->curr_scope, mod->sym);
-            if (bind)
-                goto redef;
+            if (!checker_register_binding(state, decl, mod->sym)) {
+                ok = false;
+            }
 
             /*
              * Principal modules get their prefix from their path,
@@ -2300,18 +2320,6 @@ checker_register_decl(struct checker *state, struct decl *decl)
         default:
             unreachable();
     }
-
-redef:
-    TYCHK_ERROR(state, decl->span,
-                "Redefinition of symbol '%pS'\n",
-                bind->sym);
-
-    if (bind->decl) {
-        TYCHK_INFO(state, bind->decl->span,
-                   "Symbol '%pS' was originally declared here\n",
-                   bind->sym);
-    }
-    return false;
 }
 
 static bool
@@ -2358,12 +2366,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
     if (decl->tag == DECL_MODULE) {
         mod = (struct decl_module *)decl;
-        if (!mod->type) {
-            /*
-             * Registration failed, do not print error here
-             */
-            return false;
-        }
+
+        assert(mod->type && "impossible module type");
 
         if (mod->type->tag != TYPE_MODULE) {
             TYCHK_ERROR(state, decl->span,
@@ -2391,10 +2395,12 @@ checker_validate_decl(struct checker *state, struct decl *decl)
      * Proc without a body should not be checked...
      */
     proc = (struct decl_proc *)decl;
-    if (!proc->body)
-        return true;
 
     assert(state->locals_count == 0 && "leftover locals!");
+    assert(proc->out && "impossible return type");
+
+    if (!proc->body)
+        return true;
 
     for (ptr = proc->args; ptr != NULL; ptr = ptr->next) {
         checker_local_push(state, ptr->sym, ptr->type);
@@ -2405,10 +2411,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
     ok = checker_stmt(state, proc->body);
     checker_local_pop(state, 0);
 
-    if (!proc->out)
-        return false;
-
-    if (ok && proc->out->tag != TYPE_VOID && !checker_proc_returns(proc->body)) {
+    if (ok && !type_is_invalid(proc->out) && proc->out->tag != TYPE_VOID
+           && !checker_proc_returns(proc->body)) {
         TYCHK_ERROR(state, decl->span,
                     "Procedure '%pS' does not return a value on all branches\n",
                     proc->sym);
