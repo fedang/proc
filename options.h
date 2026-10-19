@@ -11,6 +11,7 @@ struct options {
     const char **clang_args;
     size_t clang_args_count;
     size_t clang_args_size;
+    bool emit_asm;
 };
 
 bool options_init(struct options *opts, int argc, const char **argv);

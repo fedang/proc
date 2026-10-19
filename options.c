@@ -46,6 +46,11 @@ options_init(struct options *opts, int argc, const char **argv)
             continue;
         }
 
+        if (!strcmp(argv[i], "-S")) {
+            opts->emit_asm = true;
+            continue;
+        }
+
         if (!strcmp(argv[i], "-C")) {
             if (++i >= argc) {
                 report_error(NULL, NULL, "Missing argument for -C\n");

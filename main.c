@@ -17,8 +17,16 @@ run_clang(struct options *opts, const char *ir_file)
     size_t i, cmd_len;
 
     cmd_len = snprintf(cmd, sizeof(cmd),
-                       "clang %s test.c -O1 -o %s -Wno-override-module",
-                        ir_file, opts->output);
+                       "clang %s test.c -O1 -Wno-override-module",
+                        ir_file);
+
+    if (opts->emit_asm) {
+        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
+                            " -S");
+    } else {
+        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
+                            " -o %s", opts->output);
+    }
 
     for (i = 0; i < opts->clang_args_count; i++) {
         cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
