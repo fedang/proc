@@ -1,0 +1,40 @@
+struct Foo { x: int }
+proc Foo() { }              // error: redefinition of 'Foo'
+
+proc RedefValue() { }
+struct RedefValue { x: int }  // error: redefinition of 'RedefValue'
+
+struct SomeType { x: int }
+proc err_use_type_as_value() {
+    var x = SomeType          // error: 'SomeType' is a type, not a value
+}
+
+proc some_proc() { }
+proc err_use_value_as_type() {
+    var x: some_proc          // error: 'some_proc' is a value, not a type
+}
+
+
+module M {
+    struct Inner { x: int }; proc p() { }
+}
+
+proc err_type_via_module() {
+    var x = M.Inner           // error: 'M.Inner' is a type, not a value
+}
+proc err_value_via_module_type() {
+    var x: M.p                // error: 'M.p' is a value, not a type
+}
+
+
+proc shadow_type() {
+    var int = 5               // shadows the primitive `int` for values
+    var x: int = int + 1      // x is `int`, uses the local `int` value
+    var y: int = 3            // y is the primitive `int` type
+}
+
+
+// XXX
+module i64 { }
+module bool { }
+

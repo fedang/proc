@@ -219,6 +219,7 @@ checker_binding_type(struct checker *state, struct binding *bind,
         TYCHK_ERROR(state, span,
                     "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
+
         if (bind->decl) {
             TYCHK_INFO(state, bind->decl->span,
                        "Symbol '%pS' was originally declared here\n",
@@ -254,22 +255,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
         case EXPR_IDENT:
             ident = (struct expr_ident *)expr;
 
-            bind = scope_lookup(state->curr_scope, ident->sym, true);
-            if (!bind) {
-                /*
-                 * Modules are stored as values, try the other namespace
-                 */
-                bind = scope_lookup(state->curr_scope, ident->sym, false);
-                if (bind) {
-                    if (!checker_resolve_binding(state, bind))
-                        return NULL;
-
-                    if (bind->type->tag != TYPE_MODULE) {
-                        bind = NULL;
-                    }
-                }
-            }
-
+            bind = scope_lookup(state->curr_scope, ident->sym);
             if (!bind) {
                 TYCHK_ERROR(state, expr->span,
                             "Unknown type '%pS'\n",
@@ -277,7 +263,16 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            return checker_binding_type(state, bind, expr->span);
+            type = checker_binding_type(state, bind, expr->span);
+            if (!type)
+                return NULL;
+
+            if (!bind->is_type && type->tag != TYPE_MODULE) {
+                TYCHK_ERROR(state, expr->span, "'%pS' is not a type\n", ident->sym);
+                return NULL;
+            }
+
+            return type;
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -310,6 +305,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
         case EXPR_ACCESS:
             access = (struct expr_access *)expr;
+
             type = checker_eval_raw(state, access->op);
             if (!type)
                 return NULL;
@@ -324,19 +320,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            bind = scope_lookup_local(type->module.scope, access->field, true);
-            if (!bind) {
-                bind = scope_lookup_local(type->module.scope, access->field, false);
-                if (bind) {
-                    if (!checker_resolve_binding(state, bind))
-                        return NULL;
-
-                    if (bind->type->tag != TYPE_MODULE) {
-                        bind = NULL;
-                    }
-                }
-            }
-
+            bind = scope_lookup_local(type->module.scope, access->field);
             if (!bind) {
                 TYCHK_ERROR(state, expr->span,
                             "Module '%pS' has no member named '%pS'\n",
@@ -344,7 +328,16 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            return checker_binding_type(state, bind, expr->span);
+            type = checker_binding_type(state, bind, expr->span);
+            if (!type)
+                return NULL;
+
+            if (!bind->is_type && type->tag != TYPE_MODULE) {
+                TYCHK_ERROR(state, expr->span, "'%pS' is not a type\n", access->field);
+                return NULL;
+            }
+
+            return type;
 
         case EXPR_ARRAY:
             array = (struct expr_array *)expr;
@@ -559,9 +552,14 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
         if (bind->type)
             return true;
 
+        assert(bind->decl && "primitives should not be pending");
+
         TYCHK_ERROR(state, bind->decl->span,
                     "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
+        TYCHK_INFO(state, bind->decl->span,
+                   "Symbol '%pS' was originally declared here\n",
+                   bind->sym);
         return false;
     }
 
@@ -1031,7 +1029,7 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
         }
     }
 
-    bind = scope_lookup(state->curr_scope, expr->sym, false);
+    bind = scope_lookup(state->curr_scope, expr->sym);
     if (!bind) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Undefined variable '%pS'\n",
@@ -1042,6 +1040,13 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
     type = checker_binding_type(state, bind, expr->expr.span);
     if (!type)
         return false;
+
+    if (bind->is_type) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Type '%pS' cannot be used as a value\n",
+                    expr->sym);
+        return false;
+    }
 
     expr->expr.type = type;
     expr->link_sym = bind->link_sym;
@@ -1369,7 +1374,7 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     }
 
     if (type->tag == TYPE_MODULE) {
-        bind = scope_lookup_local(type->module.scope, expr->field, false);
+        bind = scope_lookup_local(type->module.scope, expr->field);
         if (!bind) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Module '%pS' has no member named '%pS'\n",
@@ -1377,10 +1382,18 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
             return false;
         }
 
-        if (!checker_resolve_binding(state, bind))
+        type = checker_binding_type(state, bind, expr->expr.span);
+        if (!type)
             return false;
 
-        expr->expr.type = bind->type;
+        if (bind->is_type) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Type '%pS' cannot be used as a value\n",
+                        expr->field);
+            return false;
+        }
+
+        expr->expr.type = type;
         expr->link_sym = bind->link_sym;
         return true;
     }
@@ -2116,6 +2129,7 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
     struct symbol *mod;
     struct type *type;
     struct binding *bind;
+    struct modfile *file;
 
     if (decl->expr->tag != EXPR_IDENT) {
         TYCHK_ERROR(state, decl->decl.span,
@@ -2125,9 +2139,9 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
 
     mod = ((struct expr_ident *)decl->expr)->sym;
 
-    bind = scope_lookup_local(state->curr_scope, mod, false);
+    bind = scope_lookup_local(state->curr_scope, mod);
     if (!bind) {
-        struct modfile *file = NULL;
+        file = NULL;
         if (!modcache_import(state->cache, mod, state->cache->rootdir, &file)) {
             TYCHK_ERROR(state, decl->decl.span,
                         "Cannot find module '%pS'\n",
@@ -2149,14 +2163,14 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
         return false;
     }
 
-    if (scope_lookup_local(state->curr_scope, mod, false)) {
+    if (scope_lookup_local(state->curr_scope, mod)) {
         TYCHK_ERROR(state, decl->decl.span,
                     "Redefinition of module '%pS'\n",
                     mod);
         return false;
     }
 
-    bind = scope_push(state->curr_scope, mod, type, NULL, false);
+    bind = scope_push(state->curr_scope, mod, type, &decl->decl, false);
     bind->status = RESOLVE_DONE;
     return true;
 }
@@ -2200,12 +2214,9 @@ checker_register_decl(struct checker *state, struct decl *decl)
     switch (decl->tag) {
         case DECL_PROC:
             proc = (struct decl_proc *)decl;
-            if (scope_lookup_local(state->curr_scope, proc->sym, false)) {
-                TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%pS'\n",
-                            proc->sym);
-                ok = false;
-            }
+            bind = scope_lookup_local(state->curr_scope, proc->sym);
+            if (bind)
+                goto redef;
 
             bind = scope_push(state->curr_scope, proc->sym, NULL, decl, false);
 
@@ -2215,16 +2226,13 @@ checker_register_decl(struct checker *state, struct decl *decl)
             }
 
             proc->link_sym = bind->link_sym;
-            return ok;
+            return true;
 
         case DECL_STRUCT:
             strukt = (struct decl_struct *)decl;
-            if (scope_lookup_local(state->curr_scope, strukt->sym, true)) {
-                TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%pS'\n",
-                            strukt->sym);
-                ok = false;
-            }
+            bind = scope_lookup_local(state->curr_scope, strukt->sym);
+            if (bind)
+                goto redef;
 
             if (!strukt->type) {
                 strukt->type = type_get_struct(decl->attr, decl, strukt->sym,
@@ -2232,18 +2240,16 @@ checker_register_decl(struct checker *state, struct decl *decl)
                                                strukt->fields_count);
             }
 
-            bind = scope_push(state->curr_scope, strukt->sym, strukt->type, decl, true);
+            bind = scope_push(state->curr_scope, strukt->sym,
+                              strukt->type, decl, true);
             strukt->link_sym = bind->link_sym;
-            return ok;
+            return true;
 
         case DECL_TYPE:
             d_type = (struct decl_type *)decl;
-            if (scope_lookup_local(state->curr_scope, d_type->sym, true)) {
-                TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%pS'\n",
-                            d_type->sym);
-                ok = false;
-            }
+            bind = scope_lookup_local(state->curr_scope, d_type->sym);
+            if (bind)
+                goto redef;
 
             /*
              * If no alias type is given, treat as opaque
@@ -2251,18 +2257,15 @@ checker_register_decl(struct checker *state, struct decl *decl)
             type = d_type->type
                  ? NULL
                  : type_get_opaque(decl->attr, decl, d_type->sym);
+
             scope_push(state->curr_scope, d_type->sym, type, decl, true);
-            return ok;
+            return true;
 
         case DECL_MODULE:
             mod = (struct decl_module *)decl;
-
-            if (scope_lookup_local(state->curr_scope, mod->sym, false)) {
-                TYCHK_ERROR(state, decl->span,
-                            "Redefinition of symbol '%pS'\n",
-                            mod->sym);
-                ok = false;
-            }
+            bind = scope_lookup_local(state->curr_scope, mod->sym);
+            if (bind)
+                goto redef;
 
             /*
              * Principal modules get their prefix from their path,
@@ -2289,9 +2292,26 @@ checker_register_decl(struct checker *state, struct decl *decl)
             state->curr_scope = saved;
             return ok;
 
+        case DECL_SIG:
+            TYCHK_ERROR(state, decl->span,
+                        "Signature declarations are not yet supported\n");
+            return false;
+
         default:
             unreachable();
     }
+
+redef:
+    TYCHK_ERROR(state, decl->span,
+                "Redefinition of symbol '%pS'\n",
+                bind->sym);
+
+    if (bind->decl) {
+        TYCHK_INFO(state, bind->decl->span,
+                   "Symbol '%pS' was originally declared here\n",
+                   bind->sym);
+    }
+    return false;
 }
 
 static bool
@@ -2338,7 +2358,14 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
     if (decl->tag == DECL_MODULE) {
         mod = (struct decl_module *)decl;
-        if (!mod->type || mod->type->tag != TYPE_MODULE) {
+        if (!mod->type) {
+            /*
+             * Registration failed, do not print error here
+             */
+            return false;
+        }
+
+        if (mod->type->tag != TYPE_MODULE) {
             TYCHK_ERROR(state, decl->span,
                         "Module '%pS' was not registered\n",
                         mod->sym);
@@ -2377,6 +2404,9 @@ checker_validate_decl(struct checker *state, struct decl *decl)
     state->ret_type = proc->out;
     ok = checker_stmt(state, proc->body);
     checker_local_pop(state, 0);
+
+    if (!proc->out)
+        return false;
 
     if (ok && proc->out->tag != TYPE_VOID && !checker_proc_returns(proc->body)) {
         TYCHK_ERROR(state, decl->span,

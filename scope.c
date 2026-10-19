@@ -49,13 +49,12 @@ scope_push(struct scope *scope, struct symbol *sym,
 }
 
 struct binding *
-scope_lookup_local(struct scope *scope, struct symbol *sym, bool is_type)
+scope_lookup_local(struct scope *scope, struct symbol *sym)
 {
     size_t i;
 
     for (i = 0; i < scope->bindings_count; i++) {
-        if (scope->bindings[i].is_type == is_type &&
-            scope->bindings[i].sym == sym)
+        if (scope->bindings[i].sym == sym)
             return &scope->bindings[i];
     }
 
@@ -63,12 +62,12 @@ scope_lookup_local(struct scope *scope, struct symbol *sym, bool is_type)
 }
 
 struct binding *
-scope_lookup(struct scope *scope, struct symbol *sym, bool is_type)
+scope_lookup(struct scope *scope, struct symbol *sym)
 {
     struct binding *bind;
 
     do {
-        bind = scope_lookup_local(scope, sym, is_type);
+        bind = scope_lookup_local(scope, sym);
         if (bind)
             return bind;
     } while ((scope = scope->parent) != NULL);

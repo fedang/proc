@@ -10,7 +10,7 @@ module X {
 
 type Opaque
 
-type X = int
+type K = int
 
 struct zst {
     x: void

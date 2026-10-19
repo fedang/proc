@@ -37,14 +37,11 @@ struct symbol *scope_mangle(struct symbol *name, struct symbol *prefix);
 struct scope *scope_make(struct symbol *name, struct symbol *prefix,
                          struct scope *parent);
 
-
 struct binding *scope_push(struct scope *scope, struct symbol *sym,
                            struct type *type, struct decl *decl, bool is_type);
 
-struct binding *scope_lookup_local(struct scope *scope, struct symbol *sym,
-                                   bool is_type);
+struct binding *scope_lookup_local(struct scope *scope, struct symbol *sym);
 
-struct binding *scope_lookup(struct scope *scope, struct symbol *sym,
-                             bool is_type);
+struct binding *scope_lookup(struct scope *scope, struct symbol *sym);
 
 #endif
