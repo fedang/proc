@@ -1,0 +1,57 @@
+//module X(Y: Sig): Sig2 {
+//}
+//
+//import X
+//
+//module X_Int = X(Y: Int_Mod)
+
+//sig Y {
+//}
+
+//import expr.ls.ks
+
+// import A.B.C
+// import A.B.C { foo; bar; sk = fun }
+// import A.B.C { X_int = X(T) }
+
+
+///// PROC TYPES
+
+//proc(int, bool) -> proc(int, bool) -> void
+// proc(int, bool): (proc(int, bool): void)
+//proc(int, bool) (proc(int, bool) void)
+
+///////// LAMBDAS (closure???)
+
+// (x, y) -> { x+y }
+// (x: (int, int)) -> x+2
+// (x: (int, int)): int -> x+2
+// (x: int): int -> x
+// (x): int -> x
+// x: int -> x
+// (x) -> x
+
+// TODO: Check if parser supports this
+// x -> int { }
+// x -> { }
+
+//type X = (int { })
+
+// x -> { if x > 10 { return 10 } else { return x } }
+
+// x : i64 -> { print(x); return 10 }
+
+// (((x))) === x
+// binop ( ->, x , x)
+// binop ( ->, (binop (:, x, int)) , x)
+
+//match x {
+//    y -> x
+//}
+
+////@lambda(a, y) {
+////}
+
+//for get_iter() -> x {
+//}
+

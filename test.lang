@@ -8,11 +8,6 @@ module X {
     }
 }
 
-//sig Y {
-//}
-
-//import expr.ls.ks
-
 type Opaque
 
 type X = int
@@ -68,6 +63,10 @@ proc zero_test() : @type_of(1) {
     puts("sizeof zst is:")
     print32(@cast(int, @size_of(@type_of(zero))))
 
+    // expr : type
+
+    var x: [u32, 3] = [4,5,6]
+
     var lit = [4,5,6]
     sliced(@slice([1,2,3]))
     sliced(@slice(lit))
@@ -97,6 +96,7 @@ proc main(argc: int, argv: **u8): int {
 
     puts("sizeof is")
     print32(@cast(int, @size_of(int)))
+    print32(@size_of(int))
 
     var func = &test_print;
 
@@ -120,6 +120,21 @@ proc main(argc: int, argv: **u8): int {
         puts(s)
         i += 1
     }
+
+    //goto label
+    //loop {
+    //    body
+    //    label:
+    //    if (!cond) break
+    //    coso ...
+    //}
+
+    //do {
+    //    prelude
+    //
+    //    if (cond) break
+    //    body
+    //} while(cond)
 
     print_array([1, 2, 3])
 
@@ -155,6 +170,8 @@ type ABC_s = ABC
 proc print32(_: int)
 
 proc puts(_: *u8)
+
+//proc DrawBackground(color: u64): void
 
 struct ABC {
     a: int
@@ -200,7 +217,7 @@ proc stest() {
 
 struct Node { next: *Node }
 
-proc sliced(s: [int]) {
+proc sliced(s: [int]): void {
     puts("in sliced!")
     print32(s[0])
 
@@ -211,6 +228,9 @@ proc sliced(s: [int]) {
         print32(s[i])
         i += @cast(i64, 1)
     }
+
+    //@count_of(arr)
+    //@len_of(arr)
 }
 
 proc anon (x: struct { a : int; b: int}) {
@@ -219,6 +239,14 @@ proc anon (x: struct { a : int; b: int}) {
         b = 20
     }
     y = x
+
+    (struct {
+        a = 1
+        b = 2
+        c = 3
+        d = 4
+        //..x
+    })
 }
 
 proc untyped() {
@@ -261,11 +289,14 @@ proc list() {
     var y: [int, 3] = l
 
     var x = 10
-    var y: int= struct { a = x; b = 10 }.a
+    var y: int = struct { a = x; b = 10 }.a
 
     if true {
+    } else if false {
     } else {
-        if false {
-        }
     }
+}
+
+proc ret(): i64 {
+    return 10
 }

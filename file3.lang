@@ -1,1 +1,7 @@
 import file2 {hello; yourfun = myfun }
+
+proc main(): int {
+    yourfun()
+    hello()
+    return 0
+}
