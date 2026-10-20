@@ -1,0 +1,3 @@
+import b
+proc f_a(): int { return b.f_b() }
+

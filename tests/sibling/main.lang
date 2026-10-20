@@ -1,0 +1,3 @@
+import lib.a
+
+proc main() { a.use() }

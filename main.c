@@ -94,9 +94,6 @@ main(int argc, const char **argv)
         }
 
         if (!modcache_load(&cache, opts.inputs[i], NULL, NULL)) {
-            report_info(NULL, NULL,
-                        "Input file '%s' failed to parse\n",
-                        opts.inputs[i]);
             ok = false;
         }
     }

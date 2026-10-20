@@ -1,0 +1,1 @@
+import c; proc g() { c.h() }

@@ -1,0 +1,10 @@
+module Helper {
+    module Sub { proc hi() {} }
+}
+
+module App {
+    import Helper.Sub
+    proc use_it() { Sub.hi() }
+}
+
+proc main() { App.use_it() }

@@ -1,0 +1,2 @@
+import helper
+proc use() { helper.via_pkg() }

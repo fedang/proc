@@ -1,0 +1,3 @@
+import a { foo }
+type TypeFromB = @type_of(foo)
+

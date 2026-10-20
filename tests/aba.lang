@@ -1,0 +1,12 @@
+module A {
+    module B {
+        module A { proc foo() {} }
+    }
+}
+
+module Wrapper {
+    import A.B.A
+    proc use() { A.foo() }
+}
+
+proc main() {}

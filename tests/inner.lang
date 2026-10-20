@@ -1,0 +1,9 @@
+module Helper { proc outer() {} }
+
+module App {
+    module Helper { proc inner() {} }
+    import Helper
+    proc use() { Helper.inner() }
+}
+
+proc main() {}

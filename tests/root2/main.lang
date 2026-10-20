@@ -1,0 +1,2 @@
+import nest1
+proc main() { nest1.use_n2() }

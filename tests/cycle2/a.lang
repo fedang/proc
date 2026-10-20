@@ -1,0 +1,4 @@
+import b { SomeType }
+proc foo(): SomeType {
+    return 1
+}

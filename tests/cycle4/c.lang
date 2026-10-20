@@ -1,0 +1,1 @@
+import a; proc h() { a.use() }

@@ -1,0 +1,2 @@
+import nest2
+proc use_n2() { nest2.hi() }
