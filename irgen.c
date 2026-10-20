@@ -1333,6 +1333,35 @@ irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
 }
 
 static void
+irgen_decl_var(struct irgen *state, struct decl_var *decl)
+{
+    struct expr_literal *lit;
+
+    IR_EMITF(state, "\n@\"%s\" = global ", decl->link_sym->str);
+    irgen_type(state, decl->type);
+
+    if (decl->value && decl->value->tag == EXPR_LITERAL) {
+        lit = (struct expr_literal *)decl->value;
+
+        switch (lit->literal) {
+            case LIT_INTEGER:
+            case LIT_BOOL:
+                IR_EMITF(state, " %ld\n", (long)lit->integer);
+                return;
+
+            case LIT_STRING:
+                // TODO
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    IR_EMITF(state, " zeroinitializer\n");
+}
+
+static void
 irgen_decl_types(struct irgen *state, struct decl *decl)
 {
     struct decl_module *mod;
@@ -1372,6 +1401,10 @@ irgen_decl_bodies(struct irgen *state, struct decl *decl)
             for (i = 0; i < mod->items_count; i++) {
                 irgen_decl_bodies(state, mod->items[i]);
             }
+            break;
+
+        case DECL_VAR:
+            irgen_decl_var(state, (struct decl_var *)decl);
             break;
 
         default:

@@ -718,6 +718,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 {
     struct decl_proc *proc;
     struct decl_type *d_type;
+    struct decl_var *var;
     struct type *type, *args[32];
     struct proc_arg *ptr;
     struct scope *saved_scope, *scope;
@@ -844,6 +845,34 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
         case DECL_IMPORT:
             ok = checker_resolve_import(state, bind);
+            break;
+
+        case DECL_VAR:
+            var = (struct decl_var *)bind->decl;
+
+            if (!var->type) {
+                TYCHK_ERROR(state, var->decl.span,
+                            "Global variable '%pS' requires explicit type annotation\n",
+                            var->sym);
+                var->type = type_get_invalid();
+                ok = false;
+            } else {
+                /*
+                 * Global variables require explicit annotation, otherwise the
+                 * inference of the value type would need eager validation
+                 */
+                if (!checker_resolve_type(state, &var->type)) {
+                    ok = false;
+                } else if (!type_is_sized(var->type)) {
+                    TYCHK_ERROR(state, var->decl.span,
+                                "Global variable '%pS' has unsized type '%pT'\n",
+                                var->sym, var->type);
+                    ok = false;
+                    var->type = type_get_invalid();
+                }
+            }
+
+            bind->type = var->type;
             break;
 
         default:
@@ -1179,7 +1208,6 @@ checker_expr_typed(struct checker *state, struct expr *expr,
                    struct type *target)
 {
     if (!checker_expr(state, expr)) {
-        // XXX: if (!expr->type)
         expr->type = type_get_invalid();
         return false;
     }
@@ -2460,40 +2488,40 @@ checker_decl_var(struct checker *state, struct decl_var *decl)
     }
 
     if (decl->value) {
-        if (!checker_expr(state, decl->value)) {
-            decl->value->type = type_get_invalid();
-            ok = false;
-        } else if (!type_is_invalid(decl->value->type)) {
-            if (!decl->type) {
-                if (!checker_expr_coerce(state, decl->value, NULL)) {
-                    if (!type_is_invalid(decl->value->type)) {
-                        TYCHK_ERROR(state, decl->value->span,
-                                    "Cannot infer type of variable '%pS'\n",
-                                    decl->sym);
-                    }
-                    ok = false;
-                    decl->type = type_get_invalid();
-                } else {
-                    decl->type = decl->value->type;
+        if (!decl->type) {
+            if (!checker_expr_typed(state, decl->value, NULL)) {
+                if (!type_is_invalid(decl->value->type)) {
+                    TYCHK_ERROR(state, decl->value->span,
+                                "Cannot infer type of variable '%pS'\n",
+                                decl->sym);
                 }
-            } else if (!checker_expr_coerce(state, decl->value, decl->type)) {
+                ok = false;
+                decl->type = type_get_invalid();
+            } else {
+                if (type_is_invalid(decl->value->type)) {
+                    ok = false;
+                }
+                decl->type = decl->value->type;
+            }
+        } else {
+            if (!checker_expr_typed(state, decl->value, decl->type)) {
                 if (!type_is_invalid(decl->value->type)) {
                     TYCHK_ERROR(state, decl->decl.span,
                                 "Cannot initialize variable of type '%pT' with type '%pT'\n",
                                 decl->type, decl->value->type);
                 }
                 ok = false;
+            } else if (type_is_invalid(decl->value->type)) {
+                ok = false;
             }
         }
     }
 
     if (!decl->type) {
-        if (!decl->value || !type_is_invalid(decl->value->type)) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "Cannot infer type for variable '%pS', explicit annotation needed\n",
-                        decl->sym);
-            ok = false;
-        }
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Cannot infer type for variable '%pS', explicit annotation needed\n",
+                    decl->sym);
+        ok = false;
         decl->type = type_get_invalid();
     } else if (!type_is_invalid(decl->type) && !type_is_sized(decl->type)) {
         TYCHK_ERROR(state, decl->decl.span,
@@ -2636,6 +2664,7 @@ checker_register_decl(struct checker *state, struct decl *decl)
             }
 
             bind = scope_push(state->curr_scope, var->sym, NULL, decl, false);
+            var->link_sym = bind->link_sym;
             return ok;
 
         default:
@@ -2680,6 +2709,7 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 {
     struct decl_module *mod;
     struct decl_proc *proc;
+    struct decl_var *var;
     struct proc_arg *ptr;
     struct scope *saved;
     size_t i;
@@ -2706,6 +2736,38 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
         state->curr_scope = saved;
         return ok;
+    }
+
+    if (decl->tag == DECL_VAR) {
+        var = (struct decl_var *)decl;
+        if (type_is_invalid(var->type))
+            return false;
+
+        /*
+         * Globals without explicit initializer will get zeroed
+         */
+        if (!var->value)
+            return true;
+
+        if (!checker_expr_typed(state, var->value, var->type)) {
+            if (!type_is_invalid(var->value->type)) {
+                TYCHK_ERROR(state, var->value->span,
+                            "Cannot initialize variable of type '%pT' with type '%pT'\n",
+                            var->type, var->value->type);
+            }
+            return false;
+        }
+
+        if (var->value->tag != EXPR_LITERAL
+            || (((struct expr_literal *)var->value)->literal != LIT_INTEGER
+            && ((struct expr_literal *)var->value)->literal != LIT_BOOL)) {
+            TYCHK_ERROR(state, var->value->span,
+                        "Cannot initialize global with non-literal value of type '%pT'\n",
+                        var->value->type);
+            return false;
+        }
+
+        return true;
     }
 
     if (decl->tag != DECL_PROC)

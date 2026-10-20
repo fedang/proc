@@ -1,0 +1,28 @@
+var GLOBAL_INT: int = 42
+
+var GLOBAL_NOINIT: int =0
+
+proc use_globals(): int {
+    return GLOBAL_INT + GLOBAL_NOINIT
+}
+
+
+import forward { FORWARD_GLOBAL }
+
+proc cross_file_use(): int {
+    return FORWARD_GLOBAL
+}
+
+var d: int = 5
+
+// BAD
+
+var GLOBAL_INFERRED_BAD = 7
+var c = d
+var a: int = b
+var b: int = a
+var BAD_SLICE: [int] = @slice([1, 2, 3])
+var BAD_TYPE: NoSuchType = 5
+var GLOBAL_BOOL: bool = true
+
+proc main() { }
