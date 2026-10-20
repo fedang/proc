@@ -43,7 +43,7 @@ source_load(struct source *src)
     rewind(file);
 
     buf = malloc(fsize + 1);
-    if (fread(buf, fsize, 1, file) != 1) {
+    if (fread(buf, 1, fsize, file) != (size_t)fsize) {
         free(buf);
         fclose(file);
         return false;

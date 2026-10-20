@@ -1244,13 +1244,13 @@ parser_module(struct parser *state, struct decl **decl)
 {
     struct decl **items;
     size_t max, count;
-    struct span start;
+    struct span span;
 
     items = NULL;
     max = 0;
     count = 0;
 
-    start = parser_curr(state)->span;
+    span = parser_curr(state)->span;
 
     while (!parser_eof(state)) {
         if (count >= max) {
@@ -1266,7 +1266,11 @@ parser_module(struct parser *state, struct decl **decl)
         }
     }
 
+    if (state->curr) {
+        span = span_merge(span, parser_prev(state)->span);
+    }
+
     *decl = decl_make_module(state->src->name, NULL, items, count);
-    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    decl_set_span(*decl, span);
     return state->perfect;
 }
