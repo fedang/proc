@@ -1,0 +1,7 @@
+module A {
+    module B {
+        module C { proc hi() {} }
+    }
+}
+import A.B.C
+proc main() { C.hi() }

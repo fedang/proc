@@ -1,0 +1,7 @@
+struct Vec { x: int; y: int }
+proc make_vec(): Vec {
+  var v: Vec
+  v.x = 0
+  v.y = 0
+  return v
+}

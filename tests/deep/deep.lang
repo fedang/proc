@@ -1,0 +1,4 @@
+  module A { module B { module C { module D { module E {
+      proc deep() {}
+  } } } } }
+

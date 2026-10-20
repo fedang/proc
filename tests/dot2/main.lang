@@ -1,0 +1,4 @@
+
+
+  import outer.Middle.Inner
+  proc main() { Inner.hi() }

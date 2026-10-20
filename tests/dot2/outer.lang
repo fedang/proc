@@ -1,0 +1,3 @@
+  module Middle {
+      module Inner { proc hi() {} }
+  }

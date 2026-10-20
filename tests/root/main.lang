@@ -1,0 +1,3 @@
+import lib
+
+proc main() { lib.lib_fn() }

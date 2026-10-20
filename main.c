@@ -10,6 +10,23 @@
 #include "report.h"
 #include "options.h"
 
+static bool
+check_extension(const char *str, const char *ext)
+{
+    size_t str_len, ext_len;
+
+    str_len = strlen(str);
+    ext_len = strlen(ext);
+
+    if (str_len <= ext_len)
+        return false;
+
+    if (strcmp(str + (str_len - ext_len), ext))
+        return false;
+
+    return str[str_len - ext_len] == '.';
+}
+
 static int
 run_clang(struct options *opts, const char *ir_file)
 {
@@ -17,8 +34,7 @@ run_clang(struct options *opts, const char *ir_file)
     size_t i, cmd_len;
 
     cmd_len = snprintf(cmd, sizeof(cmd),
-                       "clang %s test.c -O1 -Wno-override-module",
-                        ir_file);
+                       "clang -O1 -Wno-override-module");
 
     if (opts->emit_asm) {
         cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
@@ -26,6 +42,17 @@ run_clang(struct options *opts, const char *ir_file)
     } else {
         cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
                             " -o %s", opts->output);
+    }
+
+    cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
+                        " %s", ir_file);
+
+    for (i = 0; i < opts->inputs_count; i++) {
+        if (!check_extension(opts->inputs[i], ".c"))
+            continue;
+
+        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
+                            " %s", opts->inputs[i]);
     }
 
     for (i = 0; i < opts->clang_args_count; i++) {
@@ -46,6 +73,7 @@ main(int argc, const char **argv)
     const char *ir_file;
     FILE *ir_out;
     size_t i;
+    bool ok = true;
 
     if (!options_init(&opts, argc, argv))
         return 1;
@@ -58,12 +86,23 @@ main(int argc, const char **argv)
      * Load all the root modules asked by the user
      */
     for (i = 0; i < opts.inputs_count; i++) {
+        if (check_extension(opts.inputs[i], ".c")) {
+            report_info(NULL, NULL,
+                        "Input file '%s' will be passed directly to clang\n",
+                        opts.inputs[i]);
+            continue;
+        }
+
         if (!modcache_load(&cache, opts.inputs[i], NULL, NULL)) {
             report_info(NULL, NULL,
-                        "Failed to load input file '%s'\n", opts.inputs[i]);
-            return 1;
+                        "Input file '%s' failed to parse\n",
+                        opts.inputs[i]);
+            ok = false;
         }
     }
+
+    if (!ok)
+        return 1;
 
     /*
      * Verify and typecheck the modules

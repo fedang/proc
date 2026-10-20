@@ -1,0 +1,4 @@
+module sub {
+  proc helper() {}
+}
+

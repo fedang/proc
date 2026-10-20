@@ -1,0 +1,2 @@
+import math { add }
+proc main() { add(1, 2) }

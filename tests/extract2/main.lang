@@ -1,0 +1,6 @@
+import lib { Point }
+proc main() {
+  var p: Point
+  p.x = 1
+}
+

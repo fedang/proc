@@ -1,0 +1,2 @@
+import deep.A.B.C.D.E
+proc main() { E.deep() }
