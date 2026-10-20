@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "stmt.h"
+#include "expr.h"
 
 struct scope;
 
@@ -23,6 +23,8 @@ enum decl_tag {
     DECL_MODULE,
     DECL_SIG,
     DECL_IMPORT,
+    DECL_VAR,
+    DECL_EXPR,
 };
 
 struct decl {
@@ -38,7 +40,7 @@ struct decl_proc {
     struct type *out;
     struct proc_arg *args;
     size_t args_count;
-    struct stmt *body;
+    struct expr *body;
 };
 
 struct decl_struct {
@@ -82,6 +84,20 @@ struct decl_import {
     bool resolved;
 };
 
+struct decl_var {
+    struct decl decl;
+    struct symbol *sym;
+    struct symbol *link_sym;
+    struct type *type;
+    struct expr *value;
+    unsigned slot;
+};
+
+struct decl_expr {
+    struct decl decl;
+    struct expr *expr;
+};
+
 static inline void
 decl_set_span(struct decl *decl, struct span span)
 {
@@ -96,7 +112,7 @@ decl_set_attr(struct decl *decl, struct attr *attr)
 
 struct decl *decl_make_proc(struct symbol *sym, struct type *out,
                             struct proc_arg *args, size_t args_count,
-                            struct stmt *body);
+                            struct expr *body);
 
 struct decl *decl_make_struct(struct symbol *sym, struct struct_field *fields,
                               size_t fields_count);
@@ -110,5 +126,11 @@ struct decl *decl_make_sig(struct symbol *sym, struct decl **items,
                            size_t items_count);
 
 struct decl *decl_make_import(struct expr *expr);
+
+
+struct decl *decl_make_var(struct symbol *sym, struct type *type,
+                           struct expr *value);
+
+struct decl *decl_make_expr(struct expr *expr);
 
 #endif

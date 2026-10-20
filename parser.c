@@ -38,6 +38,13 @@ parser_eof(struct parser *state)
     return parser_curr(state)->tag == TOKEN_EOF;
 }
 
+static inline struct token *
+parser_next(struct parser *state)
+{
+    assert(!parser_eof(state) && "oob read forward");
+    return &state->tokens[state->curr + 1];
+}
+
 static inline void
 parser_advance(struct parser *state)
 {
@@ -118,6 +125,15 @@ parser_peek_sym(struct parser *state, struct symbol **sym)
     return true;
 }
 
+static enum token_tag
+parser_peek_two(struct parser *state)
+{
+    if (parser_eof(state))
+        return TOKEN_EOF;
+
+    return parser_next(state)->tag;
+}
+
 static bool
 parser_match_sym(struct parser *state, struct symbol **sym)
 {
@@ -188,9 +204,148 @@ parser_type(struct parser *state, struct type **type)
 /*
  * Expressions
  */
-static bool parser_stmt_block(struct parser *state, struct stmt **stmt);
+static bool parser_decl(struct parser *state, struct decl **decl);
 
-static bool parser_expr(struct parser *state, struct expr **expr);
+static bool
+parser_expr(struct parser *state, struct expr **expr)
+{
+    return parser_expr_prec(state, expr, 0);
+}
+
+static bool
+parser_expr_strict(struct parser *state, struct expr **expr)
+{
+    bool ok, saved = state->no_block;
+
+    state->no_block = true;
+    ok = parser_expr_prec(state, expr, 0);
+    state->no_block = saved;
+    return ok;
+}
+
+static bool
+parser_expr_block(struct parser *state, struct expr **expr)
+{
+    struct decl *items[64];
+    size_t items_count;
+    bool saved_parens, saved_noblock;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = false;
+    state->no_block = false;
+
+    for (items_count = 0; !parser_eof(state); items_count++) {
+        if (parser_match(state, TOKEN_RBRACE))
+            break;
+
+        assert(items_count < 64 && "too many block items!");
+        if (!parser_decl(state, &items[items_count]))
+            return false;
+    }
+
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+
+    *expr = expr_make_block(items_count);
+    memcpy(((struct expr_block *)*expr)->items, items, items_count * sizeof(struct decl *));
+    expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
+parser_expr_return(struct parser *state, struct expr **expr)
+{
+    struct expr *value;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    value = NULL;
+    if (parser_same_line(state) && parser_curr(state)->tag != TOKEN_SEMI && parser_curr(state)->tag != TOKEN_RBRACE) {
+        if (!parser_expr(state, &value))
+            return false;
+    }
+
+    if (!parser_check_end(state, "Expected newline or ';' after return"))
+        return false;
+
+    *expr = expr_make_return(value);
+    expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
+parser_expr_if(struct parser *state, struct expr **expr)
+{
+    struct symbol *sym;
+    struct expr *cond;
+    struct expr *t_branch, *f_branch;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    if (!parser_expr_strict(state, &cond))
+        return false;
+
+    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after if condition"))
+        return false;
+
+    if (!parser_expr_block(state, &t_branch))
+        return false;
+
+    f_branch = NULL;
+    if (parser_peek_sym(state, &sym) && sym == symbol_else) {
+        parser_advance(state);
+
+        /*
+         * Desugar the 'else if' in another expr_if node
+         */
+        if (parser_peek_sym(state, &sym) && sym == symbol_if) {
+            parser_advance(state);
+
+            if (!parser_expr_if(state, &f_branch))
+                return false;
+        } else {
+            if (!parser_check(state, TOKEN_LBRACE, "Expected '{' or 'if' after else"))
+                return false;
+
+            if (!parser_expr_block(state, &f_branch))
+                return false;
+        }
+    }
+
+    *expr = expr_make_if(cond, t_branch, f_branch);
+    expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
+parser_expr_while(struct parser *state, struct expr **expr)
+{
+    struct expr *cond;
+    struct expr *body;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    if (!parser_expr_strict(state, &cond))
+        return false;
+
+    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after while condition"))
+        return false;
+
+    if (!parser_expr_block(state, &body))
+        return false;
+
+    *expr = expr_make_while(cond, body);
+    expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
 
 static bool
 parser_escape_string(struct parser *state, const char **string)
@@ -301,7 +456,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     struct symbol *sym;
     struct expr *op, *args[32];
     const char *string;
-    struct stmt *body;
+    struct expr *body;
     size_t count, i;
     bool saved_parens, saved_noblock;
     struct span start;
@@ -323,7 +478,39 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         goto done;
     }
 
+    if (parser_match(state, TOKEN_LBRACE)) {
+        /*
+         * Parse as a full-fledged block, not as a struct literal
+         */
+        return parser_expr_block(state, expr);
+    }
+
     if (parser_match_sym(state, &sym)) {
+        /*
+         * Expression statements
+         */
+        if (sym == symbol_return)
+            return parser_expr_return(state, expr);
+
+        if (sym == symbol_if)
+            return parser_expr_if(state, expr);
+
+        if (sym == symbol_while)
+            return parser_expr_while(state, expr);
+
+        if (sym == symbol_break) {
+            *expr = expr_make_break();
+            goto done;
+        }
+
+        if (sym == symbol_continue) {
+            *expr = expr_make_continue();
+            goto done;
+        }
+
+        /*
+         * Literals
+         */
         if (sym == symbol_struct) {
             if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after 'struct'"))
                 return false;
@@ -450,7 +637,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
 
         body = NULL;
         if (!state->no_block && parser_match(state, TOKEN_LBRACE)) {
-            if (!parser_stmt_block(state, &body))
+            if (!parser_expr_block(state, &body))
                 return false;
         }
 
@@ -545,12 +732,6 @@ parser_token_binop(enum token_tag tag)
         [TOKEN_PERCEQ] = BINOP_MOD_SET,
     };
     return binop_table[tag];
-}
-
-static bool
-parser_expr(struct parser *state, struct expr **expr)
-{
-    return parser_expr_prec(state, expr, 0);
 }
 
 static bool
@@ -670,244 +851,6 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
     return true;
 }
 
-static bool
-parser_expr_strict(struct parser *state, struct expr **expr)
-{
-    bool ok, saved = state->no_block;
-
-    state->no_block = true;
-    ok = parser_expr_prec(state, expr, 0);
-    state->no_block = saved;
-    return ok;
-}
-
-/*
- * Statements
- */
-static bool parser_stmt(struct parser *state, struct stmt **stmt);
-
-static bool
-parser_stmt_block(struct parser *state, struct stmt **stmt)
-{
-    struct stmt *tmp[64];
-    unsigned n;
-    bool saved_parens, saved_noblock;
-    struct span start;
-
-    start = parser_prev(state)->span;
-
-    saved_parens = state->parens;
-    saved_noblock = state->no_block;
-    state->parens = false;
-    state->no_block = false;
-
-    for (n = 0; !parser_eof(state); n++) {
-        if (parser_match(state, TOKEN_RBRACE))
-            break;
-
-        assert(n < 64 && "too many stmts!");
-        if (!parser_stmt(state, &tmp[n]))
-            return false;
-    }
-
-    state->parens = saved_parens;
-    state->no_block = saved_noblock;
-
-    *stmt = stmt_make_block(n);
-    memcpy(((struct stmt_block *)*stmt)->items, tmp, n * sizeof(struct stmt *));
-    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
-    return true;
-}
-
-static bool
-parser_stmt_var(struct parser *state, struct stmt **stmt)
-{
-    struct symbol *name;
-    struct type *type;
-    struct expr *value;
-    struct span start;
-
-    start = parser_prev(state)->span;
-
-    if (!parser_check_sym(state, &name, "Expected var name"))
-        return false;
-
-    type = NULL;
-    if (parser_match(state, TOKEN_COLON)) {
-        if (!parser_type(state, &type))
-            return false;
-    }
-
-    value = NULL;
-    if (parser_match(state, TOKEN_EQ)) {
-        if (!parser_expr(state, &value))
-            return false;
-    }
-
-    if (!parser_check_end(state, "Expected newline or ';' after statement"))
-        return false;
-
-    *stmt = stmt_make_var(name, type, value);
-    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
-    return true;
-}
-
-static bool
-parser_stmt_return(struct parser *state, struct stmt **stmt)
-{
-    struct expr *value;
-    struct span start;
-
-    start = parser_prev(state)->span;
-
-    value = NULL;
-    if (parser_same_line(state) && parser_curr(state)->tag != TOKEN_SEMI && parser_curr(state)->tag != TOKEN_RBRACE) {
-        if (!parser_expr(state, &value))
-            return false;
-    }
-
-    if (!parser_check_end(state, "Expected newline or ';' after return"))
-        return false;
-
-    *stmt = stmt_make_return(value);
-    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
-    return true;
-}
-
-static bool
-parser_stmt_if(struct parser *state, struct stmt **stmt)
-{
-    struct symbol *sym;
-    struct expr *cond;
-    struct stmt *t_branch, *f_branch;
-    struct span start;
-
-    start = parser_prev(state)->span;
-
-    if (!parser_expr_strict(state, &cond))
-        return false;
-
-    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after if condition"))
-        return false;
-
-    if (!parser_stmt_block(state, &t_branch))
-        return false;
-
-    f_branch = NULL;
-    if (parser_peek_sym(state, &sym) && sym == symbol_else) {
-        parser_advance(state);
-
-        /*
-         * Desugar the 'else if' in another stmt_if node
-         */
-        if (parser_peek_sym(state, &sym) && sym == symbol_if) {
-            parser_advance(state);
-
-            if (!parser_stmt_if(state, &f_branch))
-                return false;
-        } else {
-            if (!parser_check(state, TOKEN_LBRACE, "Expected '{' or 'if' after else"))
-                return false;
-
-            if (!parser_stmt_block(state, &f_branch))
-                return false;
-        }
-    }
-
-    *stmt = stmt_make_if(cond, t_branch, f_branch);
-    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
-    return true;
-}
-
-static bool
-parser_stmt_while(struct parser *state, struct stmt **stmt)
-{
-    struct expr *cond;
-    struct stmt *body;
-    struct span start;
-
-    start = parser_prev(state)->span;
-
-    if (!parser_expr_strict(state, &cond))
-        return false;
-
-    if (!parser_check(state, TOKEN_LBRACE, "Expected '{' after while condition"))
-        return false;
-
-    if (!parser_stmt_block(state, &body))
-        return false;
-
-    *stmt = stmt_make_while(cond, body);
-    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
-    return true;
-}
-
-static bool
-parser_stmt(struct parser *state, struct stmt **stmt)
-{
-    struct symbol *sym;
-    struct expr *expr;
-    struct span start;
-
-    start = parser_curr(state)->span;
-
-    if (parser_match(state, TOKEN_LBRACE)) {
-        return parser_stmt_block(state, stmt);
-    }
-
-    if (parser_peek_sym(state, &sym)) {
-        if (sym == symbol_return) {
-            parser_advance(state);
-            return parser_stmt_return(state, stmt);
-        }
-
-        if (sym == symbol_if) {
-            parser_advance(state);
-            return parser_stmt_if(state, stmt);
-        }
-
-        if (sym == symbol_var) {
-            parser_advance(state);
-            return parser_stmt_var(state, stmt);
-        }
-
-        if (sym == symbol_while) {
-            parser_advance(state);
-            return parser_stmt_while(state, stmt);
-        }
-
-        if (sym == symbol_break) {
-            parser_advance(state);
-            if (!parser_check_end(state, "Expected newline or ';' after break"))
-                return false;
-
-            *stmt = stmt_make_break();
-            goto done;
-        }
-
-        if (sym == symbol_continue) {
-            parser_advance(state);
-            if (!parser_check_end(state, "Expected newline or ';' after continue"))
-                return false;
-
-            *stmt = stmt_make_continue();
-            goto done;
-        }
-    }
-
-    if (!parser_expr(state, &expr))
-        return false;
-
-    if (!parser_check_end(state, "Expected newline or ';' after statement"))
-        return false;
-
-    *stmt = stmt_make_expr(expr);
-
-done:
-    stmt_set_span(*stmt, span_merge(start, parser_prev(state)->span));
-    return true;
-}
-
 /*
  * Declarations
  */
@@ -918,7 +861,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
 {
     struct symbol *sym, *arg_sym;
     struct type *out, *arg_type;
-    struct stmt *body;
+    struct expr *body;
     struct proc_arg *args, **tail, *tmp;
     size_t args_count;
     struct span start;
@@ -968,7 +911,7 @@ parser_decl_proc(struct parser *state, struct decl **decl)
 
     body = NULL;
     if (parser_match(state, TOKEN_LBRACE)) {
-        if (!parser_stmt_block(state, &body))
+        if (!parser_expr_block(state, &body))
             return false;
     } else {
         if (!parser_check_end(state, "Expected '{' or termination after proc signature"))
@@ -1199,44 +1142,85 @@ parser_decl_import(struct parser *state, struct decl **decl)
 }
 
 static bool
+parser_decl_var(struct parser *state, struct decl **decl)
+{
+    struct symbol *name;
+    struct type *type;
+    struct expr *value;
+    struct span start;
+
+    start = parser_prev(state)->span;
+
+    if (!parser_check_sym(state, &name, "Expected var name"))
+        return false;
+
+    type = NULL;
+    if (parser_match(state, TOKEN_COLON)) {
+        if (!parser_type(state, &type))
+            return false;
+    }
+
+    value = NULL;
+    if (parser_match(state, TOKEN_EQ)) {
+        if (!parser_expr(state, &value))
+            return false;
+    }
+
+    if (!parser_check_end(state, "Expected newline or ';' after statement"))
+        return false;
+
+    *decl = decl_make_var(name, type, value);
+    decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    return true;
+}
+
+static bool
 parser_decl(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
+    struct expr *expr;
 
     if (parser_peek_sym(state, &sym)) {
         if (sym == symbol_proc) {
             parser_advance(state);
             return parser_decl_proc(state, decl);
-        }
-
-        if (sym == symbol_struct) {
-            parser_advance(state);
-            return parser_decl_struct(state, decl);
-        }
-
-        if (sym == symbol_type) {
+        } else if (sym == symbol_struct) {
+            /*
+             * There is a slight ambiguity with struct literals expressions
+             *
+             * struct { ... } vs struct Sym { ... }
+             */
+            if (parser_peek_two(state) != TOKEN_LBRACE) {
+                parser_advance(state);
+                return parser_decl_struct(state, decl);
+            }
+        } else if (sym == symbol_type) {
             parser_advance(state);
             return parser_decl_type(state, decl);
-        }
-
-        if (sym == symbol_module) {
+        } else if (sym == symbol_module) {
             parser_advance(state);
             return parser_decl_module(state, decl);
-        }
-
-        if (sym == symbol_sig) {
+        } else if (sym == symbol_sig) {
             parser_advance(state);
             return parser_decl_sig(state, decl);
-        }
-
-        if (sym == symbol_import) {
+        } else if (sym == symbol_import) {
             parser_advance(state);
             return parser_decl_import(state, decl);
+        } else if (sym == symbol_var) {
+            parser_advance(state);
+            return parser_decl_var(state, decl);
         }
     }
 
-    parser_error(state, "Expected declaration");
-    return false;
+    if (!parser_expr(state, &expr))
+        return false;
+
+    if (!parser_check_end(state, "Expected newline or ';' after statement"))
+        return false;
+
+    *decl = decl_make_expr(expr);
+    decl_set_span(*decl, expr->span);
+    return true;
 }
 
 bool
@@ -1249,7 +1233,6 @@ parser_module(struct parser *state, struct decl **decl)
     items = NULL;
     max = 0;
     count = 0;
-
     span = parser_curr(state)->span;
 
     while (!parser_eof(state)) {

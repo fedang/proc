@@ -2033,6 +2033,177 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
     return false;
 }
 
+static bool checker_decl_var(struct checker *state, struct decl_var *decl);
+
+static bool
+checker_block_item(struct checker *state, struct decl *decl)
+{
+    struct expr *expr;
+
+    switch (decl->tag) {
+        case DECL_VAR:
+            return checker_decl_var(state, (struct decl_var *)decl);
+
+        case DECL_EXPR:
+            expr = ((struct decl_expr *)decl)->expr;
+            if (!checker_expr_typed(state, expr, NULL)) {
+                if (!type_is_invalid(expr->type)) {
+                    TYCHK_ERROR(state, expr->span,
+                                "Cannot infer type of expression statement\n");
+                    expr->type = type_get_invalid();
+                }
+                return false;
+            }
+            return true;
+
+        default:
+            TYCHK_ERROR(state, decl->span,
+                        "Declaration of this kind is not allowed inside blocks\n");
+            return false;
+    }
+}
+
+static bool
+checker_expr_block(struct checker *state, struct expr_block *expr)
+{
+    size_t i;
+    unsigned locals;
+    bool ok;
+
+    locals = state->locals_count;
+    ok = true;
+
+    for (i = 0; i < expr->items_count; i++) {
+        if (!checker_block_item(state, expr->items[i])) {
+            ok = false;
+        }
+    }
+
+    checker_local_pop(state, locals);
+
+    expr->expr.type = ok ? type_get_void(NULL) : type_get_invalid();
+    return ok;
+}
+
+static bool
+checker_expr_if(struct checker *state, struct expr_if *expr)
+{
+    bool ok = true;
+
+    if (!checker_expr_typed(state, expr->cond, NULL)) {
+        if (!type_is_invalid(expr->cond->type)) {
+            TYCHK_ERROR(state, expr->cond->span,
+                        "Cannot infer type of condition expression\n");
+            expr->cond->type = type_get_invalid();
+        }
+        ok = false;
+    }
+
+    if (!checker_cmp(state, expr->cond->type, type_get_bool(NULL))) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Condition must be 'bool', but got '%pT'\n",
+                    expr->cond->type);
+        ok = false;
+    }
+
+    if (!checker_expr(state, expr->b_true)) {
+        ok = false;
+    }
+
+    if (expr->b_false && !checker_expr(state, expr->b_false)) {
+        ok = false;
+    }
+
+    expr->expr.type = ok ? type_get_void(NULL) : type_get_invalid();
+    return ok;
+}
+
+static bool
+checker_expr_return(struct checker *state, struct expr_return *expr)
+{
+    if (!expr->value) {
+        if (!checker_cmp(state, state->ret_type, type_get_void(NULL))) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Expected return value of type '%pT'\n",
+                        state->ret_type);
+            expr->expr.type = type_get_invalid();
+            return false;
+        }
+    } else if (!checker_expr_typed(state, expr->value, state->ret_type)) {
+        if (!type_is_invalid(expr->value->type)) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Cannot return type '%pT' from procedure expecting '%pT'\n",
+                        expr->value->type, state->ret_type);
+            expr->expr.type = type_get_invalid();
+        }
+        return false;
+    }
+
+    expr->expr.type = type_get_void(NULL);
+    return true;
+}
+
+static bool
+checker_expr_while(struct checker *state, struct expr_while *expr)
+{
+    bool ok = true;
+
+    if (!checker_expr_typed(state, expr->cond, NULL)) {
+        if (!type_is_invalid(expr->cond->type)) {
+            TYCHK_ERROR(state, expr->cond->span,
+                        "Cannot infer type of condition expression\n");
+            expr->cond->type = type_get_invalid();
+        }
+        ok = false;
+    }
+
+    if (!checker_cmp(state, expr->cond->type, type_get_bool(NULL))) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Condition must be 'bool', but got '%pT'\n",
+                    expr->cond->type);
+        ok = false;
+    }
+
+    state->loop_depth++;
+    if (!checker_expr(state, expr->body)) {
+        ok = false;
+    }
+    state->loop_depth--;
+
+    expr->expr.type = ok ? type_get_void(NULL) : type_get_invalid();
+    return ok;
+}
+
+static bool
+checker_expr_break(struct checker *state, struct expr *expr)
+{
+    bool ok = true;
+
+    if (state->loop_depth == 0) {
+        TYCHK_ERROR(state, expr->span,
+                    "Cannot break outside of a loop\n");
+        ok = false;
+    }
+
+    expr->type = ok ? type_get_void(NULL) : type_get_invalid();
+    return ok;
+}
+
+static bool
+checker_expr_continue(struct checker *state, struct expr *expr)
+{
+    bool ok = true;
+
+    if (state->loop_depth == 0) {
+        TYCHK_ERROR(state, expr->span,
+                    "Cannot continue outside of a loop\n");
+        ok = false;
+    }
+
+    expr->type = ok ? type_get_void(NULL) : type_get_invalid();
+    return ok;
+}
+
 static bool
 checker_expr(struct checker *state, struct expr *expr)
 {
@@ -2067,226 +2238,23 @@ checker_expr(struct checker *state, struct expr *expr)
         case EXPR_MACRO:
             return checker_expr_macro(state, (struct expr_macro *)expr);
 
-        default:
-            unreachable();
-    }
-}
+        case EXPR_BLOCK:
+            return checker_expr_block(state, (struct expr_block *)expr);
 
-/*
- * Statements
- */
-static bool checker_stmt(struct checker *state, struct stmt *stmt);
+        case EXPR_IF:
+            return checker_expr_if(state, (struct expr_if *)expr);
 
-static bool
-checker_stmt_var(struct checker *state, struct stmt_var *stmt)
-{
-    bool ok = true;
+        case EXPR_RETURN:
+            return checker_expr_return(state, (struct expr_return *)expr);
 
-    /*
-     * The user could have provided an explicit type
-     */
-    if (stmt->type) {
-        if (!checker_resolve_type(state, &stmt->type)) {
-            ok = false;
-        }
-    }
+        case EXPR_WHILE:
+            return checker_expr_while(state, (struct expr_while *)expr);
 
-    if (stmt->value) {
-        if (!checker_expr(state, stmt->value)) {
-            stmt->value->type = type_get_invalid();
-            ok = false;
-        } else if (!type_is_invalid(stmt->value->type)) {
-            if (!stmt->type) {
-                if (!checker_expr_coerce(state, stmt->value, NULL)) {
-                    if (!type_is_invalid(stmt->value->type)) {
-                        TYCHK_ERROR(state, stmt->value->span,
-                                    "Cannot infer type of variable '%pS'\n",
-                                    stmt->sym);
-                    }
-                    ok = false;
-                    stmt->type = type_get_invalid();
-                } else {
-                    stmt->type = stmt->value->type;
-                }
-            } else if (!checker_expr_coerce(state, stmt->value, stmt->type)) {
-                if (!type_is_invalid(stmt->value->type)) {
-                    TYCHK_ERROR(state, stmt->stmt.span,
-                                "Cannot initialize variable of type '%pT' with type '%pT'\n",
-                                stmt->type, stmt->value->type);
-                }
-                ok = false;
-            }
-        }
-    }
+        case EXPR_BREAK:
+            return checker_expr_break(state, expr);
 
-    if (!stmt->type) {
-        if (!stmt->value || !type_is_invalid(stmt->value->type)) {
-            TYCHK_ERROR(state, stmt->stmt.span,
-                        "Cannot infer type for variable '%pS', explicit annotation needed\n",
-                        stmt->sym);
-            ok = false;
-        }
-        stmt->type = type_get_invalid();
-    } else if (!type_is_invalid(stmt->type) && !type_is_sized(stmt->type)) {
-        TYCHK_ERROR(state, stmt->stmt.span,
-                    "Variable '%pS' has unsized type '%pT', consider using a pointer instead\n",
-                    stmt->sym, stmt->type);
-        ok = false;
-        stmt->type = type_get_invalid();
-    }
-
-    checker_local_push(state, stmt->sym, stmt->type);
-    return ok;
-}
-
-static bool
-checker_stmt_expr(struct checker *state, struct stmt_expr *stmt)
-{
-    if (!checker_expr_typed(state, stmt->expr, NULL)) {
-        if (!type_is_invalid(stmt->expr->type)) {
-            TYCHK_ERROR(state, stmt->expr->span,
-                        "Cannot infer type of expression statement\n");
-            stmt->expr->type = type_get_invalid();
-        }
-        return false;
-    }
-    return true;
-}
-
-static bool
-checker_stmt_block(struct checker *state, struct stmt_block *stmt)
-{
-    size_t i;
-    unsigned locals;
-    bool ok;
-
-    locals = state->locals_count;
-    ok = true;
-
-    for (i = 0; i < stmt->items_count; i++) {
-        if (!checker_stmt(state, stmt->items[i])) {
-            ok = false;
-        }
-    }
-
-    checker_local_pop(state, locals);
-    return ok;
-}
-
-static bool
-checker_stmt_if(struct checker *state, struct stmt_if *stmt)
-{
-    bool ok = true;
-
-    if (!checker_expr_typed(state, stmt->cond, NULL)) {
-        if (!type_is_invalid(stmt->cond->type)) {
-            TYCHK_ERROR(state, stmt->cond->span,
-                        "Cannot infer type of condition expression\n");
-            stmt->cond->type = type_get_invalid();
-        }
-        ok = false;
-    }
-
-    if (!checker_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
-        TYCHK_ERROR(state, stmt->stmt.span,
-                    "Condition must be 'bool', but got '%pT'\n",
-                    stmt->cond->type);
-        ok = false;
-    }
-
-    if (!checker_stmt(state, stmt->b_true)) {
-        ok = false;
-    }
-
-    if (stmt->b_false && !checker_stmt(state, stmt->b_false)) {
-        ok = false;
-    }
-
-    return ok;
-}
-
-static bool
-checker_stmt_return(struct checker *state, struct stmt_return *stmt)
-{
-    if (!stmt->expr) {
-        if (!checker_cmp(state, state->ret_type, type_get_void(NULL))) {
-            TYCHK_ERROR(state, stmt->stmt.span,
-                        "Expected return value of type '%pT'\n",
-                        state->ret_type);
-            return false;
-        }
-    } else if (!checker_expr_typed(state, stmt->expr, state->ret_type)) {
-        if (!type_is_invalid(stmt->expr->type)) {
-            TYCHK_ERROR(state, stmt->stmt.span,
-                        "Cannot return type '%pT' from procedure expecting '%pT'\n",
-                        stmt->expr->type, state->ret_type);
-            stmt->expr->type = type_get_invalid();
-        }
-        return false;
-    }
-
-    return true;
-}
-
-static bool
-checker_stmt_while(struct checker *state, struct stmt_while *stmt)
-{
-    bool ok = true;
-
-    if (!checker_expr_typed(state, stmt->cond, NULL)) {
-        if (!type_is_invalid(stmt->cond->type)) {
-            TYCHK_ERROR(state, stmt->cond->span,
-                        "Cannot infer type of condition expression\n");
-            stmt->cond->type = type_get_invalid();
-        }
-        ok = false;
-    }
-
-    if (!checker_cmp(state, stmt->cond->type, type_get_bool(NULL))) {
-        TYCHK_ERROR(state, stmt->stmt.span,
-                    "Condition must be 'bool', but got '%pT'\n",
-                    stmt->cond->type);
-        ok = false;
-    }
-
-    state->loop_depth++;
-    if (!checker_stmt(state, stmt->body)) {
-        ok = false;
-    }
-    state->loop_depth--;
-    return ok;
-}
-
-static bool
-checker_stmt(struct checker *state, struct stmt *stmt)
-{
-    switch (stmt->tag) {
-        case STMT_VAR:
-            return checker_stmt_var(state, (struct stmt_var *)stmt);
-
-        case STMT_EXPR:
-            return checker_stmt_expr(state, (struct stmt_expr *)stmt);
-
-        case STMT_BLOCK:
-            return checker_stmt_block(state, (struct stmt_block *)stmt);
-
-        case STMT_IF:
-            return checker_stmt_if(state, (struct stmt_if *)stmt);
-
-        case STMT_RETURN:
-            return checker_stmt_return(state, (struct stmt_return *)stmt);
-
-        case STMT_WHILE:
-            return checker_stmt_while(state, (struct stmt_while *)stmt);
-
-        case STMT_BREAK:
-        case STMT_CONTINUE:
-            if (state->loop_depth == 0) {
-                TYCHK_ERROR(state, stmt->span,
-                            "Cannot break/continue outside of a loop\n");
-                return false;
-            }
-            return true;
+        case EXPR_CONTINUE:
+            return checker_expr_continue(state, expr);
 
         default:
             unreachable();
@@ -2297,37 +2265,43 @@ checker_stmt(struct checker *state, struct stmt *stmt)
  * Return analysis
  */
 static bool
-checker_proc_returns(struct stmt *stmt)
+checker_proc_returns(struct expr *expr)
 {
-    struct stmt_block *block;
-    struct stmt_if *stmt_if;
+    struct expr_block *block;
+    struct expr_if *expr_if;
+    struct decl_expr *d_expr;
+    struct decl_var *d_var;
     size_t i;
 
-    if (!stmt)
+    if (!expr)
         return false;
 
-    switch (stmt->tag) {
-        case STMT_RETURN:
+    // TODO: Cover all cases!
+    switch (expr->tag) {
+        case EXPR_RETURN:
             return true;
 
-        case STMT_BLOCK:
-            block = (struct stmt_block *)stmt;
+        case EXPR_BLOCK:
+            block = (struct expr_block *)expr;
             for (i = 0; i < block->items_count; i++) {
-                if (checker_proc_returns(block->items[i]))
-                    return true;
+                if (block->items[i]->tag == DECL_EXPR) {
+                    d_expr = (struct decl_expr *)block->items[i];
+
+                    if (checker_proc_returns(d_expr->expr))
+                        return true;
+                } else if (block->items[i]->tag == DECL_VAR) {
+                    d_var = (struct decl_var *)block->items[i];
+
+                    if (d_var->value && checker_proc_returns(d_var->value))
+                        return true;
+                }
             }
             return false;
 
-        case STMT_IF:
-            stmt_if = (struct stmt_if *)stmt;
-            if (!stmt_if->b_false)
-                return false;
-            return checker_proc_returns(stmt_if->b_true)
-                && checker_proc_returns(stmt_if->b_false);
-
-        case STMT_EXPR:
-            // TODO: What if we have return as expressions?
-            return false;
+        case EXPR_IF:
+            expr_if = (struct expr_if *)expr;
+            return checker_proc_returns(expr_if->b_false)
+                && checker_proc_returns(expr_if->b_true);
 
         default:
             return false;
@@ -2472,6 +2446,68 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
 }
 
 static bool
+checker_decl_var(struct checker *state, struct decl_var *decl)
+{
+    bool ok = true;
+
+    /*
+     * The user could have provided an explicit type
+     */
+    if (decl->type) {
+        if (!checker_resolve_type(state, &decl->type)) {
+            ok = false;
+        }
+    }
+
+    if (decl->value) {
+        if (!checker_expr(state, decl->value)) {
+            decl->value->type = type_get_invalid();
+            ok = false;
+        } else if (!type_is_invalid(decl->value->type)) {
+            if (!decl->type) {
+                if (!checker_expr_coerce(state, decl->value, NULL)) {
+                    if (!type_is_invalid(decl->value->type)) {
+                        TYCHK_ERROR(state, decl->value->span,
+                                    "Cannot infer type of variable '%pS'\n",
+                                    decl->sym);
+                    }
+                    ok = false;
+                    decl->type = type_get_invalid();
+                } else {
+                    decl->type = decl->value->type;
+                }
+            } else if (!checker_expr_coerce(state, decl->value, decl->type)) {
+                if (!type_is_invalid(decl->value->type)) {
+                    TYCHK_ERROR(state, decl->decl.span,
+                                "Cannot initialize variable of type '%pT' with type '%pT'\n",
+                                decl->type, decl->value->type);
+                }
+                ok = false;
+            }
+        }
+    }
+
+    if (!decl->type) {
+        if (!decl->value || !type_is_invalid(decl->value->type)) {
+            TYCHK_ERROR(state, decl->decl.span,
+                        "Cannot infer type for variable '%pS', explicit annotation needed\n",
+                        decl->sym);
+            ok = false;
+        }
+        decl->type = type_get_invalid();
+    } else if (!type_is_invalid(decl->type) && !type_is_sized(decl->type)) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Variable '%pS' has unsized type '%pT', consider using a pointer instead\n",
+                    decl->sym, decl->type);
+        ok = false;
+        decl->type = type_get_invalid();
+    }
+
+    checker_local_push(state, decl->sym, decl->type);
+    return ok;
+}
+
+static bool
 checker_register_module(struct checker *state, struct decl_module *decl)
 {
     size_t i;
@@ -2493,6 +2529,7 @@ checker_register_decl(struct checker *state, struct decl *decl)
     struct decl_struct *strukt;
     struct decl_type *d_type;
     struct decl_module *mod;
+    struct decl_var *var;
     struct scope *saved, *scope;
     struct binding *bind;
     struct symbol *prefix;
@@ -2592,6 +2629,15 @@ checker_register_decl(struct checker *state, struct decl *decl)
         case DECL_IMPORT:
             return checker_decl_import(state, (struct decl_import *)decl);
 
+        case DECL_VAR:
+            var = (struct decl_var *)decl;
+            if (!checker_register_binding(state, decl, var->sym)) {
+                ok = false;
+            }
+
+            bind = scope_push(state->curr_scope, var->sym, NULL, decl, false);
+            return ok;
+
         default:
             unreachable();
     }
@@ -2665,24 +2711,20 @@ checker_validate_decl(struct checker *state, struct decl *decl)
     if (decl->tag != DECL_PROC)
         return true;
 
-     /*
-     * Proc without a body should not be checked...
-     */
     proc = (struct decl_proc *)decl;
-
-    assert(state->locals_count == 0 && "leftover locals!");
     assert(proc->out && "impossible return type");
 
     if (!proc->body)
         return true;
 
+    assert(state->locals_count == 0 && "leftover locals!");
     for (ptr = proc->args; ptr != NULL; ptr = ptr->next) {
         checker_local_push(state, ptr->sym, ptr->type);
     }
 
     state->loop_depth = 0;
     state->ret_type = proc->out;
-    ok = checker_stmt(state, proc->body);
+    ok = checker_expr(state, proc->body);
     checker_local_pop(state, 0);
 
     if (ok && !type_is_invalid(proc->out) && proc->out->tag != TYPE_VOID

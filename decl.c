@@ -14,7 +14,7 @@ decl_make(size_t size, enum decl_tag tag)
 
 struct decl *
 decl_make_proc(struct symbol *sym, struct type *out,
-               struct proc_arg *args, size_t args_count, struct stmt *body)
+               struct proc_arg *args, size_t args_count, struct expr *body)
 {
     struct decl_proc *decl;
 
@@ -83,6 +83,28 @@ decl_make_import(struct expr *expr)
     struct decl_import *decl;
 
     decl = decl_make(sizeof(struct decl_import), DECL_IMPORT);
+    decl->expr = expr;
+    return &decl->decl;
+}
+
+struct decl *
+decl_make_var(struct symbol *sym, struct type *type, struct expr *value)
+{
+    struct decl_var *decl;
+
+    decl = decl_make(sizeof(struct decl_var), DECL_VAR);
+    decl->sym = sym;
+    decl->type = type;
+    decl->value = value;
+    return &decl->decl;
+}
+
+struct decl *
+decl_make_expr(struct expr *expr)
+{
+    struct decl_expr *decl;
+
+    decl = decl_make(sizeof(struct decl_expr), DECL_EXPR);
     decl->expr = expr;
     return &decl->decl;
 }

@@ -21,6 +21,13 @@ enum expr_tag {
     EXPR_ARRAY,
     EXPR_STRUCT,
     EXPR_MACRO,
+    /* Statement expressions */
+    EXPR_BLOCK,
+    EXPR_IF,
+    EXPR_WHILE,
+    EXPR_RETURN,
+    EXPR_BREAK,
+    EXPR_CONTINUE,
 };
 
 enum literal_tag {
@@ -168,10 +175,36 @@ struct expr_struct {
 struct expr_macro {
     struct expr expr;
     struct symbol *name;
-    struct stmt *body;
+    struct expr *body;
     struct macro macro;
     size_t args_count;
     struct expr *args[];
+};
+
+struct decl;
+
+struct expr_block {
+    struct expr expr;
+    size_t items_count;
+    struct decl *items[];
+};
+
+struct expr_if {
+    struct expr expr;
+    struct expr *cond;
+    struct expr *b_true;
+    struct expr *b_false;
+};
+
+struct expr_while {
+    struct expr expr;
+    struct expr *cond;
+    struct expr *body;
+};
+
+struct expr_return {
+    struct expr expr;
+    struct expr *value;
 };
 
 static inline void
@@ -199,8 +232,21 @@ struct expr *expr_make_array(size_t args_count);
 
 struct expr *expr_make_struct(struct expr *op, size_t fields_count);
 
-struct expr *expr_make_macro(struct symbol *name, struct stmt *body,
+struct expr *expr_make_macro(struct symbol *name, struct expr *body,
                              size_t args_count);
+
+struct expr *expr_make_block(size_t items_count);
+
+struct expr *expr_make_if(struct expr *cond, struct expr *b_true,
+                          struct expr *b_false);
+
+struct expr *expr_make_return(struct expr *value);
+
+struct expr *expr_make_while(struct expr *cond, struct expr *body);
+
+struct expr *expr_make_continue(void);
+
+struct expr *expr_make_break(void);
 
 bool expr_is_lvalue(const struct expr *expr);
 

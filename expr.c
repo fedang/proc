@@ -130,7 +130,7 @@ expr_make_struct(struct expr *op, size_t fields_count)
 }
 
 struct expr *
-expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
+expr_make_macro(struct symbol *name, struct expr *body, size_t args_count)
 {
     struct expr_macro *expr;
     size_t size;
@@ -141,6 +141,63 @@ expr_make_macro(struct symbol *name, struct stmt *body, size_t args_count)
     expr->body = body;
     expr->args_count = args_count;
     return &expr->expr;
+}
+
+struct expr *
+expr_make_block(size_t items_count)
+{
+    struct expr_block *expr;
+    size_t size;
+
+    size = sizeof(struct expr_block) + items_count * sizeof(struct decl *);
+    expr = expr_make(size, EXPR_BLOCK);
+    expr->items_count = items_count;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_if(struct expr *cond, struct expr *b_true, struct expr *b_false)
+{
+    struct expr_if *expr;
+
+    expr = expr_make(sizeof(struct expr_if), EXPR_IF);
+    expr->cond = cond;
+    expr->b_true = b_true;
+    expr->b_false = b_false;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_return(struct expr *value)
+{
+    struct expr_return *expr;
+
+    expr = expr_make(sizeof(struct expr_return), EXPR_RETURN);
+    expr->value = value;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_while(struct expr *cond, struct expr *body)
+{
+    struct expr_while *expr;
+
+    expr = expr_make(sizeof(struct expr_while), EXPR_WHILE);
+    expr->cond = cond;
+    expr->body = body;
+    return &expr->expr;
+}
+
+struct expr *
+expr_make_continue(void)
+{
+    return expr_make(sizeof(struct expr), EXPR_CONTINUE);
+}
+
+struct expr *
+expr_make_break(void)
+{
+    return expr_make(sizeof(struct expr), EXPR_BREAK);
 }
 
 bool
