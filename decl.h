@@ -6,6 +6,8 @@
 
 #include "stmt.h"
 
+struct scope;
+
 struct proc_arg {
     struct attr *attr;
     struct type *type;
@@ -76,6 +78,8 @@ struct decl_sig {
 struct decl_import {
     struct decl decl;
     struct expr *expr;
+    struct scope *target_scope;
+    bool resolved;
 };
 
 static inline void

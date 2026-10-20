@@ -153,6 +153,27 @@ modcache_compute_prefix(const char *path, const char *workdir)
     return symbol_make(buf);
 }
 
+static char *
+modcache_dirname(const char *abs_path)
+{
+    const char *slash;
+    char *buf;
+    size_t len;
+
+    slash = strrchr(abs_path, '/');
+    if (!slash)
+        return strdup(".");
+
+    if (slash == abs_path)
+        return strdup("/");
+
+    len = (size_t)(slash - abs_path);
+    buf = malloc(len + 1);
+    memcpy(buf, abs_path, len);
+    buf[len] = '\0';
+    return buf;
+}
+
 bool
 modcache_load(struct modcache *cache, const char *path,
               struct symbol *name, struct modfile **out)
@@ -220,6 +241,7 @@ modcache_load(struct modcache *cache, const char *path,
     cache->mods[cache->mods_count].src = src;
     cache->mods[cache->mods_count].decl = decl;
     cache->mods[cache->mods_count].abs_path = strdup(abs_buf);
+    cache->mods[cache->mods_count].dir_path = modcache_dirname(abs_buf);
     cache->mods_count++;
 
     prefix = modcache_compute_prefix(abs_buf, cache->rootdir);
@@ -227,7 +249,7 @@ modcache_load(struct modcache *cache, const char *path,
     return true;
 }
 
-bool
+enum import_status
 modcache_import(struct modcache *cache, struct symbol *name,
                 const char *workdir, struct modfile **out)
 {
@@ -235,13 +257,17 @@ modcache_import(struct modcache *cache, struct symbol *name,
 
     snprintf(path, sizeof(path), "%s/%s.lang", workdir, name->str);
     if (modcache_detect(path)) {
-        return modcache_load(cache, path, name, out);
+        return modcache_load(cache, path, name, out)
+             ? IMPORT_DONE
+             : IMPORT_ERROR;
     }
 
     snprintf(path, sizeof(path), "%s/%s/module.lang", workdir, name->str);
     if (modcache_detect(path)) {
-        return modcache_load(cache, path, name, out);
+        return modcache_load(cache, path, name, out)
+             ? IMPORT_DONE
+             : IMPORT_ERROR;
     }
 
-    return false;
+    return IMPORT_NOT_FOUND;
 }

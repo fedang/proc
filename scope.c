@@ -19,12 +19,14 @@ scope_mangle(struct symbol *name, struct symbol *prefix)
 }
 
 struct scope *
-scope_make(struct symbol *name, struct symbol *prefix, struct scope *parent)
+scope_make(struct symbol *name, struct symbol *prefix, struct scope *parent,
+           struct modfile *file)
 {
     struct scope *scope = calloc(1, sizeof(struct scope));
     scope->name = name;
-    scope->parent = parent;
     scope->prefix = prefix;
+    scope->parent = parent;
+    scope->file = file ? file : (parent ? parent->file : NULL);
     return scope;
 }
 

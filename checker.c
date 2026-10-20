@@ -49,7 +49,7 @@ checker_init(struct checker *state, struct modcache *cache)
     state->loop_depth = 0;
     state->locals_count = 0;
 
-    root = scope_make(NULL, NULL, NULL);
+    root = scope_make(NULL, NULL, NULL, NULL);
     state->root_scope = root;
     state->curr_scope = root;
 
@@ -220,8 +220,8 @@ checker_binding_type(struct checker *state, struct binding *bind,
                     "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
 
-        if (bind->decl) {
-            TYCHK_INFO(state, bind->decl->span,
+        if (bind->decl && bind->scope && bind->scope->file) {
+            report_info(&bind->scope->file->src, &bind->decl->span,
                        "Symbol '%pS' was originally declared here\n",
                        bind->sym);
         }
@@ -530,6 +530,188 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
     return ok;
 }
 
+static bool checker_register_file(struct checker *state, struct modfile *file);
+
+static struct scope *
+checker_eval_import(struct checker *state, struct scope *curr_scope,
+                    struct expr *path, struct binding *self_bind)
+{
+    struct expr_access *access;
+    enum import_status status;
+    struct symbol *segment;
+    struct binding *bind, *test;
+    struct scope *scope;
+    struct modfile *file;
+    const char *workdir;
+
+    if (path->tag == EXPR_IDENT) {
+        segment = ((struct expr_ident *)path)->sym;
+
+        /*
+         * Look for the segment in the current scope and its parents,
+         * skipping the stub binding pushed during registration
+         */
+
+        scope = curr_scope;
+        bind = NULL;
+
+        do {
+            test = scope_lookup_local(scope, segment);
+            if (test && test != self_bind) {
+                bind = test;
+                break;
+            }
+
+            scope = scope->parent;
+        } while (scope && scope != state->root_scope);
+
+        /*
+         * If we found a module already in scope, resolve it now
+         */
+        if (bind) {
+            if (!checker_resolve_binding(state, bind))
+                return NULL;
+
+            if (type_is_invalid(bind->type))
+                return NULL;
+
+            if (bind->type->tag != TYPE_MODULE) {
+                TYCHK_ERROR(state, path->span,
+                            "'%pS' is not a module\n",
+                            segment);
+                return NULL;
+            }
+
+            return bind->type->module.scope;
+        }
+
+        /*
+         * If the lexical search did not find a matching local module,
+         * call the modcache importer to search in the filesystem
+         */
+
+        workdir = curr_scope->file
+                ? curr_scope->file->dir_path
+                : state->cache->rootdir;
+
+        status = modcache_import(state->cache, segment, workdir, &file);
+
+        if (status == IMPORT_NOT_FOUND) {
+            TYCHK_ERROR(state, path->span,
+                        "Cannot find module '%pS' to import\n",
+                        segment);
+            return NULL;
+        }
+
+        if (status == IMPORT_ERROR) {
+            /*
+             * Errors should already have been displayed by the importer
+             */
+            return NULL;
+        }
+
+        if (!checker_register_file(state, file))
+            return NULL;
+
+        return ((struct decl_module *)file->decl)->type->module.scope;
+    }
+
+    if (path->tag == EXPR_ACCESS) {
+        access = (struct expr_access *)path;
+
+        /*
+         * Evaluate the parent scope down the chain
+         */
+        scope = checker_eval_import(state, curr_scope, access->op, self_bind);
+        if (!scope)
+            return NULL;
+
+        /*
+         * Subsequent segments strictly walk the resolved module's scope,
+         * without the possibility to call the importer
+         */
+        bind = scope_lookup_local(scope, access->field);
+        if (!bind) {
+            TYCHK_ERROR(state, path->span,
+                        "Module '%pS' has no member named '%pS'\n",
+                        scope->name, access->field);
+            return NULL;
+        }
+
+        if (!checker_resolve_binding(state, bind))
+            return NULL;
+
+        if (type_is_invalid(bind->type))
+            return NULL;
+
+        if (bind->is_type || bind->type->tag != TYPE_MODULE) {
+            TYCHK_ERROR(state, path->span,
+                        "'%pS' is not a module\n", access->field);
+            return NULL;
+        }
+
+        return bind->type->module.scope;
+    }
+
+    TYCHK_ERROR(state, path->span,
+                "Invalid expression in import path\n");
+    return NULL;
+}
+
+static bool
+checker_resolve_import(struct checker *state, struct binding *bind)
+{
+    struct decl_import *import;
+    struct expr *path;
+    struct binding *orig_bind;
+
+    import = (struct decl_import *)bind->decl;
+
+    if (!import->resolved) {
+        import->resolved = true;
+
+        path = import->expr->tag == EXPR_STRUCT
+             ? ((struct expr_struct *)import->expr)->op
+             : import->expr;
+
+        import->target_scope = checker_eval_import(state, bind->scope, path, bind);
+    }
+
+    if (!import->target_scope) {
+        bind->type = type_get_invalid();
+        return false;
+    }
+
+    /*
+     * For simple imports we have no particular symbol to extract,
+     * just bind the last module in the path
+     */
+    if (!bind->import_sym) {
+        bind->type = type_get_module(import->decl.attr, import->target_scope);
+        bind->is_type = false;
+        return true;
+    }
+
+    orig_bind = scope_lookup_local(import->target_scope, bind->import_sym);
+    if (!orig_bind) {
+        TYCHK_ERROR(state, bind->decl->span,
+                    "Module '%pS' has no member named '%pS'\n",
+                    import->target_scope->name, bind->import_sym);
+        bind->type = type_get_invalid();
+        return false;
+    }
+
+    if (!checker_resolve_binding(state, orig_bind)) {
+        bind->type = type_get_invalid();
+        return false;
+    }
+
+    bind->type = orig_bind->type;
+    bind->link_sym = orig_bind->link_sym;
+    bind->is_type = orig_bind->is_type;
+    return !type_is_invalid(bind->type);
+}
+
 static bool
 checker_resolve_binding(struct checker *state, struct binding *bind)
 {
@@ -537,7 +719,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct decl_type *d_type;
     struct type *type, *args[32];
     struct proc_arg *ptr;
-    struct scope *saved, *scope;
+    struct scope *saved_scope, *scope;
+    struct source *saved_src;
     size_t i;
     bool ok = true;
 
@@ -557,14 +740,26 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
         TYCHK_ERROR(state, bind->decl->span,
                     "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
-        TYCHK_INFO(state, bind->decl->span,
-                   "Symbol '%pS' was originally declared here\n",
-                   bind->sym);
+
+        if (bind->scope && bind->scope->file) {
+            TYCHK_INFO(state, bind->decl->span,
+                       "Symbol '%pS' was originally declared here\n",
+                       bind->sym);
+        }
         return false;
     }
 
-    saved = state->curr_scope;
+    saved_src = state->src;
+    saved_scope = state->curr_scope;
+
     state->curr_scope = bind->scope;
+    if (bind->scope && bind->scope->file) {
+        state->src = &bind->scope->file->src;
+    }
+
+    /*
+     * Mark binding as pending to prevent cyclical definitions
+     */
     bind->status = RESOLVE_PENDING;
 
     switch (bind->decl->tag) {
@@ -646,12 +841,18 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             }
             break;
 
+        case DECL_IMPORT:
+            ok = checker_resolve_import(state, bind);
+            break;
+
         default:
             unreachable();
     }
 
+    state->src = saved_src;
+    state->curr_scope = saved_scope;
+
     bind->status = RESOLVE_DONE;
-    state->curr_scope = saved;
     return ok;
 }
 
@@ -1034,8 +1235,15 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
     }
 
     type = checker_binding_type(state, bind, expr->expr.span);
-    if (!type)
+    if (!type) {
+        expr->expr.type = type_get_invalid();
         return false;
+    }
+
+    if (type_is_invalid(type)) {
+        expr->expr.type = type_get_invalid();
+        return true;
+    }
 
     if (bind->is_type) {
         TYCHK_ERROR(state, expr->expr.span,
@@ -1192,6 +1400,12 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
         if (!expr_is_mem(expr->op)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Address-of operator requires a memory location\n");
+            return false;
+        }
+
+        if (expr->op->type->tag == TYPE_MODULE) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Address-of module is not implemented yet\n");
             return false;
         }
     }
@@ -1379,8 +1593,15 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
         }
 
         type = checker_binding_type(state, bind, expr->expr.span);
-        if (!type)
+        if (!type) {
+            expr->expr.type = type_get_invalid();
             return false;
+        }
+
+        if (type_is_invalid(type)) {
+            expr->expr.type = type_get_invalid();
+            return true;
+        }
 
         if (bind->is_type) {
             TYCHK_ERROR(state, expr->expr.span,
@@ -1494,7 +1715,7 @@ checker_expr_array(struct checker *state, struct expr_array *expr)
 
         if (type_is_invalid(expr->args[i]->type)) {
             expr->expr.type = type_get_invalid();
-            return false;
+            return true;
         }
 
         /*
@@ -2137,57 +2358,111 @@ checker_register_binding(struct checker *state, struct decl *decl,
     TYCHK_ERROR(state, decl->span,
                 "Redefinition of symbol '%pS'\n", sym);
 
-    if (bind->decl) {
-        TYCHK_INFO(state, bind->decl->span,
-                   "Symbol '%pS' was originally declared here\n", sym);
+    if (bind->decl && bind->scope && bind->scope->file) {
+        report_info(&bind->scope->file->src, &bind->decl->span,
+                   "Symbol '%pS' was originally declared here\n",
+                   bind->sym);
     }
     return false;
+}
+
+static struct symbol *
+checker_import_target(struct checker *state, struct expr *path)
+{
+    struct expr_access *access;
+
+    if (path->tag == EXPR_IDENT) {
+        return ((struct expr_ident *)path)->sym;
+    }
+
+    if (path->tag == EXPR_ACCESS) {
+        access = (struct expr_access *)path;
+
+        /*
+         * Validate the rest of the subtree before returning
+         */
+        if (!checker_import_target(state, access->op))
+            return NULL;
+
+        return access->field;
+    }
+
+    TYCHK_ERROR(state, path->span,
+                "Invalid expression in import path\n");
+    return NULL;
 }
 
 static bool
 checker_decl_import(struct checker *state, struct decl_import *decl)
 {
-    struct symbol *mod;
-    struct type *type;
+    struct expr_struct *extract;
+    struct expr *path, *value;
+    struct symbol *target, *local, *orig;
     struct binding *bind;
-    struct modfile *file;
+    size_t i;
     bool ok = true;
 
-    if (decl->expr->tag != EXPR_IDENT) {
+    extract = decl->expr->tag == EXPR_STRUCT
+            ? (struct expr_struct *)decl->expr
+            : NULL;
+
+    path = extract ? extract->op : decl->expr;
+    if (!path) {
         TYCHK_ERROR(state, decl->decl.span,
-                    "Only simple imports are supported for now\n");
+                    "Expected module path in import\n");
         return false;
     }
 
-    mod = ((struct expr_ident *)decl->expr)->sym;
+    target = checker_import_target(state, path);
+    if (!target)
+        return false;
 
-    bind = scope_lookup_local(state->curr_scope, mod);
-    if (!bind) {
-        file = NULL;
-        if (!modcache_import(state->cache, mod, state->cache->rootdir, &file)) {
-            TYCHK_ERROR(state, decl->decl.span,
-                        "Cannot find module '%pS'\n",
-                        mod);
+    /*
+     * For simple imports (import A.B.C) we just register a stub of the target
+     */
+    if (!extract) {
+        if (!checker_register_binding(state, &decl->decl, target))
             return false;
+
+        bind = scope_push(state->curr_scope, target, NULL, &decl->decl, false);
+        return true;
+    }
+
+    /*
+     * For imports that extract values (import A.B.C {foo = bar; baz})
+     * we need to register everything with the respective import_sym
+     */
+    for (i = 0; i < extract->fields_count; i++) {
+        value = extract->fields[i].value;
+        local = extract->fields[i].field->sym;
+        orig = local;
+
+        if (extract->fields[i].colon) {
+            TYCHK_ERROR(state, extract->expr.span,
+                        "Import extraction uses '=', not ':'\n");
+            ok = false;
+            continue;
         }
-        if (!checker_register_file(state, file))
-            return false;
 
-        type = ((struct decl_module *)file->decl)->type;
-    } else {
-        type = bind->type;
+        if (value) {
+            if (value->tag != EXPR_IDENT) {
+                TYCHK_ERROR(state, value->span,
+                            "Extraction alias must be a simple identifier\n");
+                ok = false;
+                continue;
+            }
+            orig = ((struct expr_ident *)extract->fields[i].value)->sym;
+        }
+
+        if (!checker_register_binding(state, &decl->decl, local)) {
+            ok = false;
+            continue;
+        }
+
+        bind = scope_push(state->curr_scope, local, NULL, &decl->decl, false);
+        bind->import_sym = orig;
     }
 
-    if (!type || type->tag != TYPE_MODULE) {
-        TYCHK_ERROR(state, decl->decl.span,
-                    "'%pS' is not a module\n", mod);
-        return false;
-    }
-
-    ok = checker_register_binding(state, &decl->decl, mod);
-
-    bind = scope_push(state->curr_scope, mod, type, &decl->decl, false);
-    bind->status = RESOLVE_DONE;
     return ok;
 }
 
@@ -2198,16 +2473,8 @@ checker_register_module(struct checker *state, struct decl_module *decl)
     bool ok = true;
 
     for (i = 0; i < decl->items_count; i++) {
-        if (decl->items[i]->tag != DECL_IMPORT) {
-            if (!checker_register_decl(state, decl->items[i]))
-                ok = false;
-        }
-    }
-
-    for (i = 0; i < decl->items_count; i++) {
-        if (decl->items[i]->tag == DECL_IMPORT) {
-            if (!checker_decl_import(state, (struct decl_import *)decl->items[i]))
-                ok = false;
+        if (!checker_register_decl(state, decl->items[i])) {
+            ok = false;
         }
     }
 
@@ -2296,7 +2563,7 @@ checker_register_decl(struct checker *state, struct decl *decl)
                    : scope_mangle(mod->sym, state->curr_scope->prefix);
 
             if (!mod->type) {
-                scope = scope_make(mod->sym, prefix, state->curr_scope);
+                scope = scope_make(mod->sym, prefix, state->curr_scope, NULL);
                 mod->type = type_get_module(decl->attr, scope);
             }
 
@@ -2316,6 +2583,9 @@ checker_register_decl(struct checker *state, struct decl *decl)
             TYCHK_ERROR(state, decl->span,
                         "Signature declarations are not yet supported\n");
             return false;
+
+        case DECL_IMPORT:
+            return checker_decl_import(state, (struct decl_import *)decl);
 
         default:
             unreachable();
@@ -2337,7 +2607,7 @@ checker_register_file(struct checker *state, struct modfile *file)
 
     mod = (struct decl_module *)file->decl;
     if (!mod->type) {
-        scope = scope_make(mod->sym, mod->prefix, state->root_scope);
+        scope = scope_make(mod->sym, mod->prefix, state->root_scope, file);
         mod->type = type_get_module(mod->decl.attr, scope);
     }
 
@@ -2366,8 +2636,7 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
     if (decl->tag == DECL_MODULE) {
         mod = (struct decl_module *)decl;
-
-        assert(mod->type && "impossible module type");
+        assert(mod->type && "impossible for nested modules");
 
         if (mod->type->tag != TYPE_MODULE) {
             TYCHK_ERROR(state, decl->span,
@@ -2447,7 +2716,13 @@ checker_resolve_file(struct checker *state, struct modfile *file)
     bool ok = true;
 
     mod = (struct decl_module *)file->decl;
-    assert(mod->type && "impossible?");
+    if (!mod->type) {
+        TYCHK_ERROR(state, mod->decl.span,
+                     "Module '%s' was not registered before resolution\n",
+                     file->abs_path);
+        return false;
+    }
+
     scope = mod->type->module.scope;
 
     saved_src = state->src;
