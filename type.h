@@ -93,6 +93,12 @@ size_t type_sizeof(const struct type *type);
 size_t type_alignof(const struct type *type);
 
 static inline bool
+type_is_invalid(const struct type *type)
+{
+    return type->tag == TYPE_INVALID;
+}
+
+static inline bool
 type_is_integer(const struct type *type)
 {
     return type->tag == TYPE_INT
@@ -118,7 +124,8 @@ type_is_ordered(const struct type *type)
 static inline bool
 type_is_sized(const struct type *type)
 {
-    return type->tag != TYPE_PROC
+    return !type_is_invalid(type)
+        && type->tag != TYPE_PROC
         && type->tag != TYPE_OPAQUE
         && type->tag != TYPE_MODULE
         && type->tag != TYPE_ANY_INT;
@@ -129,12 +136,6 @@ type_is_zst(const struct type *type)
 {
     return type_is_sized(type)
         && type_sizeof(type) == 0;
-}
-
-static inline bool
-type_is_invalid(const struct type *type)
-{
-    return type->tag == TYPE_INVALID;
 }
 
 static inline size_t

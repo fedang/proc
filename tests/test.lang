@@ -32,6 +32,11 @@ proc zero_test() : @type_of(1) {
     var zero: zst
     var v: void
 
+    while true {
+        puts("Once")
+        var sus = break
+    }
+
     if @cast(bool, 1) {
         puts("cast true")
     }

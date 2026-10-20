@@ -1,0 +1,3 @@
+struct K {
+    k: [int, @size_of(K)]
+}

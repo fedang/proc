@@ -261,17 +261,21 @@ parser_expr_return(struct parser *state, struct expr **expr)
 {
     struct expr *value;
     struct span start;
+    enum token_tag tag;
 
     start = parser_prev(state)->span;
+    tag = parser_curr(state)->tag;
 
     value = NULL;
-    if (parser_same_line(state) && parser_curr(state)->tag != TOKEN_SEMI && parser_curr(state)->tag != TOKEN_RBRACE) {
+    if (parser_same_line(state)
+            && tag != TOKEN_COMMA
+            && tag != TOKEN_SEMI
+            && tag != TOKEN_RPAREN
+            && tag != TOKEN_RBRACK
+            && tag != TOKEN_RBRACE) {
         if (!parser_expr(state, &value))
             return false;
     }
-
-    if (!parser_check_end(state, "Expected newline or ';' after return"))
-        return false;
 
     *expr = expr_make_return(value);
     expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
@@ -1215,7 +1219,7 @@ parser_decl(struct parser *state, struct decl **decl)
     if (!parser_expr(state, &expr))
         return false;
 
-    if (!parser_check_end(state, "Expected newline or ';' after statement"))
+    if (!parser_check_end(state, "Expected newline or ';' after expression"))
         return false;
 
     *decl = decl_make_expr(expr);

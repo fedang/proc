@@ -66,7 +66,7 @@ static bool checker_resolve_type(struct checker *state, struct type **type);
 
 static bool checker_resolve_binding(struct checker *state, struct binding *bind);
 
-static struct type *checker_eval_raw(struct checker *state, struct expr *expr);
+static struct type *checker_resolve_raw(struct checker *state, struct expr *expr);
 
 static bool checker_expr(struct checker *state, struct expr *expr);
 
@@ -237,7 +237,7 @@ checker_binding_type(struct checker *state, struct binding *bind,
 }
 
 static struct type *
-checker_eval_raw(struct checker *state, struct expr *expr)
+checker_resolve_raw(struct checker *state, struct expr *expr)
 {
     struct binding *bind;
     struct type *type;
@@ -282,7 +282,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            type = checker_eval_raw(state, unop->op);
+            type = checker_resolve_raw(state, unop->op);
             if (!type || type_is_invalid(type))
                 return type;
 
@@ -306,7 +306,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
         case EXPR_ACCESS:
             access = (struct expr_access *)expr;
 
-            type = checker_eval_raw(state, access->op);
+            type = checker_resolve_raw(state, access->op);
             if (!type || type_is_invalid(type))
                 return type;
 
@@ -344,7 +344,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
-            type = checker_eval_raw(state, array->args[0]);
+            type = checker_resolve_raw(state, array->args[0]);
             if (!type || type_is_invalid(type))
                 return type;
 
@@ -412,7 +412,7 @@ checker_eval_raw(struct checker *state, struct expr *expr)
 
             for (i = 0; i < strukt->fields_count; i++) {
                 fields[i].name = strukt->fields[i].field->sym;
-                fields[i].type = checker_eval_raw(state, strukt->fields[i].value);
+                fields[i].type = checker_resolve_raw(state, strukt->fields[i].value);
                 fields[i].index = i;
 
                 if (!fields[i].type)
@@ -479,7 +479,7 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
             return false;
 
         case TYPE_RAW:
-            type = checker_eval_raw(state, type->raw);
+            type = checker_resolve_raw(state, type->raw);
             if (!type) {
                 ok = false;
             } else {
@@ -503,7 +503,7 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
 
         case TYPE_STRUCT:
             /*
-             * Struct types should already be resolved by checker_eval_raw
+             * Struct types should already be resolved by checker_resolve_raw
              */
             break;
 
@@ -1833,7 +1833,7 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
     /*
      * Named struct literals
      */
-    type = checker_eval_raw(state, expr->op);
+    type = checker_resolve_raw(state, expr->op);
     if (!type) {
         expr->expr.type = type_get_invalid();
         return false;
@@ -1940,7 +1940,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             return false;
         }
 
-        type = checker_eval_raw(state, expr->args[0]);
+        type = checker_resolve_raw(state, expr->args[0]);
         if (!type)
             return false;
 
@@ -1978,7 +1978,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
         if (!checker_expr(state, expr->args[1]))
             return false;
 
-        type = checker_eval_raw(state, expr->args[0]);
+        type = checker_resolve_raw(state, expr->args[0]);
         if (!type)
             return false;
 
@@ -2295,19 +2295,66 @@ checker_expr(struct checker *state, struct expr *expr)
 static bool
 checker_proc_returns(struct expr *expr)
 {
-    struct expr_block *block;
-    struct expr_if *expr_if;
     struct decl_expr *d_expr;
     struct decl_var *d_var;
+    struct expr_block *block;
+    struct expr_macro *macro;
+    struct expr_call *call;
+    struct expr_array *array;
     size_t i;
 
     if (!expr)
         return false;
 
-    // TODO: Cover all cases!
     switch (expr->tag) {
-        case EXPR_RETURN:
-            return true;
+        case EXPR_LITERAL:
+        case EXPR_IDENT:
+        case EXPR_BREAK:
+        case EXPR_CONTINUE:
+        case EXPR_WHILE:
+            return false;
+
+        case EXPR_BINOP:
+            return checker_proc_returns(((struct expr_binop *)expr)->op_lhs)
+                && checker_proc_returns(((struct expr_binop *)expr)->op_rhs);
+
+        case EXPR_UNOP:
+            return checker_proc_returns(((struct expr_unop *)expr)->op);
+
+        case EXPR_CALL:
+            call = (struct expr_call *)expr;
+            if (checker_proc_returns(call->op))
+                return true;
+
+            for (i = 0; i < call->args_count; i++) {
+                if (checker_proc_returns(call->args[i]))
+                    return true;
+            }
+            return false;
+
+        case EXPR_INDEX:
+            return checker_proc_returns(((struct expr_index *)expr)->op)
+                && checker_proc_returns(((struct expr_index *)expr)->index);
+
+        case EXPR_ACCESS:
+            return checker_proc_returns(((struct expr_access *)expr)->op);
+
+        case EXPR_ARRAY:
+            array = (struct expr_array *)expr;
+            for (i = 0; i < array->args_count; i++) {
+                if (checker_proc_returns(array->args[i]))
+                    return true;
+            }
+            return false;
+
+        case EXPR_STRUCT:
+            // XXX
+            return false;
+
+        case EXPR_MACRO:
+            macro = (struct expr_macro *)expr;
+            return macro->macro.tag == MACRO_EXPR
+                && checker_proc_returns(macro->macro.expr);
 
         case EXPR_BLOCK:
             block = (struct expr_block *)expr;
@@ -2327,9 +2374,11 @@ checker_proc_returns(struct expr *expr)
             return false;
 
         case EXPR_IF:
-            expr_if = (struct expr_if *)expr;
-            return checker_proc_returns(expr_if->b_false)
-                && checker_proc_returns(expr_if->b_true);
+            return checker_proc_returns(((struct expr_if *)expr)->b_false)
+                && checker_proc_returns(((struct expr_if *)expr)->b_true);
+
+        case EXPR_RETURN:
+            return true;
 
         default:
             return false;
@@ -2666,6 +2715,12 @@ checker_register_decl(struct checker *state, struct decl *decl)
             bind = scope_push(state->curr_scope, var->sym, NULL, decl, false);
             var->link_sym = bind->link_sym;
             return ok;
+
+        case DECL_EXPR:
+            // TODO: Allow macro calls here
+            TYCHK_ERROR(state, decl->span,
+                        "Expressions are not allowed at module scope\n");
+            return false;
 
         default:
             unreachable();
