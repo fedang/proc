@@ -264,8 +264,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             type = checker_binding_type(state, bind, expr->span);
-            if (!type)
-                return NULL;
+            if (!type || type_is_invalid(type))
+                return type;
 
             if (!bind->is_type && type->tag != TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span, "'%pS' is not a type\n", ident->sym);
@@ -283,8 +283,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             type = checker_eval_raw(state, unop->op);
-            if (!type)
-                return NULL;
+            if (!type || type_is_invalid(type))
+                return type;
 
             if (type->tag == TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span,
@@ -307,11 +307,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             access = (struct expr_access *)expr;
 
             type = checker_eval_raw(state, access->op);
-            if (!type)
-                return NULL;
-
-            if (type_is_invalid(type))
-                return type_get_invalid();
+            if (!type || type_is_invalid(type))
+                return type;
 
             if (type->tag != TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span,
@@ -329,8 +326,8 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             type = checker_binding_type(state, bind, expr->span);
-            if (!type)
-                return NULL;
+            if (!type || type_is_invalid(type))
+                return type;
 
             if (!bind->is_type && type->tag != TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span, "'%pS' is not a type\n", access->field);
@@ -348,7 +345,10 @@ checker_eval_raw(struct checker *state, struct expr *expr)
             }
 
             type = checker_eval_raw(state, array->args[0]);
-            if (!type || !checker_resolve_type(state, &type))
+            if (!type || type_is_invalid(type))
+                return type;
+
+            if (!checker_resolve_type(state, &type))
                 return NULL;
 
             if (!type_is_sized(type)) {
@@ -534,7 +534,7 @@ static bool checker_register_file(struct checker *state, struct modfile *file);
 
 static struct scope *
 checker_eval_import(struct checker *state, struct scope *curr_scope,
-                    struct expr *path, struct binding *self_bind)
+                    struct expr *path, struct decl *decl)
 {
     struct expr_access *access;
     enum import_status status;
@@ -557,7 +557,7 @@ checker_eval_import(struct checker *state, struct scope *curr_scope,
 
         do {
             test = scope_lookup_local(scope, segment);
-            if (test && test != self_bind) {
+            if (test && test->decl != decl) {
                 bind = test;
                 break;
             }
@@ -622,7 +622,7 @@ checker_eval_import(struct checker *state, struct scope *curr_scope,
         /*
          * Evaluate the parent scope down the chain
          */
-        scope = checker_eval_import(state, curr_scope, access->op, self_bind);
+        scope = checker_eval_import(state, curr_scope, access->op, decl);
         if (!scope)
             return NULL;
 
@@ -674,7 +674,8 @@ checker_resolve_import(struct checker *state, struct binding *bind)
              ? ((struct expr_struct *)import->expr)->op
              : import->expr;
 
-        import->target_scope = checker_eval_import(state, bind->scope, path, bind);
+        import->target_scope = checker_eval_import(state, bind->scope, path,
+                                                   bind->decl);
     }
 
     if (!import->target_scope) {
@@ -2424,6 +2425,10 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
         if (!checker_register_binding(state, &decl->decl, target))
             return false;
 
+        /*
+         * Differently from other declarations, don't push duplicae imports
+         * into scope unconditionally to avoid snowballing errors
+         */
         bind = scope_push(state->curr_scope, target, NULL, &decl->decl, false);
         return true;
     }
