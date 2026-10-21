@@ -1,3 +1,13 @@
 struct K {
     k: [int, @size_of(K)]
 }
+
+struct XK {
+    k: struct {
+        x: [int, @size_of(XK)]
+    }
+}
+
+struct X { }
+
+var x: [int, @size_of(X)]

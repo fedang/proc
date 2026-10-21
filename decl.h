@@ -8,6 +8,8 @@
 
 struct scope;
 
+struct binding;
+
 struct proc_arg {
     struct attr *attr;
     struct type *type;
@@ -50,6 +52,7 @@ struct decl_struct {
     struct struct_field *fields;
     size_t fields_count;
     struct type *type;
+    struct binding *bind;
 };
 
 struct decl_type {

@@ -480,7 +480,7 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
 
         case TYPE_RAW:
             type = checker_resolve_raw(state, type->raw);
-            if (!type) {
+            if (!type || type_is_invalid(type)) {
                 ok = false;
             } else {
                 *type_ptr = type;
@@ -713,6 +713,71 @@ checker_resolve_import(struct checker *state, struct binding *bind)
     return !type_is_invalid(bind->type);
 }
 
+/*
+ * Check type layout completeness, forbidding cycles that are not
+ * wrapped by pointers or slices
+ */
+static bool
+checker_resolve_layout(struct checker *state, struct type *type)
+{
+    struct decl_struct *decl;
+    struct binding *bind;
+    size_t i;
+
+    if (!type || type_is_invalid(type))
+        return false;
+
+    switch (type->tag) {
+        case TYPE_RAW:
+        case TYPE_INVALID:
+            /*
+             * We should never see this, but if we do the layout is not good
+             */
+            return false;
+
+        case TYPE_PTR:
+        case TYPE_SLICE:
+            return true;
+
+        case TYPE_ARRAY:
+            return checker_resolve_layout(state, type->array.item);
+
+        case TYPE_STRUCT:
+            decl = type->strukt.decl;
+            if (!decl) {
+                /*
+                 * Anonymous struct types do not have an associated declaration
+                 */
+                for (i = 0; i < type->strukt.fields_count; i++) {
+                    if (!checker_resolve_layout(state, type->strukt.fields[i].type))
+                        return false;
+                }
+
+                return true;
+            }
+
+            bind = decl->bind;
+            assert(bind && "named struct must have a binding");
+
+            if (bind->status == RESOLVE_PENDING) {
+                assert(bind->scope && bind->scope->file && "root type cycle?");
+                report_error(&bind->scope->file->src, &bind->decl->span,
+                             "Struct '%pS' has infinitely recursive layout\n",
+                             bind->sym);
+                return false;
+            }
+
+            if (bind->status == RESOLVE_NONE &&
+                !checker_resolve_binding(state, bind))
+                return false;
+
+            return bind->type && !type_is_invalid(bind->type);
+
+        default:
+            return true;
+    }
+}
+
 static bool
 checker_resolve_binding(struct checker *state, struct binding *bind)
 {
@@ -785,6 +850,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
         case DECL_STRUCT:
             type = bind->type;
+
             for (i = 0; i < type->strukt.fields_count; i++) {
                 if (!checker_resolve_type(state, &type->strukt.fields[i].type)) {
                     ok = false;
@@ -796,6 +862,20 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                     ok = false;
                     type->strukt.fields[i].type = type_get_invalid();
                 }
+            }
+
+            for (i = 0; i < type->strukt.fields_count; i++) {
+                if (type_is_invalid(type->strukt.fields[i].type))
+                    continue;
+
+                if (!checker_resolve_layout(state, type->strukt.fields[i].type)) {
+                    ok = false;
+                    type->strukt.fields[i].type = type_get_invalid();
+                }
+            }
+
+            if (!ok) {
+                bind->type = type_get_invalid();
             }
             break;
 
@@ -1949,6 +2029,11 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             return true;
         }
 
+        if (!checker_resolve_layout(state, type)) {
+            expr->expr.type = type_get_invalid();
+            return false;
+        }
+
         if (!type_is_sized(type)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Expected a sized type, but got '%pT'\n",
@@ -2649,6 +2734,7 @@ checker_register_decl(struct checker *state, struct decl *decl)
             bind = scope_push(state->curr_scope, strukt->sym,
                               strukt->type, decl, true);
             strukt->link_sym = bind->link_sym;
+            strukt->bind = bind;
             return ok;
 
         case DECL_TYPE:

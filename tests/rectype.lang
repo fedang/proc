@@ -1,3 +1,29 @@
+// BAD
 struct Node {
     next: Node
+}
+
+struct C { a: D }
+struct D { b: C }
+
+
+struct L { x: struct { y: L } }
+struct OP {
+    y: [OP, 4]
+}
+
+// GOOD
+
+struct Fine {
+    next: *Fine
+}
+
+struct B { a: A }
+struct A { b: *B }
+
+struct K { b: Z }
+struct Z { a: *K }
+
+struct OK {
+    y: [*OK, 4]
 }

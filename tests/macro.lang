@@ -1,0 +1,5 @@
+macro foo(args: [expr], block: expr): expr {
+    return @quote() {
+        @unquote(args[0]) + @unquote(args[1])
+    }
+}
