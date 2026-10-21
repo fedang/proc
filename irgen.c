@@ -41,6 +41,10 @@ irgen_val(struct irgen *state, struct irval val)
             IR_EMITF(state, "undef");
             break;
 
+        case IRVAL_POISON:
+            IR_EMITF(state, "poison");
+            break;
+
         case IRVAL_INT:
             IR_EMITF(state, "%ld", val.ival);
             break;
@@ -241,7 +245,7 @@ irgen_emit_extractvalue(struct irgen *state, struct irval arr,
     struct irval out;
 
     if (type_is_zst(arr_type) || type_is_zst(type))
-        return IRVAL_INT(0);
+        return IRVAL_POISON();
 
     out = IRVAL_REG(irgen_fresh_reg(state));
     IR_EMITF(state, "\t%%%u = extractvalue ", out.reg);
@@ -259,7 +263,7 @@ irgen_emit_insertvalue(struct irgen *state, struct irval arr, struct type *arr_t
     struct irval out;
 
     if (type_is_zst(arr_type) || type_is_zst(type))
-        return IRVAL_INT(0);
+        return IRVAL_POISON();
 
     out = IRVAL_REG(irgen_fresh_reg(state));
     IR_EMITF(state, "\t%%%u = insertvalue ", out.reg);
@@ -300,7 +304,7 @@ irgen_emit_load(struct irgen *state, struct type *type, struct irval slot)
     struct irval out;
 
     if (type_is_zst(type))
-        return IRVAL_INT(0);
+        return IRVAL_POISON();
 
     out = IRVAL_REG(irgen_fresh_reg(state));
     IR_EMITF(state, "\t%%%u = load ", out.reg);
@@ -668,7 +672,7 @@ irgen_expr_binop(struct irgen *state, struct expr_binop *expr)
         }
 
         irgen_emit_store(state, expr->op_rhs->type, lhs, rhs);
-        return IRVAL_INT(0);
+        return IRVAL_POISON();
     }
 
     lhs = irgen_expr(state, expr->op_lhs);
@@ -746,7 +750,7 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
     }
 
     if (type_is_zst(expr->expr.type)) {
-        out = IRVAL_INT(0);
+        out = IRVAL_POISON();
         IR_EMITF(state, "\tcall ");
     } else {
         out = IRVAL_REG(irgen_fresh_reg(state));
@@ -913,7 +917,7 @@ irgen_expr_block(struct irgen *state, struct expr_block *expr)
     }
 
     state->locals_count = locals;
-    return IRVAL_INT(0);
+    return IRVAL_POISON();
 }
 
 static struct irval
@@ -925,11 +929,11 @@ irgen_expr_return(struct irgen *state, struct expr_return *expr)
         val = irgen_expr(state, expr->value);
         irgen_emit_ret(state, expr->value->type, val);
     } else {
-        val = IRVAL_INT(0);
+        val = IRVAL_POISON();
         irgen_emit_ret(state, type_get_void(NULL), val);
     }
 
-    return IRVAL_INT(0);
+    return IRVAL_POISON();
 }
 
 /*
@@ -976,7 +980,7 @@ irgen_expr_if(struct irgen *state, struct expr_if *expr)
     }
 
     irgen_emit_block(state, merge_label);
-    return IRVAL_INT(0);
+    return IRVAL_POISON();
 }
 
 /*
@@ -1022,21 +1026,21 @@ irgen_expr_while(struct irgen *state, struct expr_while *expr)
     state->loop_exit = saved_exit;
 
     irgen_emit_block(state, exit_label);
-    return IRVAL_INT(0);
+    return IRVAL_POISON();
 }
 
 static struct irval
 irgen_expr_continue(struct irgen *state, struct expr *expr)
 {
     irgen_emit_br(state, state->loop_cond);
-    return IRVAL_INT(0);
+    return IRVAL_POISON();
 }
 
 static struct irval
 irgen_expr_break(struct irgen *state, struct expr *expr)
 {
     irgen_emit_br(state, state->loop_exit);
-    return IRVAL_INT(0);
+    return IRVAL_POISON();
 }
 
 struct irval

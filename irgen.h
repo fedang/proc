@@ -10,6 +10,7 @@ enum irval_tag {
     IRVAL_INVALID,
     IRVAL_ZERO,
     IRVAL_UNDEF,
+    IRVAL_POISON,
     IRVAL_INT,
     IRVAL_REG,
     IRVAL_GLOBAL,
@@ -25,10 +26,11 @@ struct irval {
     };
 };
 
-#define IRVAL_ZERO() ((struct irval) { IRVAL_ZERO, {} })
-#define IRVAL_UNDEF() ((struct irval) { IRVAL_UNDEF, {} })
-#define IRVAL_INT(v) ((struct irval) { IRVAL_INT, { .ival = (v) } })
-#define IRVAL_REG(v) ((struct irval) { IRVAL_REG, { .reg = (v) } })
+#define IRVAL_ZERO()    ((struct irval) { IRVAL_ZERO, {} })
+#define IRVAL_UNDEF()   ((struct irval) { IRVAL_UNDEF, {} })
+#define IRVAL_POISON()  ((struct irval) { IRVAL_POISON, {} })
+#define IRVAL_INT(v)    ((struct irval) { IRVAL_INT, { .ival = (v) } })
+#define IRVAL_REG(v)    ((struct irval) { IRVAL_REG, { .reg = (v) } })
 #define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { .global = (v) } })
 #define IRVAL_STRING(v) ((struct irval) { IRVAL_STRING, { .reg = (v) } })
 
