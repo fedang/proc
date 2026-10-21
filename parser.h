@@ -9,6 +9,7 @@
 #include "decl.h"
 
 struct parser {
+    struct source_map *src_map;
     struct source *src;
     struct token *tokens;
     size_t curr;
@@ -18,7 +19,8 @@ struct parser {
     bool no_block;
 };
 
-void parser_init(struct parser *state, struct source *src, struct token *tokens);
+void parser_init(struct parser *state, struct source_map *src_map,
+                 struct source *src,  struct token *tokens);
 
 bool parser_module(struct parser *state, struct decl **decl);
 

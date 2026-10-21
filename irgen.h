@@ -38,7 +38,6 @@ struct irvar {
 };
 
 struct irgen {
-    struct source *src;
     FILE *out;
     unsigned regs;
     unsigned labels;

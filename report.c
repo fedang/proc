@@ -17,8 +17,10 @@
 #define TERM_CYAN   "\033[1;36m"
 
 static void
-report_format(FILE *out, const char *fmt, va_list args)
+report_format(FILE *out, const struct source_map *map,
+              const char *fmt, va_list args)
 {
+    const struct source *src;
     struct symbol *sym;
     struct span *span;
 
@@ -61,9 +63,13 @@ report_format(FILE *out, const char *fmt, va_list args)
 
             if (fmt[1] == 'L') {
                 span = va_arg(args, struct span *);
-                if (span && span->start && span->end) {
+                if (span) {
+                    src = source_map_get(map, span->src_id);
+                    assert(map && src && "expected valid src");
+
                     fprintf(out, "%.*s",
-                            (int)(span->end - span->start), span->start);
+                            (int)(span->end - span->start),
+                            &src->str[span->start]);
                 } else {
                     fprintf(out, "<null>");
                 }
@@ -106,33 +112,50 @@ static void
 report_source_span(const struct source *src, const struct span *span,
                    const char *color)
 {
-    const char *line_ptr, *line_end, *tmp;
+    const char *start, *end, *tmp, *line_head, *line_tail;
     bool in_color, in_span;
-    unsigned line;
-
-    line_ptr = span->start;
-    line = span->start_line;
+    unsigned line, start_line, end_line;
 
     assert(src->str && "invalid src");
-    assert(span->start && span->end && span->start <= span->end && "invalid span");
+    assert(span->start <= span->end && "invalid span");
 
-    while (line_ptr > src->str && *(line_ptr - 1) != '\n') {
-        line_ptr--;
+    start = &src->str[span->start];
+    end = &src->str[span->end];
+    start_line = span->line;
+    end_line = span->line;
+
+    /*
+     * Compute the last line in the span
+     */
+    for (tmp = start; tmp < end; tmp++) {
+        if (*tmp == '\n')
+            end_line++;
     }
 
-    while (line_ptr <= src->str + src->len && line <= span->end_line) {
-        line_end = line_ptr;
+    /*
+     * Find the start of the the first line in the span
+     */
+    line_head = start;
+    while (line_head > src->str && line_head[-1] != '\n') {
+        line_head--;
+    }
 
-        while (*line_end != '\0' && *line_end != '\n') {
-            line_end++;
+    line = start_line;
+    while (line_head <= src->str + src->len && line <= end_line) {
+        /*
+         * Calculate the end of the current line
+         */
+        line_tail = line_head;
+        while (*line_tail != '\0' && *line_tail != '\n') {
+            line_tail++;
         }
 
         /*
          * Ellipsise spans longer than 4 lines
          */
-        if (span->end_line - span->start_line >= 4) {
-            if (line > span->start_line + 1 && line < span->end_line - 1) {
-                if (line == span->start_line + 2) {
+        if (end_line - start_line >= 4) {
+            if (line > start_line + 1 && line < end_line - 1) {
+                if (line == start_line + 2) {
                     fprintf(stderr, "      | ...\n");
                 }
                 goto done;
@@ -142,8 +165,8 @@ report_source_span(const struct source *src, const struct span *span,
         fprintf(stderr, " %4u | ", line);
 
         in_color = false;
-        for (tmp = line_ptr; tmp < line_end; tmp++) {
-            in_span = tmp >= span->start && tmp < span->end;
+        for (tmp = line_head; tmp < line_tail; tmp++) {
+            in_span = tmp >= start && tmp < end;
 
             if (in_span && !in_color) {
                 fprintf(stderr, "%s", color);
@@ -160,15 +183,15 @@ report_source_span(const struct source *src, const struct span *span,
         }
         fprintf(stderr, "\n");
 
-        if (line == span->start_line) {
+        if (line == start_line) {
             fprintf(stderr, "      | %s", color);
 
-            for (tmp = line_ptr; tmp <= line_end && tmp < span->end; tmp++) {
-                if (tmp == span->start) {
+            for (tmp = line_head; tmp <= line_tail && tmp < end; tmp++) {
+                if (tmp == start) {
                     fputc('^', stderr);
-                } else if (tmp > span->start) {
+                } else if (tmp > start) {
                     fputc('~', stderr);
-                } else if (tmp < line_end) {
+                } else if (tmp < line_tail) {
                     fputc(*tmp == '\t' ? '\t' : ' ', stderr);
                 }
             }
@@ -176,37 +199,40 @@ report_source_span(const struct source *src, const struct span *span,
         }
 
 done:
-        if (*line_end == '\0')
+        if (*line_tail == '\0')
             break;
 
-        line_ptr = line_end + 1;
+        line_head = line_tail + 1;
         line++;
     }
 
     /*
      * If we have a multi-line span, add a final line for spacing
      */
-    if (span->end_line > span->start_line) {
+    if (end_line > start_line) {
         fprintf(stderr, "      |\n");
     }
 }
 
 static void
-report_message(const struct source *src, const struct span *span, int level,
-               const char *fmt, va_list args)
+report_message(const struct source_map *map, const struct span *span,
+               int level, const char *fmt, va_list args)
 {
     const char *color, *label;
+    const struct source *src;
 
-    assert((!span || src) && "either just source or both");
+    assert(((span && map) || (!span && !map)) && "either both or neither");
 
-    if (src)
+    if (span) {
+        src = source_map_get(map, span->src_id);
+
         fprintf(stderr, TERM_BOLD "%s:", src->path);
 
-    if (span)
-        fprintf(stderr, "%u:", span->start_line);
+        if (span->line > 0)
+            fprintf(stderr, "%u:", span->line);
 
-    if (src || span)
         fprintf(stderr, " ");
+    }
 
     if (level == REPORT_ERROR) {
         label = "error";
@@ -222,38 +248,38 @@ report_message(const struct source *src, const struct span *span, int level,
     }
 
     fprintf(stderr, TERM_NORM "%s%s: " TERM_NORM, color, label);
-    report_format(stderr, fmt, args);
+    report_format(stderr, map, fmt, args);
 
-    if (src && span)
+    if (span && span->line > 0)
         report_source_span(src, span, color);
 }
 
 void
-report_error(const struct source *src, const struct span *span,
+report_error(const struct source_map *map, const struct span *span,
              const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    report_message(src, span, REPORT_ERROR, fmt, args);
+    report_message(map, span, REPORT_ERROR, fmt, args);
     va_end(args);
 }
 
 void
-report_warning(const struct source *src, const struct span *span,
+report_warning(const struct source_map *map, const struct span *span,
                const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    report_message(src, span, REPORT_WARNING, fmt, args);
+    report_message(map, span, REPORT_WARNING, fmt, args);
     va_end(args);
 }
 
 void
-report_info(const struct source *src, const struct span *span,
+report_info(const struct source_map *map, const struct span *span,
             const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    report_message(src, span, REPORT_INFO, fmt, args);
+    report_message(map, span, REPORT_INFO, fmt, args);
     va_end(args);
 }

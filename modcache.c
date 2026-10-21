@@ -33,10 +33,12 @@ modcache_init(struct modcache *cache, const char *rootdir)
     memset(cache, 0, sizeof(struct modcache));
     assert(realpath(rootdir ? rootdir : ".", abs_buf));
     cache->rootdir = strdup(abs_buf);
+
+    source_map_init(&cache->src_map);
 }
 
 static struct symbol *
-modcache_derive_name(struct source *src)
+modcache_derive_name(struct source_map *map, struct source *src)
 {
     const char *base, *end, *ptr, *dir;
     size_t len;
@@ -55,7 +57,7 @@ modcache_derive_name(struct source *src)
      */
     if (strcmp(base, "module.lang") == 0) {
         if (base == src->path) {
-            report_error(src, NULL,
+            report_error(map, &SOURCE_SPAN(src),
                          "'module.lang' must be inside a named directory\n");
             return NULL;
         }
@@ -89,27 +91,27 @@ modcache_derive_name(struct source *src)
     len = end - base;
 
     if (len == 0) {
-        report_error(src, NULL,
+        report_error(map, &SOURCE_SPAN(src),
                      "Empty or hidden filenames are not allowed as module names\n");
         return NULL;
     }
 
     if (!isalpha(*base) && *base != '_') {
-        report_error(src, NULL,
+        report_error(map, &SOURCE_SPAN(src),
                      "Module name must start with a letter or underscore\n");
         return NULL;
     }
 
     for (ptr = base + 1; ptr < end; ptr++) {
         if (!isalnum(*ptr) && *ptr != '_') {
-            report_error(src, NULL,
+            report_error(map, &SOURCE_SPAN(src),
                          "Module name can only contain alphanumerics and underscores\n");
             return NULL;
         }
     }
 
     if (len == 6 && !memcmp(base, "module", 6)) {
-        report_error(src, NULL,
+        report_error(map, &SOURCE_SPAN(src),
                      "Module name 'module' is reserved\n");
         return NULL;
     }
@@ -179,7 +181,7 @@ modcache_load(struct modcache *cache, const char *path,
               struct symbol *name, struct modfile **out)
 {
     char abs_buf[PATH_MAX];
-    struct source src;
+    struct source *src;
     struct lexer lexer;
     struct parser parser;
     struct token *tokens;
@@ -197,10 +199,10 @@ modcache_load(struct modcache *cache, const char *path,
      */
     for (i = 0; i < cache->mods_count; i++) {
         if (!strcmp(cache->mods[i].abs_path, abs_buf)) {
-            if (name && name != cache->mods[i].src.name) {
+            if (name && name != cache->mods[i].src->name) {
                 report_error(NULL, NULL,
-                             "Module '%s' already loaded as '%s'\n",
-                             name->str, cache->mods[i].src.name->str);
+                             "Module '%pS' already loaded as '%pS'\n",
+                             name, cache->mods[i].src->name);
                 return false;
             }
 
@@ -211,24 +213,23 @@ modcache_load(struct modcache *cache, const char *path,
         }
     }
 
-    source_init(&src, path, name);
-    if (!name) {
-        name = modcache_derive_name(&src);
-        if (!name)
+    src = source_map_push(&cache->src_map, path, name);
+    if (!src->name) {
+        src->name = modcache_derive_name(&cache->src_map, src);
+        if (!src->name)
             return false;
-
-        src.name = name;
     }
 
-    if (!source_load(&src)) {
-        report_error(&src, NULL, "Failed to load module file\n");
+    if (!source_load(src)) {
+        report_error(&cache->src_map, &SOURCE_SPAN(src),
+                     "Failed to load module file '%pS'\n", src->name);
         return false;
     }
 
-    lexer_init(&lexer, &src);
+    lexer_init(&lexer, src);
     lexer_tokenize(&lexer, &tokens);
 
-    parser_init(&parser, &src, tokens);
+    parser_init(&parser, &cache->src_map, src, tokens);
     if (!parser_module(&parser, &decl))
         return false;
 

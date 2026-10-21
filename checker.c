@@ -6,13 +6,13 @@
 #include "report.h"
 
 #define TYCHK_ERROR(state, span, ...) \
-    report_error((state)->src, &(span), __VA_ARGS__)
+    report_error(&(state)->cache->src_map, &(span), __VA_ARGS__)
 
 #define TYCHK_WARN(state, span, ...) \
-    report_warning((state)->src, &(span), __VA_ARGS__)
+    report_warning(&(state)->cache->src_map, &(span), __VA_ARGS__)
 
 #define TYCHK_INFO(state, span, ...) \
-    report_info((state)->src, &(span), __VA_ARGS__)
+    report_info(&(state)->cache->src_map, &(span), __VA_ARGS__)
 
 static void
 checker_root_push(struct checker *state, const char *name, struct type *type)
@@ -44,7 +44,6 @@ checker_init(struct checker *state, struct modcache *cache)
     struct scope *root;
 
     state->cache = cache;
-    state->src = NULL;
     state->ret_type = NULL;
     state->loop_depth = 0;
     state->locals_count = 0;
@@ -220,8 +219,8 @@ checker_binding_type(struct checker *state, struct binding *bind,
                     "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
 
-        if (bind->decl && bind->scope && bind->scope->file) {
-            report_info(&bind->scope->file->src, &bind->decl->span,
+        if (bind->decl) {
+            TYCHK_INFO(state, bind->decl->span,
                        "Symbol '%pS' was originally declared here\n",
                        bind->sym);
         }
@@ -764,9 +763,9 @@ checker_resolve_layout(struct checker *state, struct type *type)
 
             if (bind->status == RESOLVE_PENDING) {
                 assert(bind->scope && bind->scope->file && "root type cycle?");
-                report_error(&bind->scope->file->src, &bind->decl->span,
-                             "Struct '%pS' has infinitely recursive layout\n",
-                             bind->sym);
+                TYCHK_ERROR(state, bind->decl->span,
+                            "Struct '%pS' has infinitely recursive layout\n",
+                            bind->sym);
                 return false;
             }
 
@@ -790,7 +789,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct type *type, *args[32];
     struct proc_arg *ptr;
     struct scope *saved_scope, *scope;
-    struct source *saved_src;
     size_t i;
     bool ok = true;
 
@@ -819,13 +817,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
         return false;
     }
 
-    saved_src = state->src;
     saved_scope = state->curr_scope;
-
     state->curr_scope = bind->scope;
-    if (bind->scope && bind->scope->file) {
-        state->src = &bind->scope->file->src;
-    }
 
     /*
      * Mark binding as pending to prevent cyclical definitions
@@ -962,7 +955,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             unreachable();
     }
 
-    state->src = saved_src;
     state->curr_scope = saved_scope;
 
     bind->status = RESOLVE_DONE;
@@ -2507,8 +2499,8 @@ checker_register_binding(struct checker *state, struct decl *decl,
     TYCHK_ERROR(state, decl->span,
                 "Redefinition of symbol '%pS'\n", sym);
 
-    if (bind->decl && bind->scope && bind->scope->file) {
-        report_info(&bind->scope->file->src, &bind->decl->span,
+    if (bind->decl) {
+        TYCHK_INFO(state, bind->decl->span,
                    "Symbol '%pS' was originally declared here\n",
                    bind->sym);
     }
@@ -2839,7 +2831,6 @@ checker_register_file(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
     struct scope *saved_scope, *scope;
-    struct source *saved_src;
     bool ok = true;
 
     if (file->registered)
@@ -2853,15 +2844,12 @@ checker_register_file(struct checker *state, struct modfile *file)
         mod->type = type_get_module(mod->decl.attr, scope);
     }
 
-    saved_src = state->src;
     saved_scope = state->curr_scope;
 
-    state->src = &file->src;
     state->curr_scope = mod->type->module.scope;
 
     ok = checker_register_module(state, mod);
 
-    state->src = saved_src;
     state->curr_scope = saved_scope;
     return ok;
 }
@@ -2970,16 +2958,7 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 static bool
 checker_validate_file(struct checker *state, struct modfile *file)
 {
-    struct source *saved_src;
-    bool ok;
-
-    saved_src = state->src;
-    state->src = &file->src;
-
-    ok = checker_validate_decl(state, file->decl);
-
-    state->src = saved_src;
-    return ok;
+    return checker_validate_decl(state, file->decl);
 }
 
 static bool
@@ -2987,7 +2966,6 @@ checker_resolve_file(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
     struct scope *scope;
-    struct source *saved_src;
     size_t i;
     bool ok = true;
 
@@ -3000,16 +2978,11 @@ checker_resolve_file(struct checker *state, struct modfile *file)
     }
 
     scope = mod->type->module.scope;
-
-    saved_src = state->src;
-    state->src = &file->src;
-
     for (i = 0; i < scope->bindings_count; i++) {
         if (!checker_resolve_binding(state, &scope->bindings[i]))
             ok = false;
     }
 
-    state->src = saved_src;
     return ok;
 }
 

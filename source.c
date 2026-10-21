@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 500
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -5,19 +6,6 @@
 
 #include "source.h"
 #include "report.h"
-
-void
-source_init(struct source *src, const char *path, struct symbol *name)
-{
-    size_t len;
-
-    memset(src, 0, sizeof(struct source));
-    src->name = name;
-
-    len = strlen(path) + 1;
-    src->path = malloc(len);
-    memcpy(src->path, path, len);
-}
 
 bool
 source_load(struct source *src)
@@ -55,4 +43,39 @@ source_load(struct source *src)
     src->str = buf;
     src->len = fsize;
     return true;
+}
+
+void
+source_map_init(struct source_map *map)
+{
+    memset(map, 0, sizeof(struct source_map));
+
+    /*
+     * Let the first source be a sentinel for invalid spans
+     */
+    map->srcs[0].path = "<unknown>";
+    map->count++;
+}
+
+struct source *
+source_map_push(struct source_map *map, const char *path, struct symbol *name)
+{
+    struct source *src;
+    assert(map->count < 256 && "too many sources");
+
+    src = &map->srcs[map->count];
+    src->src_id = map->count;
+    src->path = strdup(path);
+    src->name = name;
+    map->count++;
+    return src;
+}
+
+const struct source *
+source_map_get(const struct source_map *map, unsigned src_id)
+{
+    if (src_id >= map->count)
+        return &map->srcs[0];
+
+    return &map->srcs[src_id];
 }

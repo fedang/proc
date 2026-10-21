@@ -9,8 +9,10 @@
 // TODO: Improve flag tracking for recovery
 
 void
-parser_init(struct parser *state, struct source *src, struct token *tokens)
+parser_init(struct parser *state, struct source_map *src_map,
+            struct source *src,  struct token *tokens)
 {
+    state->src_map = src_map;
     state->src = src;
     state->tokens = tokens;
     state->curr = 0;
@@ -66,7 +68,7 @@ parser_match(struct parser *state, enum token_tag tag)
 static void
 parser_error(struct parser *state, const char *msg)
 {
-    report_error(state->src, &parser_curr(state)->span, "%s\n", msg);
+    report_error(state->src_map, &parser_curr(state)->span, "%s\n", msg);
 
     state->error = true;
     state->perfect = false;
@@ -75,7 +77,7 @@ parser_error(struct parser *state, const char *msg)
 static void
 parser_error_prev(struct parser *state, const char *msg)
 {
-    report_error(state->src, &parser_prev(state)->span, "%s\n", msg);
+    report_error(state->src_map, &parser_prev(state)->span, "%s\n", msg);
 
     state->error = true;
     state->perfect = false;
@@ -94,8 +96,7 @@ parser_check(struct parser *state, enum token_tag tag, const char *msg)
 static inline bool
 parser_same_line(struct parser *state)
 {
-    return parser_curr(state)->span.start_line
-        == parser_prev(state)->span.end_line;
+    return parser_curr(state)->same_line;
 }
 
 static bool
@@ -114,7 +115,7 @@ parser_check_end(struct parser *state, const char *msg)
     /*
      * Implicit newline termination
      */
-    if (parser_curr(state)->span.start_line > parser_prev(state)->span.end_line)
+    if (!parser_same_line(state))
         return true;
 
     parser_error(state, msg);
@@ -130,7 +131,7 @@ parser_peek_sym(struct parser *state, struct symbol **sym)
         return false;
 
     token = parser_curr(state);
-    *sym = symbol_intern(token->span.start,
+    *sym = symbol_intern(&state->src->str[token->span.start],
                          token->span.end - token->span.start);
     return true;
 }
@@ -365,41 +366,48 @@ parser_expr_while(struct parser *state, struct expr **expr)
 static bool
 parser_integer(struct parser *state, int64_t *value)
 {
-    const char *start, *end;
+    unsigned start, end;
+    size_t len, i;
     int digit, base;
+    const char *str;
 
     start = parser_prev(state)->span.start;
     end = parser_prev(state)->span.end;
-    base = 10;
+    len = end - start;
+    str = &state->src->str[start];
 
-    if (end - start > 2 && start[0] == '0') {
-        if (start[1] == 'x') {
+    base = 10;
+    *value = 0;
+
+    if (len > 2 && str[0] == '0') {
+        if (str[1] == 'x') {
             base = 16;
-        } else if (start[1] == 'o') {
+        } else if (str[1] == 'o') {
             base = 8;
-        } else if (start[1] == 'b') {
+        } else if (str[1] == 'b') {
             base = 2;
         } else {
             parser_error_prev(state, "Malformed integer literal");
             return false;
         }
 
-        start += 2;
-        if (start == end) {
+        len -= 2;
+        str += 2;
+
+        if (len == 0) {
             parser_error_prev(state, "Missing digits after integer prefix");
             return false;
         }
     }
 
-    *value = 0;
-    while (start < end) {
+    for (i = 0; i < len; i++) {
         digit = -1;
-        if (isdigit(*start)) {
-            digit = *start - '0';
-        } else if (isupper(*start)) {
-            digit = *start - 'A' + 10;
-        } else if (islower(*start)) {
-            digit = *start - 'a' + 10;
+        if (isdigit(str[i])) {
+            digit = str[i] - '0';
+        } else if (isupper(str[i])) {
+            digit = str[i] - 'A' + 10;
+        } else if (islower(str[i])) {
+            digit = str[i] - 'a' + 10;
         }
 
         if (digit < 0 || digit >= base) {
@@ -424,20 +432,22 @@ parser_integer(struct parser *state, int64_t *value)
 static bool
 parser_escape_string(struct parser *state, const char **string)
 {
+    const char *start;
     struct span span;
     size_t i, j, len;
     char c, *buf;
 
     span = parser_prev(state)->span;
+    start = &state->src->str[span.start];
     len = (span.end - span.start) - 2;
     buf = malloc(len + 1);
 
     for (i = 0, j = 0; j < len; ++j) {
-        c = span.start[j + 1];
+        c = start[j + 1];
 
         if (c == '\\' && j + 1 < len) {
             j++;
-            c = span.start[j + 1];
+            c = start[j + 1];
 
             switch (c) {
                 case 'n':

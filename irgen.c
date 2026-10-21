@@ -1437,7 +1437,6 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
      * Emit all types to avoid declaration ordering issues
      */
     for (i = 0; i < cache->mods_count; i++) {
-        state->src = &cache->mods[i].src;
         irgen_decl_types(state, cache->mods[i].decl);
     }
 
@@ -1445,7 +1444,6 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
      * Emit all procedure bodies
      */
     for (i = 0; i < cache->mods_count; i++) {
-        state->src = &cache->mods[i].src;
         irgen_decl_bodies(state, cache->mods[i].decl);
     }
 

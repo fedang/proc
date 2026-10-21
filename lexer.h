@@ -12,6 +12,7 @@ struct lexer {
     size_t start;
     unsigned line;
     unsigned start_line;
+    unsigned prev_line;
 
     struct token *tokens;
     size_t tokens_count;

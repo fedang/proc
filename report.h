@@ -17,15 +17,15 @@
 #endif
 
 CHECK_FMT(3, 4)
-void report_error(const struct source *src, const struct span *span,
+void report_error(const struct source_map *map, const struct span *span,
                   const char *fmt, ...);
 
 CHECK_FMT(3, 4)
-void report_warning(const struct source *src, const struct span *span,
+void report_warning(const struct source_map *map, const struct span *span,
                     const char *fmt, ...);
 
 CHECK_FMT(3, 4)
-void report_info(const struct source *src, const struct span *span,
+void report_info(const struct source_map *map, const struct span *span,
                  const char *fmt, ...);
 
 // TODO: report_blunder for ICEs

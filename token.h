@@ -72,6 +72,7 @@ enum token_tag {
 struct token {
     struct span span;
     enum token_tag tag;
+    unsigned same_line : 1;
 };
 
 #endif

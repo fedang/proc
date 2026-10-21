@@ -14,7 +14,7 @@ enum import_status {
 };
 
 struct modfile {
-    struct source src;
+    struct source *src;
     struct decl *decl;
     char *abs_path;
     char *dir_path;
@@ -23,6 +23,7 @@ struct modfile {
 
 struct modcache {
     const char *rootdir;
+    struct source_map src_map;
     struct modfile mods[256];
     size_t mods_count;
 };

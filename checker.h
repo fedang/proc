@@ -15,7 +15,6 @@ struct local_var {
 
 struct checker {
     struct modcache *cache;
-    struct source *src;
     unsigned loop_depth;
     struct type *ret_type;
     struct scope *root_scope;

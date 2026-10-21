@@ -13,6 +13,7 @@ lexer_init(struct lexer *state, struct source *src)
     state->start = 0;
     state->line = 1;
     state->start_line = 1;
+    state->prev_line = 0;
 
     state->tokens = NULL;
     state->tokens_count = 0;
@@ -58,11 +59,14 @@ lexer_push(struct lexer *state, enum token_tag tag)
     }
 
     token = &state->tokens[state->tokens_count++];
-    token->span.start = &state->src->str[state->start];
-    token->span.end = &state->src->str[state->curr];
-    token->span.start_line = state->start_line;
-    token->span.end_line = state->line;
+    token->span.src_id = state->src->src_id;
+    token->span.start = state->start;
+    token->span.end = state->curr;
+    token->span.line = state->start_line;
     token->tag = tag;
+    token->same_line = state->line == state->prev_line;
+
+    state->prev_line = state->line;
 }
 
 static void
