@@ -744,7 +744,7 @@ done:
 static inline unsigned
 parser_token_prec(enum token_tag tag)
 {
-    static const int prec_table[TOKEN_EOF] = {
+    static const unsigned prec_table[TOKEN_EOF] = {
         [TOKEN_EQ] = 1,
         [TOKEN_ANDEQ] = 1,
         [TOKEN_OREQ] = 1,
@@ -1298,7 +1298,7 @@ parser_module(struct parser *state, struct decl **decl)
     expr_set_span(block, span);
     free(items);
 
-    *decl = decl_make_module(state->src->name, NULL, block);
+    *decl = decl_make_module(NULL, NULL, block);
     decl_set_span(*decl, span);
     return state->perfect;
 }

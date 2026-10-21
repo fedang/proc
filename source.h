@@ -11,8 +11,6 @@ struct source {
     char *path;
     const char *str;
     size_t len;
-    /* Associated module name */
-    struct symbol *name;
 };
 
 struct source_map {
@@ -27,8 +25,7 @@ bool source_load(struct source *src);
 
 void source_map_init(struct source_map *map);
 
-struct source *source_map_push(struct source_map *map, const char *path,
-                               struct symbol *name);
+struct source *source_map_push(struct source_map *map, const char *path);
 
 const struct source *source_map_get(const struct source_map *map,
                                     unsigned src_id);

@@ -186,7 +186,7 @@ modcache_load(struct modcache *cache, const char *path,
     struct parser parser;
     struct token *tokens;
     struct decl *decl;
-    struct symbol *prefix;
+    struct decl_module *mod;
     size_t i;
 
     if (!realpath(path, abs_buf)) {
@@ -199,10 +199,12 @@ modcache_load(struct modcache *cache, const char *path,
      */
     for (i = 0; i < cache->mods_count; i++) {
         if (!strcmp(cache->mods[i].abs_path, abs_buf)) {
-            if (name && name != cache->mods[i].src->name) {
+            mod = (struct decl_module *)cache->mods[i].decl;
+
+            if (name && name != mod->sym) {
                 report_error(NULL, NULL,
                              "Module '%pS' already loaded as '%pS'\n",
-                             name, cache->mods[i].src->name);
+                             name, mod->sym);
                 return false;
             }
 
@@ -213,16 +215,16 @@ modcache_load(struct modcache *cache, const char *path,
         }
     }
 
-    src = source_map_push(&cache->src_map, path, name);
-    if (!src->name) {
-        src->name = modcache_derive_name(&cache->src_map, src);
-        if (!src->name)
+    src = source_map_push(&cache->src_map, path);
+    if (!name) {
+        name = modcache_derive_name(&cache->src_map, src);
+        if (!name)
             return false;
     }
 
     if (!source_load(src)) {
         report_error(&cache->src_map, &SOURCE_SPAN(src),
-                     "Failed to load module file '%pS'\n", src->name);
+                     "Failed to load module file '%pS'\n", name);
         return false;
     }
 
@@ -245,8 +247,9 @@ modcache_load(struct modcache *cache, const char *path,
     cache->mods[cache->mods_count].dir_path = modcache_dirname(abs_buf);
     cache->mods_count++;
 
-    prefix = modcache_compute_prefix(abs_buf, cache->rootdir);
-    ((struct decl_module *)decl)->prefix = prefix;
+    mod = (struct decl_module *)decl;
+    mod->sym = name;
+    mod->prefix = modcache_compute_prefix(abs_buf, cache->rootdir);
     return true;
 }
 

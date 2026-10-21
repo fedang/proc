@@ -58,7 +58,7 @@ source_map_init(struct source_map *map)
 }
 
 struct source *
-source_map_push(struct source_map *map, const char *path, struct symbol *name)
+source_map_push(struct source_map *map, const char *path)
 {
     struct source *src;
     assert(map->count < 256 && "too many sources");
@@ -66,7 +66,6 @@ source_map_push(struct source_map *map, const char *path, struct symbol *name)
     src = &map->srcs[map->count];
     src->src_id = map->count;
     src->path = strdup(path);
-    src->name = name;
     map->count++;
     return src;
 }
