@@ -34,8 +34,6 @@ struct scope {
     size_t bindings_count;
 };
 
-struct symbol *scope_mangle(struct symbol *name, struct symbol *prefix);
-
 struct scope *scope_make(struct symbol *name, struct symbol *prefix,
                          struct scope *parent, struct modfile *file);
 

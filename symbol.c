@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 
@@ -45,6 +46,19 @@ struct symbol *
 symbol_make(const char *str)
 {
     return symbol_intern(str, strlen(str));
+}
+
+struct symbol *
+symbol_mangle(struct symbol *prefix, struct symbol *sym)
+{
+    char buf[1024];
+    size_t len;
+
+    if (!prefix)
+        return sym;
+
+    len = snprintf(buf, sizeof(buf), "%s.%s", prefix->str, sym->str);
+    return symbol_intern(buf, len);
 }
 
 void

@@ -3,21 +3,6 @@
 
 #include "scope.h"
 
-struct symbol *
-scope_mangle(struct symbol *name, struct symbol *prefix)
-{
-    char buf[1024];
-    size_t len;
-
-    if (!prefix)
-        return name;
-
-    len = snprintf(buf, sizeof(buf), "%s.%s", prefix->str, name->str);
-    assert(len < sizeof(buf) && "name too long");
-
-    return symbol_intern(buf, len);
-}
-
 struct scope *
 scope_make(struct symbol *name, struct symbol *prefix, struct scope *parent,
            struct modfile *file)
@@ -40,13 +25,19 @@ scope_push(struct scope *scope, struct symbol *sym,
     bind = &scope->bindings[scope->bindings_count++];
 
     bind->sym = sym;
-    bind->link_sym = scope_mangle(sym, scope->prefix);
     bind->status = decl ? RESOLVE_NONE : RESOLVE_DONE;
     bind->scope = scope;
     bind->is_type = is_type;
     bind->is_public = true;
     bind->decl = decl;
     bind->type = type;
+
+    /*
+     * Avoid computing link symbol for declarations that don't need it
+     */
+    if (decl && (decl->tag == DECL_PROC
+        || decl->tag == DECL_STRUCT || decl->tag == DECL_VAR))
+        bind->link_sym = symbol_mangle(scope->prefix, sym);
 
     return bind;
 }

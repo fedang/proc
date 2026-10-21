@@ -45,6 +45,8 @@ struct symbol *symbol_intern(const char *str, size_t len);
 
 struct symbol *symbol_make(const char *str);
 
+struct symbol *symbol_mangle(struct symbol *prefix, struct symbol *sym);
+
 void symbol_init(void);
 
 #endif

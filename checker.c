@@ -2778,7 +2778,7 @@ checker_register_decl(struct checker *state, struct decl *decl)
              */
             prefix = mod->prefix
                    ? mod->prefix
-                   : scope_mangle(mod->sym, state->curr_scope->prefix);
+                   : symbol_mangle(state->curr_scope->prefix, mod->sym);
 
             if (!mod->type) {
                 scope = scope_make(mod->sym, prefix, state->curr_scope, NULL);
