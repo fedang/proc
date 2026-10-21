@@ -1,0 +1,12 @@
+// good
+var x = 0x10;
+var y = 0o10;
+var z = 0b10;
+
+// bad
+var a = 0x;
+var a = 0000;
+var a = 0xZZZ;
+var a = 0b789;
+
+var x = 0xffffffffffffffff;

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include "parser.h"
 #include "report.h"
@@ -66,6 +67,15 @@ static void
 parser_error(struct parser *state, const char *msg)
 {
     report_error(state->src, &parser_curr(state)->span, "%s\n", msg);
+
+    state->error = true;
+    state->perfect = false;
+}
+
+static void
+parser_error_prev(struct parser *state, const char *msg)
+{
+    report_error(state->src, &parser_prev(state)->span, "%s\n", msg);
 
     state->error = true;
     state->perfect = false;
@@ -165,7 +175,9 @@ parser_sync(struct parser *state)
 
     while (!parser_eof(state)) {
         if (parser_peek_sym(state, &sym)) {
-            if (sym == symbol_proc || sym == symbol_struct || sym == symbol_type)
+            if (sym == symbol_proc || sym == symbol_struct ||
+                sym == symbol_type || sym == symbol_var ||
+                sym == symbol_module || sym == symbol_sig)
                 return;
         }
 
@@ -350,6 +362,64 @@ parser_expr_while(struct parser *state, struct expr **expr)
     return true;
 }
 
+static bool
+parser_integer(struct parser *state, int64_t *value)
+{
+    const char *start, *end;
+    int digit, base;
+
+    start = parser_prev(state)->span.start;
+    end = parser_prev(state)->span.end;
+    base = 10;
+
+    if (end - start > 2 && start[0] == '0') {
+        if (start[1] == 'x') {
+            base = 16;
+        } else if (start[1] == 'o') {
+            base = 8;
+        } else if (start[1] == 'b') {
+            base = 2;
+        } else {
+            parser_error_prev(state, "Malformed integer literal");
+            return false;
+        }
+
+        start += 2;
+        if (start == end) {
+            parser_error_prev(state, "Missing digits after integer prefix");
+            return false;
+        }
+    }
+
+    *value = 0;
+    while (start < end) {
+        digit = -1;
+        if (isdigit(*start)) {
+            digit = *start - '0';
+        } else if (isupper(*start)) {
+            digit = *start - 'A' + 10;
+        } else if (islower(*start)) {
+            digit = *start - 'a' + 10;
+        }
+
+        if (digit < 0 || digit >= base) {
+            parser_error_prev(state, "Invalid digit in integer literal");
+            return false;
+        }
+
+        if (*value > (INT64_MAX - digit) / base) {
+            parser_error_prev(state, "Integer literal out of range");
+            return false;
+        }
+
+        *value *= base;
+        *value += digit;
+        start++;
+    }
+
+    // TODO: Handle unsigned literals as well
+    return true;
+}
 
 static bool
 parser_escape_string(struct parser *state, const char **string)
@@ -468,8 +538,9 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     start = parser_curr(state)->span;
 
     if (parser_match(state, TOKEN_INT)) {
-        // XXX: Does not handle u64 max well
-        value = strtol(parser_prev(state)->span.start, NULL, 10);
+        if (!parser_integer(state, &value))
+            return false;
+
         *expr = expr_make_literal(LIT_INTEGER, value);
         goto done;
     }

@@ -114,9 +114,15 @@ lexer_sym(struct lexer *state)
 }
 
 static void
-lexer_int(struct lexer *state)
+lexer_int(struct lexer *state, char c)
 {
-    while (isdigit(lexer_curr(state))) {
+    if (c == '0') {
+        c = tolower(lexer_curr(state));
+        if (c == 'o' || c == 'x' || c == 'b')
+            lexer_advance(state);
+    }
+
+    while (isalnum(lexer_curr(state))) {
         lexer_advance(state);
     }
 
@@ -187,7 +193,7 @@ lexer_next(struct lexer *state)
     }
 
     if (isdigit(c)) {
-        lexer_int(state);
+        lexer_int(state, c);
         return;
     }
 
