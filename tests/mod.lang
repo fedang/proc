@@ -1,0 +1,21 @@
+module mod
+
+module mod: Sig
+
+sig Sig {
+    proc foo()
+    proc bar(): int
+}
+
+proc foo() { nest.nest2.nest3.baz() }
+proc bar(): int { return 10 }
+
+module nest {
+    module nest2 {
+        module nest3 {
+            module nest3
+
+            proc baz() {}
+        }
+    }
+}

@@ -2681,11 +2681,20 @@ checker_decl_var(struct checker *state, struct decl_var *decl)
 static bool
 checker_register_module(struct checker *state, struct decl_module *decl)
 {
+    struct expr_block *block;
     size_t i;
     bool ok = true;
 
-    for (i = 0; i < decl->items_count; i++) {
-        if (!checker_register_decl(state, decl->items[i])) {
+    if (!decl->block || decl->block->tag != EXPR_BLOCK) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Module '%pS' has a malformed body\n",
+                    decl->sym);
+        return false;
+    }
+
+    block = (struct expr_block *)decl->block;
+    for (i = 0; i < block->items_count; i++) {
+        if (!checker_register_decl(state, block->items[i])) {
             ok = false;
         }
     }
@@ -2858,6 +2867,7 @@ static bool
 checker_validate_decl(struct checker *state, struct decl *decl)
 {
     struct decl_module *mod;
+    struct expr_block *block;
     struct decl_proc *proc;
     struct decl_var *var;
     struct proc_arg *ptr;
@@ -2876,11 +2886,15 @@ checker_validate_decl(struct checker *state, struct decl *decl)
             return false;
         }
 
+        if (!mod->block)
+            return true;
+
         saved = state->curr_scope;
         state->curr_scope = mod->type->module.scope;
 
-        for (i = 0; i < mod->items_count; i++) {
-            if (!checker_validate_decl(state, mod->items[i]))
+        block = (struct expr_block *)mod->block;
+        for (i = 0; i < block->items_count; i++) {
+            if (!checker_validate_decl(state, block->items[i]))
                 ok = false;
         }
 

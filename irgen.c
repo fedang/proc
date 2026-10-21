@@ -1365,6 +1365,7 @@ static void
 irgen_decl_types(struct irgen *state, struct decl *decl)
 {
     struct decl_module *mod;
+    struct expr_block *block;
     size_t i;
 
     switch (decl->tag) {
@@ -1374,8 +1375,13 @@ irgen_decl_types(struct irgen *state, struct decl *decl)
 
         case DECL_MODULE:
             mod = (struct decl_module *)decl;
-            for (i = 0; i < mod->items_count; i++) {
-                irgen_decl_types(state, mod->items[i]);
+            if (mod->block) {
+                assert(mod->block->tag == EXPR_BLOCK);
+
+                block = (struct expr_block *)mod->block;
+                for (i = 0; i < block->items_count; i++) {
+                    irgen_decl_types(state, block->items[i]);
+                }
             }
             break;
 
@@ -1389,6 +1395,7 @@ static void
 irgen_decl_bodies(struct irgen *state, struct decl *decl)
 {
     struct decl_module *mod;
+    struct expr_block *block;
     size_t i;
 
     switch (decl->tag) {
@@ -1398,8 +1405,13 @@ irgen_decl_bodies(struct irgen *state, struct decl *decl)
 
         case DECL_MODULE:
             mod = (struct decl_module *)decl;
-            for (i = 0; i < mod->items_count; i++) {
-                irgen_decl_bodies(state, mod->items[i]);
+            if (mod->block) {
+                assert(mod->block->tag == EXPR_BLOCK);
+
+                block = (struct expr_block *)mod->block;
+                for (i = 0; i < block->items_count; i++) {
+                    irgen_decl_bodies(state, block->items[i]);
+                }
             }
             break;
 

@@ -1082,9 +1082,7 @@ parser_decl_module(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
     struct type *sig;
-    struct decl **copy, *items[64];
-    size_t items_count;
-    bool no_body, saved_parens, saved_noblock;
+    struct expr *block;
     struct span start;
 
     start = parser_prev(state)->span;
@@ -1100,39 +1098,16 @@ parser_decl_module(struct parser *state, struct decl **decl)
             return false;
     }
 
-    items_count = 0;
-    no_body = true;
-    copy = NULL;
-
+    block = NULL;
     if (parser_match(state, TOKEN_LBRACE)) {
-        no_body = false;
-
-        saved_parens = state->parens;
-        saved_noblock = state->no_block;
-        state->parens = false;
-        state->no_block = false;
-
-        for (; !parser_eof(state); items_count++) {
-            if (parser_match(state, TOKEN_RBRACE))
-                break;
-
-            assert(items_count < 64 && "too many decls!");
-            if (!parser_decl(state, &items[items_count]))
-                return false;
-        }
-
-        state->parens = saved_parens;
-        state->no_block = saved_noblock;
-
-        copy = malloc(items_count * sizeof(struct decl *));
-        memcpy(copy, items, items_count * sizeof(struct decl *));
+        if (!parser_expr_block(state, &block))
+            return false;
     }
 
     if (!parser_check_end(state, "Expected newline or ';' after declaration"))
         return false;
 
-    *decl = decl_make_module(sym, sig, copy, items_count);
-    ((struct decl_module *)*decl)->no_body = no_body;
+    *decl = decl_make_module(sym, sig, block);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
 }
@@ -1141,9 +1116,7 @@ static bool
 parser_decl_sig(struct parser *state, struct decl **decl)
 {
     struct symbol *sym;
-    struct decl **copy, *items[64];
-    size_t items_count;
-    bool no_body, saved_parens, saved_noblock;
+    struct expr *block;
     struct span start;
 
     start = parser_prev(state)->span;
@@ -1151,39 +1124,16 @@ parser_decl_sig(struct parser *state, struct decl **decl)
     if (!parser_check_sym(state, &sym, "Expected signature name"))
         return false;
 
-    items_count = 0;
-    no_body = true;
-    copy = NULL;
-
+    block = NULL;
     if (parser_match(state, TOKEN_LBRACE)) {
-        no_body = false;
-
-        saved_parens = state->parens;
-        saved_noblock = state->no_block;
-        state->parens = false;
-        state->no_block = false;
-
-        for (; !parser_eof(state); items_count++) {
-            if (parser_match(state, TOKEN_RBRACE))
-                break;
-
-            assert(items_count < 64 && "too many decls!");
-            if (!parser_decl(state, &items[items_count]))
-                return false;
-        }
-
-        state->parens = saved_parens;
-        state->no_block = saved_noblock;
-
-        copy = malloc(items_count * sizeof(struct decl *));
-        memcpy(copy, items, items_count * sizeof(struct decl *));
+        if (!parser_expr_block(state, &block))
+            return false;
     }
 
     if (!parser_check_end(state, "Expected newline or ';' after declaration"))
         return false;
 
-    *decl = decl_make_sig(sym, copy, items_count);
-    ((struct decl_sig *)*decl)->no_body = no_body;
+    *decl = decl_make_sig(sym, block);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
     return true;
 }
@@ -1301,24 +1251,26 @@ parser_decl(struct parser *state, struct decl **decl)
 bool
 parser_module(struct parser *state, struct decl **decl)
 {
+    struct expr *block;
     struct decl **items;
-    size_t max, count;
+    size_t items_count, items_size;
     struct span span;
 
-    items = NULL;
-    max = 0;
-    count = 0;
     span = parser_curr(state)->span;
 
+    items = NULL;
+    items_size = 0;
+    items_count = 0;
+
     while (!parser_eof(state)) {
-        if (count >= max) {
-            max = max < 32 ? 32 : max * 2;
-            items = realloc(items, max * sizeof(struct decl *));
+        if (items_count >= items_size) {
+            items_size = items_size < 32 ? 32 : items_size * 2;
+            items = realloc(items, items_size * sizeof(struct decl *));
             assert(items && "out of mem");
         }
 
-        if (parser_decl(state, &items[count])) {
-            count++;
+        if (parser_decl(state, &items[items_count])) {
+            items_count++;
         } else {
             parser_sync(state);
         }
@@ -1328,7 +1280,15 @@ parser_module(struct parser *state, struct decl **decl)
         span = span_merge(span, parser_prev(state)->span);
     }
 
-    *decl = decl_make_module(state->src->name, NULL, items, count);
+    /*
+     * Simulate parser_expr_block and create the block manually
+     */
+    block = expr_make_block(items_count);
+    memcpy(((struct expr_block *)block)->items, items, items_count * sizeof(struct decl *));
+    expr_set_span(block, span);
+    free(items);
+
+    *decl = decl_make_module(state->src->name, NULL, block);
     decl_set_span(*decl, span);
     return state->perfect;
 }

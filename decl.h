@@ -66,18 +66,14 @@ struct decl_module {
     struct symbol *sym;
     struct symbol *prefix;
     struct type *sig;
-    struct decl **items;
-    size_t items_count;
+    struct expr *block;
     struct type *type;
-    bool no_body;
 };
 
 struct decl_sig {
     struct decl decl;
     struct symbol *sym;
-    struct decl **items;
-    size_t items_count;
-    bool no_body;
+    struct expr *block;
 };
 
 struct decl_import {
@@ -123,10 +119,9 @@ struct decl *decl_make_struct(struct symbol *sym, struct struct_field *fields,
 struct decl *decl_make_type(struct symbol *sym, struct type *type);
 
 struct decl *decl_make_module(struct symbol *sym, struct type *sig,
-                              struct decl **items, size_t items_count);
+                              struct expr *block);
 
-struct decl *decl_make_sig(struct symbol *sym, struct decl **items,
-                           size_t items_count);
+struct decl *decl_make_sig(struct symbol *sym, struct expr *block);
 
 struct decl *decl_make_import(struct expr *expr);
 

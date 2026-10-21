@@ -52,28 +52,25 @@ decl_make_type(struct symbol *sym, struct type *type)
 }
 
 struct decl *
-decl_make_module(struct symbol *sym, struct type *sig, struct decl **items,
-                 size_t items_count)
+decl_make_module(struct symbol *sym, struct type *sig, struct expr *block)
 {
     struct decl_module *decl;
 
     decl = decl_make(sizeof(struct decl_module), DECL_MODULE);
     decl->sym = sym;
     decl->sig = sig;
-    decl->items = items;
-    decl->items_count = items_count;
+    decl->block = block;
     return &decl->decl;
 }
 
 struct decl *
-decl_make_sig(struct symbol *sym, struct decl **items, size_t items_count)
+decl_make_sig(struct symbol *sym, struct expr *block)
 {
     struct decl_sig *decl;
 
     decl = decl_make(sizeof(struct decl_sig), DECL_SIG);
     decl->sym = sym;
-    decl->items = items;
-    decl->items_count = items_count;
+    decl->block = block;
     return &decl->decl;
 }
 
