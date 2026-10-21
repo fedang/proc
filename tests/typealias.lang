@@ -1,0 +1,9 @@
+type T = int
+
+type X = T
+
+proc main(): int {
+    var y: T = 10
+    var x: X = 10
+    return y + x
+}

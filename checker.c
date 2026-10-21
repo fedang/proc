@@ -361,6 +361,9 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
             if (array->args_count == 1)
                 return type_get_slice(NULL, type);
 
+            if (!checker_expr(state, array->args[1]))
+                return NULL;
+
             if (!checker_eval_const(state, array->args[1], &count))
                 return NULL;
 
