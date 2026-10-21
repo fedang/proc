@@ -11,3 +11,6 @@ struct XK {
 struct X { }
 
 var x: [int, @size_of(X)]
+
+
+struct Y { a: [int, @size_of([Y, 2])] }

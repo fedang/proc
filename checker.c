@@ -2382,6 +2382,7 @@ checker_proc_returns(struct expr *expr)
 {
     struct decl_expr *d_expr;
     struct decl_var *d_var;
+    struct expr_binop *binop;
     struct expr_block *block;
     struct expr_macro *macro;
     struct expr_call *call;
@@ -2400,8 +2401,16 @@ checker_proc_returns(struct expr *expr)
             return false;
 
         case EXPR_BINOP:
-            return checker_proc_returns(((struct expr_binop *)expr)->op_lhs)
-                && checker_proc_returns(((struct expr_binop *)expr)->op_rhs);
+            binop = (struct expr_binop *)expr;
+            if (binop->binop == BINOP_BOOL_AND ||
+                binop->binop == BINOP_BOOL_OR) {
+                /*
+                 * Short-circuiting operators might skip the rhs!
+                 */
+                return checker_proc_returns(binop->op_lhs);
+            }
+            return checker_proc_returns(binop->op_lhs)
+                || checker_proc_returns(binop->op_rhs);
 
         case EXPR_UNOP:
             return checker_proc_returns(((struct expr_unop *)expr)->op);
