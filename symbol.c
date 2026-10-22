@@ -58,6 +58,7 @@ symbol_mangle(struct symbol *prefix, struct symbol *sym)
         return sym;
 
     len = snprintf(buf, sizeof(buf), "%s.%s", prefix->str, sym->str);
+    assert(len < sizeof(buf) && "name too long");
     return symbol_intern(buf, len);
 }
 

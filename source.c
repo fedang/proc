@@ -8,7 +8,7 @@
 #include "report.h"
 
 bool
-source_load(struct source *src)
+source_load(struct source *src, const char *abs_path)
 {
     char *buf;
     FILE *file;
@@ -16,7 +16,7 @@ source_load(struct source *src)
 
     assert(!src->str && !src->len && "double read?");
 
-    file = fopen(src->path, "rb");
+    file = fopen(abs_path ? abs_path : src->path, "rb");
     if (!file)
         return false;
 

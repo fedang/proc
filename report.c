@@ -23,6 +23,7 @@ report_format(FILE *out, const struct source_map *map,
     const struct source *src;
     struct symbol *sym;
     struct span *span;
+    int len;
 
     while (*fmt) {
         if (*fmt != '%') {
@@ -83,8 +84,15 @@ report_format(FILE *out, const struct source_map *map,
             continue;
         }
 
+        if (!strncmp(fmt, ".*s", 3)) {
+            len = va_arg(args, int);
+            fprintf(out, "%.*s", len, va_arg(args, const char *));
+            fmt += 3;
+            continue;
+        }
+
 #define FMT_SPEC(spec, type) \
-        if (strncmp(fmt, spec, sizeof(spec) - 1) == 0) { \
+        if (!strncmp(fmt, spec, sizeof(spec) - 1)) { \
             fprintf(out, "%" spec, va_arg(args, type)); \
             fmt += sizeof(spec) - 1; \
             continue; \

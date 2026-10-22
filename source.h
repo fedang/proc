@@ -21,7 +21,7 @@ struct source_map {
 #define SOURCE_SPAN(src) \
     ((struct span) { .src_id = (src)->src_id })
 
-bool source_load(struct source *src);
+bool source_load(struct source *src, const char *abs_path);
 
 void source_map_init(struct source_map *map);
 
