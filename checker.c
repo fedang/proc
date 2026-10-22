@@ -17,7 +17,7 @@
 static void
 checker_root_push(struct checker *state, const char *name, struct type *type)
 {
-    scope_push(state->root_scope, symbol_make(name), type, NULL, true);
+    scope_push(state->root_scope, symbol_make(name), type, NULL, BIND_TYPE);
 }
 
 static void
@@ -266,7 +266,7 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
             if (!type || type_is_invalid(type))
                 return type;
 
-            if (!bind->is_type && type->tag != TYPE_MODULE) {
+            if (!BIND_IS_TYPE(bind) && type->tag != TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span, "'%pS' is not a type\n", ident->sym);
                 return NULL;
             }
@@ -328,7 +328,7 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
             if (!type || type_is_invalid(type))
                 return type;
 
-            if (!bind->is_type && type->tag != TYPE_MODULE) {
+            if (!BIND_IS_TYPE(bind) && type->tag != TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span, "'%pS' is not a type\n", access->field);
                 return NULL;
             }
@@ -646,12 +646,13 @@ checker_eval_import(struct checker *state, struct scope *curr_scope,
         if (type_is_invalid(bind->type))
             return NULL;
 
-        if (bind->is_type || bind->type->tag != TYPE_MODULE) {
+        if (bind->type->tag != TYPE_MODULE) {
             TYCHK_ERROR(state, path->span,
                         "'%pS' is not a module\n", access->field);
             return NULL;
         }
 
+        assert(!BIND_IS_TYPE(bind) && "wrong type propagation");
         return bind->type->module.scope;
     }
 
@@ -690,8 +691,11 @@ checker_resolve_import(struct checker *state, struct binding *bind)
      * just bind the last module in the path
      */
     if (!bind->import_sym) {
+        assert(import->target_scope->mod && "scope without module");
+
         bind->type = type_get_module(import->decl.attr, import->target_scope);
-        bind->is_type = false;
+        bind->orig_decl = &import->target_scope->mod->decl;
+        bind->flags = 0;
         return true;
     }
 
@@ -711,7 +715,11 @@ checker_resolve_import(struct checker *state, struct binding *bind)
 
     bind->type = orig_bind->type;
     bind->link_sym = orig_bind->link_sym;
-    bind->is_type = orig_bind->is_type;
+    bind->flags = orig_bind->flags;
+    bind->orig_decl = orig_bind->orig_decl
+                    ? orig_bind->orig_decl
+                    : orig_bind->decl;
+
     return !type_is_invalid(bind->type);
 }
 
@@ -730,13 +738,6 @@ checker_resolve_layout(struct checker *state, struct type *type)
         return false;
 
     switch (type->tag) {
-        case TYPE_RAW:
-        case TYPE_INVALID:
-            /*
-             * We should never see this, but if we do the layout is not good
-             */
-            return false;
-
         case TYPE_PTR:
         case TYPE_SLICE:
             return true;
@@ -758,7 +759,7 @@ checker_resolve_layout(struct checker *state, struct type *type)
                 return true;
             }
 
-            bind = decl->bind;
+            bind = decl->decl.bind;
             assert(bind && "named struct must have a binding");
 
             if (bind->status == RESOLVE_PENDING) {
@@ -1351,7 +1352,7 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
         return true;
     }
 
-    if (bind->is_type) {
+    if (BIND_IS_TYPE(bind)) {
         TYCHK_ERROR(state, expr->expr.span,
                     "Type '%pS' cannot be used as a value\n",
                     expr->sym);
@@ -1359,7 +1360,7 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
     }
 
     expr->expr.type = type;
-    expr->link_sym = bind->link_sym;
+    expr->bind = bind;
     return true;
 }
 
@@ -1709,7 +1710,7 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
             return true;
         }
 
-        if (bind->is_type) {
+        if (BIND_IS_TYPE(bind)) {
             TYCHK_ERROR(state, expr->expr.span,
                         "Type '%pS' cannot be used as a value\n",
                         expr->field);
@@ -1717,7 +1718,7 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
         }
 
         expr->expr.type = type;
-        expr->link_sym = bind->link_sym;
+        expr->bind = bind;
         return true;
     }
 
@@ -2162,6 +2163,17 @@ checker_block_item(struct checker *state, struct decl *decl)
                 }
                 return false;
             }
+
+            if (type_is_invalid(expr->type))
+                return true;
+
+            if (!type_is_sized(expr->type)) {
+                TYCHK_ERROR(state, expr->span,
+                            "Expression statement has unsized type '%pT'\n",
+                            expr->type);
+                expr->type = type_get_invalid();
+                return false;
+            }
             return true;
 
         default:
@@ -2566,10 +2578,10 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
             return false;
 
         /*
-         * Differently from other declarations, don't push duplicae imports
+         * Differently from other declarations, don't push duplicate imports
          * into scope unconditionally to avoid snowballing errors
          */
-        bind = scope_push(state->curr_scope, target, NULL, &decl->decl, false);
+        bind = scope_push(state->curr_scope, target, NULL, &decl->decl, 0);
         return true;
     }
 
@@ -2604,7 +2616,7 @@ checker_decl_import(struct checker *state, struct decl_import *decl)
             continue;
         }
 
-        bind = scope_push(state->curr_scope, local, NULL, &decl->decl, false);
+        bind = scope_push(state->curr_scope, local, NULL, &decl->decl, 0);
         bind->import_sym = orig;
     }
 
@@ -2722,14 +2734,15 @@ checker_register_decl(struct checker *state, struct decl *decl)
                 proc->out = type_get_void(NULL);
             }
 
-            bind = scope_push(state->curr_scope, proc->sym, NULL, decl, false);
+            bind = scope_push(state->curr_scope, proc->sym, NULL, decl,
+                              BIND_LINKED);
 
             // XXX: do this with attrs/extern
             if (!proc->body || !strcmp(proc->sym->str, "main")) {
                 bind->link_sym = proc->sym;
             }
 
-            proc->link_sym = bind->link_sym;
+            decl->bind = bind;
             return ok;
 
         case DECL_STRUCT:
@@ -2745,9 +2758,8 @@ checker_register_decl(struct checker *state, struct decl *decl)
             }
 
             bind = scope_push(state->curr_scope, strukt->sym,
-                              strukt->type, decl, true);
-            strukt->link_sym = bind->link_sym;
-            strukt->bind = bind;
+                              strukt->type, decl, BIND_TYPE | BIND_LINKED);
+            decl->bind = bind;
             return ok;
 
         case DECL_TYPE:
@@ -2763,7 +2775,9 @@ checker_register_decl(struct checker *state, struct decl *decl)
                  ? NULL
                  : type_get_opaque(decl->attr, decl, d_type->sym);
 
-            scope_push(state->curr_scope, d_type->sym, type, decl, true);
+            bind = scope_push(state->curr_scope, d_type->sym, type, decl,
+                              BIND_TYPE);
+            decl->bind = bind;
             return ok;
 
         case DECL_MODULE:
@@ -2783,9 +2797,11 @@ checker_register_decl(struct checker *state, struct decl *decl)
             if (!mod->type) {
                 scope = scope_make(mod->sym, prefix, state->curr_scope, NULL);
                 mod->type = type_get_module(decl->attr, scope);
+                scope->mod = mod;
             }
 
-            scope_push(state->curr_scope, mod->sym, mod->type, decl, false);
+            bind = scope_push(state->curr_scope, mod->sym, mod->type, decl, 0);
+            decl->bind = bind;
 
             saved = state->curr_scope;
             state->curr_scope = mod->type->module.scope;
@@ -2811,8 +2827,9 @@ checker_register_decl(struct checker *state, struct decl *decl)
                 ok = false;
             }
 
-            bind = scope_push(state->curr_scope, var->sym, NULL, decl, false);
-            var->link_sym = bind->link_sym;
+            bind = scope_push(state->curr_scope, var->sym, NULL, decl,
+                              BIND_LINKED);
+            decl->bind = bind;
             return ok;
 
         case DECL_EXPR:
@@ -2831,7 +2848,7 @@ checker_register_file(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
     struct scope *saved_scope, *scope;
-    bool ok = true;
+    bool ok;
 
     if (file->registered)
         return true;
@@ -2842,10 +2859,10 @@ checker_register_file(struct checker *state, struct modfile *file)
     if (!mod->type) {
         scope = scope_make(mod->sym, mod->prefix, state->root_scope, file);
         mod->type = type_get_module(mod->decl.attr, scope);
+        scope->mod = mod;
     }
 
     saved_scope = state->curr_scope;
-
     state->curr_scope = mod->type->module.scope;
 
     ok = checker_register_module(state, mod);

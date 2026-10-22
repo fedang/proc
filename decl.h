@@ -33,12 +33,12 @@ struct decl {
     struct span span;
     enum decl_tag tag;
     struct attr *attr;
+    struct binding *bind;
 };
 
 struct decl_proc {
     struct decl decl;
     struct symbol *sym;
-    struct symbol *link_sym;
     struct type *out;
     struct proc_arg *args;
     size_t args_count;
@@ -48,11 +48,9 @@ struct decl_proc {
 struct decl_struct {
     struct decl decl;
     struct symbol *sym;
-    struct symbol *link_sym;
     struct struct_field *fields;
     size_t fields_count;
     struct type *type;
-    struct binding *bind;
 };
 
 struct decl_type {
@@ -86,7 +84,6 @@ struct decl_import {
 struct decl_var {
     struct decl decl;
     struct symbol *sym;
-    struct symbol *link_sym;
     struct type *type;
     struct expr *value;
     unsigned slot;

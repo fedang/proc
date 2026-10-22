@@ -17,7 +17,7 @@ scope_make(struct symbol *name, struct symbol *prefix, struct scope *parent,
 
 struct binding *
 scope_push(struct scope *scope, struct symbol *sym,
-           struct type *type, struct decl *decl, bool is_type)
+           struct type *type, struct decl *decl, int flags)
 {
     struct binding *bind;
 
@@ -27,16 +27,11 @@ scope_push(struct scope *scope, struct symbol *sym,
     bind->sym = sym;
     bind->status = decl ? RESOLVE_NONE : RESOLVE_DONE;
     bind->scope = scope;
-    bind->is_type = is_type;
-    bind->is_public = true;
     bind->decl = decl;
     bind->type = type;
+    bind->flags = flags;
 
-    /*
-     * Avoid computing link symbol for declarations that don't need it
-     */
-    if (decl && (decl->tag == DECL_PROC
-        || decl->tag == DECL_STRUCT || decl->tag == DECL_VAR))
+    if (BIND_IS_LINKED(bind))
         bind->link_sym = symbol_mangle(scope->prefix, sym);
 
     return bind;

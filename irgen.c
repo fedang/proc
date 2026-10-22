@@ -66,16 +66,24 @@ irgen_val(struct irgen *state, struct irval val)
     }
 }
 
+static struct symbol *
+irgen_link_sym(struct irgen *state, struct decl *decl)
+{
+    assert(decl->bind && "unresolved decl?");
+    assert(BIND_IS_LINKED(decl->bind) && "unlinked struct?");
+    return decl->bind->link_sym;
+}
+
 /*
  * Types
  */
 static void
 irgen_type(struct irgen *state, struct type *type)
 {
+    struct symbol *link_sym;
     size_t i;
 
     assert(type && "expected valid type");
-
     switch (type->tag) {
         case TYPE_BOOL:
         case TYPE_INT:
@@ -104,7 +112,8 @@ irgen_type(struct irgen *state, struct type *type)
 
         case TYPE_STRUCT:
             if (type->strukt.decl) {
-                IR_EMITF(state, "%%\"%s\"", type->strukt.decl->link_sym->str);
+                link_sym = irgen_link_sym(state, &type->strukt.decl->decl);
+                IR_EMITF(state, "%%\"%s\"", link_sym->str);
             } else {
                 /*
                  * Anonymous structs
@@ -409,8 +418,10 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
     switch (expr->tag) {
         case EXPR_IDENT:
             ident = (struct expr_ident *)expr;
-            if (ident->link_sym)
-                return IRVAL_GLOBAL(ident->link_sym->str);
+            if (ident->bind) {
+                assert(BIND_IS_LINKED(ident->bind) && ident->bind->link_sym);
+                return IRVAL_GLOBAL(ident->bind->link_sym->str);
+            }
 
             for (i = state->locals_count; i > 0; i--) {
                 if (state->locals[i - 1].sym == ident->sym)
@@ -457,8 +468,10 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
 
         case EXPR_ACCESS:
             access = (struct expr_access *)expr;
-            if (access->link_sym)
-                return IRVAL_GLOBAL(access->link_sym->str);
+            if (access->bind) {
+                assert(BIND_IS_LINKED(access->bind) && access->bind->link_sym);
+                return IRVAL_GLOBAL(access->bind->link_sym->str);
+            }
 
             type = access->op->type;
             if (type->tag == TYPE_PTR) {
@@ -1232,8 +1245,11 @@ static void
 irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 {
     struct proc_arg *ptr;
+    struct symbol *link_sym;
     struct irval slot;
     unsigned reg, i, k;
+
+    link_sym = irgen_link_sym(state, &decl->decl);
 
     /*
      * External declaration
@@ -1244,17 +1260,17 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
          * Also add a dedicated check to see if all bindings have the same type
          */
         for (i = 0; i < state->externs_count; i++) {
-            if (state->externs[i] == decl->link_sym)
+            if (state->externs[i] == link_sym)
                 return;
         }
 
         assert(state->externs_count < 256 && "too many externs!");
-        state->externs[state->externs_count] = decl->link_sym;
+        state->externs[state->externs_count] = link_sym;
         state->externs_count++;
 
         IR_EMITF(state, "\ndeclare ");
         irgen_type_ret(state, decl->out);
-        IR_EMITF(state, " @\"%s\"(", decl->link_sym->str);
+        IR_EMITF(state, " @\"%s\"(", link_sym->str);
 
         for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
             if (type_is_zst(ptr->type))
@@ -1277,7 +1293,7 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 
     IR_EMITF(state, "\ndefine ");
     irgen_type_ret(state, decl->out);
-    IR_EMITF(state, " @\"%s\"(", decl->link_sym->str);
+    IR_EMITF(state, " @\"%s\"(", link_sym->str);
 
     for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
         if (type_is_zst(ptr->type))
@@ -1324,24 +1340,30 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 static void
 irgen_decl_struct(struct irgen *state, struct decl_struct *decl)
 {
+    struct symbol *link_sym;
     size_t i;
 
-    IR_EMITF(state, "\n%%\"%s\" = type { ", decl->link_sym->str);
+    link_sym = irgen_link_sym(state, &decl->decl);
+    IR_EMITF(state, "\n%%\"%s\" = type { ", link_sym->str);
+
     for (i = 0; i < decl->fields_count; i++) {
         if (i != 0)
             IR_EMITF(state, ", ");
 
         irgen_type(state, decl->fields[i].type);
     }
+
     IR_EMITF(state, " }\n");
 }
 
 static void
 irgen_decl_var(struct irgen *state, struct decl_var *decl)
 {
+    struct symbol *link_sym;
     struct expr_literal *lit;
 
-    IR_EMITF(state, "\n@\"%s\" = global ", decl->link_sym->str);
+    link_sym = irgen_link_sym(state, &decl->decl);
+    IR_EMITF(state, "\n@\"%s\" = global ", link_sym->str);
     irgen_type(state, decl->type);
 
     if (decl->value && decl->value->tag == EXPR_LITERAL) {

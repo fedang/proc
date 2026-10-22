@@ -95,6 +95,7 @@ size_t type_alignof(const struct type *type);
 static inline bool
 type_is_invalid(const struct type *type)
 {
+    assert(type->tag != TYPE_RAW);
     return type->tag == TYPE_INVALID;
 }
 

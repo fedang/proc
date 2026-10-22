@@ -105,3 +105,11 @@ proc untyped_errors() {
     var d: u32 = b
     var e: [u32, 3] = [1, 2]
 }
+
+module AII { }
+
+proc s() {
+    AII
+
+    AII == AII
+}

@@ -7,6 +7,19 @@
 #include "type.h"
 #include "decl.h"
 
+#define BIND_TYPE   (1 << 0)
+#define BIND_MACRO  (1 << 1)
+#define BIND_LINKED (1 << 2)
+
+#define BIND_CHECK_FLAG(b, f)   (((b)->flags & (f)) == (f))
+#define BIND_CLEAR_FLAG(b, f)   ((b)->flags &= ~(f))
+#define BIND_SET_FLAG(b, f)     ((b)->flags |= (f))
+
+#define BIND_IS_TYPE(b)     BIND_CHECK_FLAG(b, BIND_TYPE)
+#define BIND_IS_MACRO(b)    BIND_CHECK_FLAG(b, BIND_MACRO)
+#define BIND_IS_LINKED(b)   BIND_CHECK_FLAG(b, BIND_LINKED)
+
+
 enum resolve_status {
     RESOLVE_NONE,
     RESOLVE_PENDING,
@@ -19,10 +32,10 @@ struct binding {
     struct symbol *import_sym;
     struct scope *scope;
     enum resolve_status status;
-    bool is_type;
-    bool is_public;
     struct decl *decl;
+    struct decl *orig_decl;
     struct type *type;
+    int flags;
 };
 
 struct scope {
@@ -30,6 +43,7 @@ struct scope {
     struct symbol *prefix;
     struct scope *parent;
     struct modfile *file;
+    struct decl_module *mod;
     struct binding bindings[256];
     size_t bindings_count;
 };
@@ -38,7 +52,7 @@ struct scope *scope_make(struct symbol *name, struct symbol *prefix,
                          struct scope *parent, struct modfile *file);
 
 struct binding *scope_push(struct scope *scope, struct symbol *sym,
-                           struct type *type, struct decl *decl, bool is_type);
+                           struct type *type, struct decl *decl, int flags);
 
 struct binding *scope_lookup_local(struct scope *scope, struct symbol *sym);
 
