@@ -839,8 +839,10 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
             break;
 
         op_tag = parser_curr(state)->tag;
-        prec = parser_token_prec(op_tag);
+        if (op_tag == TOKEN_EOF)
+            break;
 
+        prec = parser_token_prec(op_tag);
         if (prec < base_prec || prec == 0)
             break;
 

@@ -985,23 +985,26 @@ checker_literal_width(int64_t value, struct type *type)
     uint64_t u_max;
     size_t bits;
 
-    if (type->tag == TYPE_INT) {
-        bits = type_bit_width(type);
-        if (bits >= 64)
-            return true;
+    switch (type->tag) {
+        case TYPE_INT:
+            bits = type_bit_width(type);
+            if (bits >= 64)
+                return true;
 
-        i_max = (1LL << (bits - 1)) - 1;
-        i_min = -(1LL << (bits - 1));
-        return value >= i_min && value <= i_max;
-    }
+            i_max = (1LL << (bits - 1)) - 1;
+            i_min = -(1LL << (bits - 1));
+            return value >= i_min && value <= i_max;
 
-    if (type->tag == TYPE_UINT) {
-        bits = type_bit_width(type);
-        if (bits >= 64)
-            return value >= 0;
+        case TYPE_UINT:
+            bits = type_bit_width(type);
+            if (bits >= 64)
+                return value >= 0;
 
-        u_max = (1ULL << bits) - 1;
-        return value >= 0 && (uint64_t)value <= u_max;
+            u_max = (1ULL << bits) - 1;
+            return value >= 0 && (uint64_t)value <= u_max;
+
+        default:
+            break;
     }
 
     return true;
@@ -1195,7 +1198,6 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
 
                 if (!checker_expr_coerce(state, strukt->fields[i].value, coerce)) {
                     if (!type_is_invalid(strukt->fields[i].value->type)) {
-                        assert(coerce && "impossible?");
                         TYCHK_ERROR(state, strukt->fields[i].value->span,
                                     "Field '%pS' cannot be coerced to type '%pT'\n",
                                     strukt->fields[i].field->sym, coerce);
@@ -2074,9 +2076,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
              */
             target = NULL;
             if (type->tag == TYPE_INT || type->tag == TYPE_UINT) {
-                // XXX: Kludge to not error out on truncations
-                if (type_bit_width(type) > INT_SIZE * 8)
-                    target = type;
+                target = type_get_uint(NULL, 64);
             } else if (type->tag == TYPE_PTR) {
                 target = type_get_uint(NULL, PTR_SIZE * 8);
             }

@@ -3,7 +3,7 @@ OBJ = $(SRC:.c=.o)
 BIN = comp
 
 CFLAGS  += -Wall -Wextra -Wno-unused-parameter -Wno-maybe-uninitialized
-CFLAGS  += -Wshadow -Wstrict-prototypes -Wmissing-prototypes
+CFLAGS  += -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Warray-bounds
 CFLAGS	+= -O1 -g3 -ggdb -std=c99
 LDFLAGS +=
 

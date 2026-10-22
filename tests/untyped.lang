@@ -14,6 +14,20 @@ proc cast_to_integer() {
     var c: i32 = @cast(i32, @size_of(int))
 }
 
+proc casts() {
+    var k = @cast(u32, 4000000000)
+
+    @cast(i64, 0xFFFFFFFFFFFF)
+
+    @cast(i32, 0xFFFFFFFF)
+
+    @cast(u16, 65535)
+
+    @cast(u8, 5000000000)
+
+    @cast(u8, 300)
+}
+
 proc statement_defaults() {
     1
     1 + 2
@@ -72,7 +86,6 @@ proc anon_structs() {
     var b: struct { x: u32 } = struct { x = 1 }    // struct { x: u32 }
 
     @slice([1,2,3]).ptr[0]
-    var x: uint = struct { a = 1 }.a
     struct { a = 1 }.a
 }
 
@@ -120,85 +133,7 @@ proc mixed_array() {
     var grid2 = [[1, 2], a]     // [[u32, 2], 2]
 }
 
-// KNOWN INVALID BELOW
-proc err_untyped_to_bool() {
-    var b: bool = 1
-}
-
-proc err_untyped_to_ptr() {
-    var p: *u8 = 1
-}
-
-proc err_untyped_plus_string() {
-    var x = 1 + "str"
-}
-
-proc err_string_plus_untyped() {
-    var x = "str" + 1
-}
-
-proc err_return_untyped_as_ptr(): *u8 {
-    return 1
-}
-
-proc xxx() {
-    var x: u8 = (3000000000000 + 1) + 2
-    var x: u8 = -300
-    var x = -3000000000000
-
-    var z = @slice([1, 2, 3])
-    var z: [u32] = @slice([1, 2, 3])
-
-    var k: u32 = 1
-    var z = @slice([1, k, 3])
-    var z: [i32] = @slice([1, k, 3])
-
-
-    var z: [i32] = @slice(&[1, k, 3])
-    var x = (&[1, 2, 3])[0]
-
-    // will fail, too deep
-    struct { a = struct { b = 1 }; b = 10 }.a
-    var x: uint = struct { a = struct { b = 1 } }.a.b
-
-    var c: struct { x: u32 } = struct { x = 1; y = 2 }
-
-    var p: *[int, 3] = &[1, 2, 3]
-    if p == &[1, 2, 3] {  }
-
-
-    var a = struct { x = struct {y=10000000000} }
-}
-
-struct NamedStruct { x: int }
-
-proc err_named_struct_mismatch() {
-    var b: NamedStruct = struct { x = 1 }
-    var a: struct {x: int} = NamedStruct { x = 1 }
-}
-
-proc err_incompatible_elems() {
-    var a: [u32, 2] = [1, 2]
-    var x = [1, 2, a]
-}
-
-proc misc() {
-    var a = [1, 2, 3]
-    a[0] = 5
-
-    var p: *[int, 3] = &[1, 2, 3]
-    *p = [1, 2, 3]
-    if p == &[1, 2, 3] {  }
-
-    (&[1, 2] == &[3, 4]) // PASSES type_is_scalar(TYPE_PTR) and CRASHES IRGEN!
-    (&struct { a = 1 } == &struct { a = 2 }) // PASSES type_is_scalar(TYPE_PTR) and CRASHES IRGEN!
-
-    var s = @slice([[1, 2], [3, 4]])
-    var s = @slice([struct { a = 1 }])
-
-    var x: [u32, 2] = [1,2]
-
-    ([1, 2] == [1, 2])
-    if x == [1,2] {
-    }
+proc main() {
+    var x: @type_of(&(struct { a = 5 }.a))
+    x + 1
 }

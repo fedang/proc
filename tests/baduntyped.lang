@@ -1,0 +1,85 @@
+proc err_untyped_to_bool() {
+    var b: bool = 1
+}
+
+proc err_untyped_to_ptr() {
+    var p: *u8 = 1
+}
+
+proc err_untyped_plus_string() {
+    var x = 1 + "str"
+}
+
+proc err_string_plus_untyped() {
+    var x = "str" + 1
+}
+
+proc err_return_untyped_as_ptr(): *u8 {
+    return 1
+}
+
+
+proc xxx() {
+    var x: u8 = (3000000000000 + 1) + 2
+    var x: u8 = -300
+    var x = -3000000000000
+
+    var z = @slice([1, 2, 3])
+    var z: [u32] = @slice([1, 2, 3])
+
+    var k: u32 = 1
+    var z = @slice([1, k, 3])
+    var z: [i32] = @slice([1, k, 3])
+
+
+    var z: [i32] = @slice(&[1, k, 3])
+    var x = (&[1, 2, 3])[0]
+
+    // will fail, too deep
+    struct { a = struct { b = 1 }; b = 10 }.a
+    var x: uint = struct { a = struct { b = 1 } }.a.b
+
+    var c: struct { x: u32 } = struct { x = 1; y = 2 }
+
+    var p: *[int, 3] = &[1, 2, 3]
+    if p == &[1, 2, 3] {  }
+
+}
+
+proc k() {
+    var x: uint = struct { a = 1 }.a
+}
+
+struct NamedStruct { x: int }
+
+proc err_named_struct_mismatch() {
+    var b: NamedStruct = struct { x = 1 }
+    var a: struct {x: int} = NamedStruct { x = 1 }
+}
+
+proc err_incompatible_elems() {
+    var a: [u32, 2] = [1, 2]
+    var x = [1, 2, a]
+}
+
+proc misc() {
+    var a = [1, 2, 3]
+    a[0] = 5
+
+    var p: *[int, 3] = &[1, 2, 3]
+    *p = [1, 2, 3]
+    if p == &[1, 2, 3] {  }
+
+    (&[1, 2] == &[3, 4]) // PASSES type_is_scalar(TYPE_PTR) and CRASHES IRGEN!
+    (&struct { a = 1 } == &struct { a = 2 }) // PASSES type_is_scalar(TYPE_PTR) and CRASHES IRGEN!
+
+    var s = @slice([[1, 2], [3, 4]])
+    var s = @slice([struct { a = 1 }])
+
+    var x: [u32, 2] = [1,2]
+
+    ([1, 2] == [1, 2])
+    if x == [1,2] {
+    }
+}
+
