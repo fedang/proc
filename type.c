@@ -273,7 +273,7 @@ type_get_opaque(struct attr *attr, struct decl *decl, struct symbol *name)
     struct type *type;
     size_t i;
 
-    assert(!decl || decl->tag == DECL_TYPE);
+    assert(!decl || decl->tag == DECL_TYPE || decl->tag == DECL_STRUCT);
 
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
@@ -282,13 +282,13 @@ type_get_opaque(struct attr *attr, struct decl *decl, struct symbol *name)
          * Opaque types are identified by their declaration
          */
         if (type->tag == TYPE_OPAQUE && type->attr == attr
-                && (struct decl *)type->opaque.decl == decl) {
+                && type->opaque.decl == decl) {
             return type;
         }
     }
 
     type = type_get_fresh(attr, TYPE_OPAQUE);
-    type->opaque.decl = (struct decl_type *)decl;
+    type->opaque.decl = decl;
     type->opaque.name = name;
     return type;
 }
@@ -298,6 +298,8 @@ type_get_module(struct attr *attr, struct scope *scope)
 {
     struct type *type;
     size_t i;
+
+    assert(scope && (!scope->decl || scope->decl->tag == DECL_MODULE));
 
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
@@ -309,6 +311,27 @@ type_get_module(struct attr *attr, struct scope *scope)
 
     type = type_get_fresh(attr, TYPE_MODULE);
     type->module.scope = scope;
+    return type;
+}
+
+struct type *
+type_get_sig(struct attr *attr, struct scope *scope)
+{
+    struct type *type;
+    size_t i;
+
+    assert(scope && (!scope->decl || scope->decl->tag == DECL_SIG));
+
+    for (i = 0; i < type_count; i++) {
+        type = &type_pool[i];
+        if (type->tag == TYPE_SIG && type->attr == attr
+                && type->sig.scope == scope) {
+            return type;
+        }
+    }
+
+    type = type_get_fresh(attr, TYPE_SIG);
+    type->sig.scope = scope;
     return type;
 }
 
@@ -395,6 +418,16 @@ type_alignof(const struct type *type)
     }
 }
 
+static void
+type_format_named(FILE *out, struct decl *decl, struct symbol *name)
+{
+    if (decl && decl->bind && decl->bind->scope && decl->bind->scope->name) {
+        fprintf(out, "%.*s.", (int)decl->bind->scope->name->len,
+                decl->bind->scope->name->str);
+    }
+    fprintf(out, "%.*s", (int)name->len, name->str);
+}
+
 void
 type_format(FILE *out, const struct type *type)
 {
@@ -454,14 +487,12 @@ type_format(FILE *out, const struct type *type)
             break;
 
         case TYPE_OPAQUE:
-            fprintf(out, "%.*s", (int)type->opaque.name->len,
-                    type->opaque.name->str);
+            type_format_named(out, type->opaque.decl, type->opaque.name);
             break;
 
         case TYPE_STRUCT:
             if (type->strukt.name) {
-                fprintf(out, "%.*s", (int)type->strukt.name->len,
-                        type->strukt.name->str);
+                type_format_named(out, &type->strukt.decl->decl, type->strukt.name);
             } else {
                 fprintf(out, "struct { ");
                 for (i = 0; i < type->strukt.fields_count; i++) {
@@ -493,6 +524,10 @@ type_format(FILE *out, const struct type *type)
 
         case TYPE_MODULE:
             fprintf(out, "<module>");
+            break;
+
+        case TYPE_SIG:
+            fprintf(out, "<signature>");
             break;
 
         default:

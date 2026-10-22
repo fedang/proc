@@ -212,6 +212,7 @@ modcache_load(struct modcache *cache, const char *path,
     struct decl *decl;
     struct decl_module *mod;
     struct symbol *prefix;
+    struct modfile *file;
     size_t i;
 
     if (!realpath(path, abs_buf)) {
@@ -260,21 +261,29 @@ modcache_load(struct modcache *cache, const char *path,
     if (!parser_module(&parser, &decl))
         return false;
 
-    assert(decl && decl->tag == DECL_MODULE);
-    mod = (struct decl_module *)decl;
-    mod->sym = name ? name : modcache_extract_name(prefix);
-    mod->prefix = prefix;
-
-    assert(cache->mods_count < 256 && "too many modules!");
-    if (out) {
-        *out = &cache->mods[cache->mods_count];
+    if (!name) {
+        /*
+         * If we don't have a specific name we need to get the last segment
+         * of the calculated module prefix
+         */
+        name = modcache_extract_name(prefix);
     }
 
-    cache->mods[cache->mods_count].src = src;
-    cache->mods[cache->mods_count].decl = decl;
-    cache->mods[cache->mods_count].abs_path = strdup(abs_buf);
-    cache->mods[cache->mods_count].dir_path = modcache_dirname(abs_buf);
-    cache->mods_count++;
+    assert(decl && decl->tag == DECL_MODULE);
+    mod = (struct decl_module *)decl;
+    mod->sym = name;
+
+    assert(cache->mods_count < 256 && "too many modules!");
+    file = &cache->mods[cache->mods_count++];
+
+    file->src = src;
+    file->prefix = prefix;
+    file->decl = decl;
+    file->abs_path = strdup(abs_buf);
+    file->dir_path = modcache_dirname(abs_buf);
+
+    if (out)
+        *out = file;
     return true;
 }
 

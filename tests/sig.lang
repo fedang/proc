@@ -1,0 +1,38 @@
+sig X {
+    proc foo(): int
+}
+
+module Y : X {
+    proc foo() : int { return 10 }
+    proc bar() { }
+}
+
+sig A {
+    type K = int
+    type S
+
+    proc make(x: K): *S
+    proc use(x: *S)
+}
+
+module B : A {
+    type S = int
+
+    proc make(x: K): *S { return @cast(*S, x) }
+    proc use(x: *S) { }
+}
+
+module C : A {
+    type S = bool
+    type K = int
+
+    proc make(x: K): *S { return @cast(*S, 0) }
+    proc use(x: *S) { }
+}
+
+proc main() {
+    Y.foo()
+    Y.bar()
+
+    B.use(C.make(10))
+}

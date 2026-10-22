@@ -41,6 +41,7 @@ enum type_tag {
     TYPE_PROC,
     TYPE_OPAQUE,
     TYPE_MODULE,
+    TYPE_SIG,
 };
 
 struct struct_field {
@@ -79,12 +80,15 @@ struct type {
             size_t args_count;
         } proc;
         struct {
-            struct decl_type *decl;
+            struct decl *decl;
             struct symbol *name;
         } opaque;
         struct {
             struct scope *scope;
         } module;
+        struct {
+            struct scope *scope;
+        } sig;
     };
 };
 
@@ -129,6 +133,7 @@ type_is_sized(const struct type *type)
         && type->tag != TYPE_PROC
         && type->tag != TYPE_OPAQUE
         && type->tag != TYPE_MODULE
+        && type->tag != TYPE_SIG
         && type->tag != TYPE_ANY_INT;
 }
 
@@ -186,6 +191,8 @@ struct type *type_get_opaque(struct attr *attr, struct decl *decl,
                              struct symbol *name);
 
 struct type *type_get_module(struct attr *attr, struct scope *scope);
+
+struct type *type_get_sig(struct attr *attr, struct scope *scope);
 
 void type_format(FILE *out, const struct type *type);
 

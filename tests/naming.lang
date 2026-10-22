@@ -1,0 +1,21 @@
+module A {
+    module B {
+        module C {
+            type K
+        }
+    }
+}
+
+module Z {
+    module B {
+        module C {
+            type K
+        }
+    }
+}
+
+proc main() {
+    var x : *A.B.C.K
+    var y : *Z.B.C.K
+    x = y
+}

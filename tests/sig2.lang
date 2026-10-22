@@ -1,0 +1,23 @@
+sig X {
+    sig Y {
+        proc foo()
+    }
+
+    proc bar()
+
+
+    var x = 10
+    var y
+    var z: int = 10
+    var l: int
+}
+
+module Z : X {
+    proc foo()
+    proc bar()
+}
+
+proc main() {
+    Z.foo()
+    Z.bar()
+}

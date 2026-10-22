@@ -63,3 +63,15 @@ scope_lookup(struct scope *scope, struct symbol *sym)
 
     return NULL;
 }
+
+bool
+scope_contained(const struct scope *curr, const struct scope *target)
+{
+    while (curr != NULL) {
+        if (curr == target)
+            return true;
+        curr = curr->parent;
+    }
+
+    return false;
+}

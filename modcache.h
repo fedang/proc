@@ -15,6 +15,7 @@ enum import_status {
 
 struct modfile {
     struct source *src;
+    struct symbol *prefix;
     struct decl *decl;
     char *abs_path;
     char *dir_path;

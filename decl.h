@@ -62,7 +62,6 @@ struct decl_type {
 struct decl_module {
     struct decl decl;
     struct symbol *sym;
-    struct symbol *prefix;
     struct type *sig;
     struct expr *block;
     struct type *type;
@@ -72,6 +71,7 @@ struct decl_sig {
     struct decl decl;
     struct symbol *sym;
     struct expr *block;
+    struct type *type;
 };
 
 struct decl_import {

@@ -58,6 +58,20 @@ checker_init(struct checker *state, struct modcache *cache)
 #undef X
 }
 
+static bool
+checker_cmp(struct checker *state, struct type *t1, struct type *t2)
+{
+    /*
+     * Treat invalid types as wildcard to prevent error cascades
+     */
+    if (type_is_invalid(t1) || type_is_invalid(t2))
+        return true;
+
+    assert(t1->tag != TYPE_RAW && "t1 invalid");
+    assert(t2->tag != TYPE_RAW && "t2 invalid");
+    return t1 == t2;
+}
+
 /*
  * Compile time evaluation
  */
@@ -232,7 +246,51 @@ checker_binding_type(struct checker *state, struct binding *bind,
             return NULL;
     }
 
+    /*
+     * If this binding was sealed by a signature and we are outside its
+     * defining module's scope, return the sealed type
+     */
+    if (bind->seal_type && !scope_contained(state->curr_scope, bind->scope))
+        return bind->seal_type;
+
     return bind->type;
+}
+
+static bool
+checker_binding_visible(struct checker *state, struct scope *scope,
+                        struct binding *bind, struct span span)
+{
+    struct type *sig;
+    struct decl *orig;
+
+    if (!BIND_IS_SEALED(bind) || scope_contained(state->curr_scope, scope))
+        return true;
+
+    if (scope->decl->tag == DECL_MODULE) {
+        sig = ((struct decl_module *)scope->decl)->sig;
+        assert(sig->tag == TYPE_SIG);
+
+        TYCHK_ERROR(state, span,
+                    "Symbol '%pS' is not exposed by signature '%pS' of module '%pS'\n",
+                    bind->sym, sig->sig.scope->name, scope->name);
+
+        TYCHK_INFO(state, sig->sig.scope->decl->span,
+                   "Module '%pS' is sealed by signature '%pS' declared here\n",
+                   scope->name, sig->sig.scope->name);
+    } else {
+        TYCHK_ERROR(state, span,
+                    "Symbol '%pS' of module '%pS' is private\n",
+                    bind->sym, scope->name);
+    }
+
+    orig = bind->orig_decl ? bind->orig_decl : bind->decl;
+    if (orig) {
+        TYCHK_INFO(state, orig->span,
+                   "Symbol '%pS' was declared in module '%pS' here\n",
+                   bind->sym, scope->name);
+    }
+
+    return false;
 }
 
 static struct type *
@@ -287,7 +345,7 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
 
             if (type->tag == TYPE_MODULE) {
                 TYCHK_ERROR(state, expr->span,
-                            "Cannot make a pointer type from module '%pS'\n",
+                            "Cannot make a pointer type from '%pS'\n",
                             type->module.scope->name);
                 return NULL;
             }
@@ -323,6 +381,9 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
                             type->module.scope->name, access->field);
                 return NULL;
             }
+
+            if (!checker_binding_visible(state, type->module.scope, bind, expr->span))
+               return NULL;
 
             type = checker_binding_type(state, bind, expr->span);
             if (!type || type_is_invalid(type))
@@ -640,6 +701,9 @@ checker_eval_import(struct checker *state, struct scope *curr_scope,
             return NULL;
         }
 
+        if (!checker_binding_visible(state, scope, bind, path->span))
+            return NULL;
+
         if (!checker_resolve_binding(state, bind))
             return NULL;
 
@@ -669,7 +733,6 @@ checker_resolve_import(struct checker *state, struct binding *bind)
     struct binding *orig_bind;
 
     import = (struct decl_import *)bind->decl;
-
     if (!import->resolved) {
         import->resolved = true;
 
@@ -691,10 +754,10 @@ checker_resolve_import(struct checker *state, struct binding *bind)
      * just bind the last module in the path
      */
     if (!bind->import_sym) {
-        assert(import->target_scope->mod && "scope without module");
+        assert(import->target_scope->decl && "scope without decl");
 
         bind->type = type_get_module(import->decl.attr, import->target_scope);
-        bind->orig_decl = &import->target_scope->mod->decl;
+        bind->orig_decl = import->target_scope->decl;
         bind->flags = 0;
         return true;
     }
@@ -708,17 +771,24 @@ checker_resolve_import(struct checker *state, struct binding *bind)
         return false;
     }
 
-    if (!checker_resolve_binding(state, orig_bind)) {
+    if (!checker_binding_visible(state, import->target_scope, orig_bind,
+                                 bind->decl->span)) {
         bind->type = type_get_invalid();
         return false;
     }
 
-    bind->type = orig_bind->type;
+    bind->type = checker_binding_type(state, orig_bind, bind->decl->span);
+    if (!bind->type) {
+        bind->type = type_get_invalid();
+        return false;
+    }
+
     bind->link_sym = orig_bind->link_sym;
-    bind->flags = orig_bind->flags;
     bind->orig_decl = orig_bind->orig_decl
                     ? orig_bind->orig_decl
                     : orig_bind->decl;
+    bind->flags = orig_bind->flags;
+    BIND_CLEAR_FLAG(bind, BIND_SEALED);
 
     return !type_is_invalid(bind->type);
 }
@@ -781,11 +851,159 @@ checker_resolve_layout(struct checker *state, struct type *type)
     }
 }
 
+static struct type *
+checker_rebind_sig(struct type *type, struct scope *scope,
+                   struct scope *sig_scope, bool seal)
+{
+    struct binding *bind;
+    struct decl *orig_decl;
+    struct type *item, *args[32];
+    size_t i;
+
+    if (!type)
+        return NULL;
+
+    switch (type->tag) {
+        case TYPE_OPAQUE:
+            if (!type->opaque.decl || !type->opaque.decl->bind
+                || type->opaque.decl->bind->scope != sig_scope)
+                return type;
+
+            bind = scope_lookup_local(scope, type->opaque.name);
+            if (!bind || !BIND_IS_TYPE(bind) || !bind->type)
+                return type;
+
+            if (!seal)
+                return bind->type;
+
+            if (!bind->seal_type) {
+                orig_decl = bind->orig_decl ? bind->orig_decl : bind->decl;
+                bind->seal_type = type_get_opaque(type->attr, orig_decl,
+                                                  bind->sym);
+            }
+            return bind->seal_type;
+
+        case TYPE_PTR:
+            item = checker_rebind_sig(type->pointer, scope, sig_scope, seal);
+            return type_get_ptr(type->attr, item);
+
+        case TYPE_ARRAY:
+            item = checker_rebind_sig(type->array.item, scope, sig_scope, seal);
+            return type_get_array(type->attr, item, type->array.count);
+
+        case TYPE_SLICE:
+            item = checker_rebind_sig(type->slice.item, scope, sig_scope, seal);
+            return type_get_slice(type->attr, item);
+
+        case TYPE_PROC:
+            for (i = 0; i < type->proc.args_count; i++) {
+                args[i] = checker_rebind_sig(type->proc.args[i], scope,
+                                             sig_scope, seal);
+            }
+            item = checker_rebind_sig(type->proc.out, scope, sig_scope, seal);
+            return type_get_proc(type->attr, item, args, type->proc.args_count);
+
+        default:
+            // TODO: Other types, structs, etc
+            return type;
+    }
+}
+
+static bool
+checker_seal_module(struct checker *state, struct decl_module *mod)
+{
+    struct scope *scope, *sig_scope;
+    struct binding *bind, *sig_bind;
+    struct type *type, *seal_type;
+    size_t i;
+    bool ok = true;
+
+    scope = mod->type->module.scope;
+    sig_scope = mod->sig->sig.scope;
+
+    /*
+     * Mark all bindings in the module as sealed, then clear them as we go
+     */
+    for (i = 0; i < scope->bindings_count; i++) {
+        BIND_SET_FLAG(&scope->bindings[i], BIND_SEALED);
+    }
+
+    for (i = 0; i < sig_scope->bindings_count; i++) {
+        sig_bind = &sig_scope->bindings[i];
+        bind = scope_lookup_local(scope, sig_bind->sym);
+
+        if (!bind) {
+            TYCHK_ERROR(state, mod->decl.span,
+                        "Module '%pS' is missing '%pS' required by signature '%pS'\n",
+                        mod->sym, sig_bind->sym, sig_scope->name);
+
+            if (sig_bind->decl) {
+                TYCHK_INFO(state, sig_bind->decl->span,
+                           "Symbol '%pS' is required by signature '%pS' here\n",
+                           sig_bind->sym, sig_scope->name);
+            }
+            ok = false;
+            continue;
+        } else {
+            /*
+             * The module implements the binding from the signature,
+             * we can unseal its binding
+             */
+            BIND_CLEAR_FLAG(bind, BIND_SEALED);
+        }
+
+        if (BIND_IS_TYPE(sig_bind) != BIND_IS_TYPE(bind)) {
+            TYCHK_ERROR(state, bind->decl->span,
+                        "Symbol '%pS' in module '%pS' is a %s, but signature '%pS' expects a %s\n",
+                        sig_bind->sym, mod->sym,
+                        BIND_IS_TYPE(bind) ? "type" : "value",
+                        sig_scope->name,
+                        BIND_IS_TYPE(sig_bind) ? "type" : "value");
+
+            if (sig_bind->decl) {
+                TYCHK_INFO(state, sig_bind->decl->span,
+                           "Symbol '%pS' was declared in signature '%pS' here\n",
+                           sig_bind->sym, sig_scope->name);
+            }
+            ok = false;
+            continue;
+        }
+
+        if (type_is_invalid(sig_bind->type) || type_is_invalid(bind->type)) {
+            ok = false;
+            continue;
+        }
+
+        type = checker_rebind_sig(sig_bind->type, scope, sig_scope, false);
+        if (!checker_cmp(state, bind->type, type)) {
+            TYCHK_ERROR(state, bind->decl->span,
+                        "Type mismatch for '%pS' in module '%pS': got '%pT', but signature '%pS' expects '%pT'\n",
+                        sig_bind->sym, mod->sym, bind->type,
+                        sig_scope->name, type);
+
+            if (sig_bind->decl) {
+                TYCHK_INFO(state, sig_bind->decl->span,
+                           "Expected type declared in signature '%pS' here\n",
+                           sig_scope->name);
+            }
+            ok = false;
+        }
+
+        seal_type = checker_rebind_sig(sig_bind->type, scope, sig_scope, true);
+        if (!checker_cmp(state, bind->type, seal_type)) {
+            bind->seal_type = seal_type;
+        }
+    }
+
+    return ok;
+}
+
 static bool
 checker_resolve_binding(struct checker *state, struct binding *bind)
 {
     struct decl_proc *proc;
     struct decl_type *d_type;
+    struct decl_module *mod;
     struct decl_var *var;
     struct type *type, *args[32];
     struct proc_arg *ptr;
@@ -805,7 +1023,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             return true;
 
         assert(bind->decl && "primitives should not be pending");
-
         TYCHK_ERROR(state, bind->decl->span,
                     "Cyclic definition involving symbol '%pS'\n",
                     bind->sym);
@@ -834,10 +1051,11 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
             if (!checker_resolve_type(state, &d_type->type)) {
                 ok = false;
-            } else if (d_type->type->tag == TYPE_MODULE) {
+            } else if (d_type->type->tag == TYPE_MODULE
+                    || d_type->type->tag == TYPE_SIG) {
                 TYCHK_ERROR(state, bind->decl->span,
-                            "Cannot alias type '%pS' to module '%pS'\n",
-                            bind->sym, d_type->type->module.scope->name);
+                            "Cannot alias type '%pS' to '%pT'\n",
+                            bind->sym, d_type->type);
                 ok = false;
                 d_type->type = type_get_invalid();
             }
@@ -912,7 +1130,34 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             break;
 
         case DECL_MODULE:
+            mod = (struct decl_module *)bind->decl;
+            if (mod->sig) {
+                if (!checker_resolve_type(state, &mod->sig)) {
+                    ok = false;
+                } else if (mod->sig->tag != TYPE_SIG) {
+                    TYCHK_ERROR(state, mod->decl.span,
+                                "Expected signature type to seal module '%pS', but got '%pT'\n",
+                                mod->sym, mod->sig);
+                    ok = false;
+                }
+            }
+
             scope = bind->type->module.scope;
+            for (i = 0; i < scope->bindings_count; i++) {
+                if (!checker_resolve_binding(state, &scope->bindings[i])) {
+                    ok = false;
+                }
+            }
+
+            if (mod->sig && ok) {
+                if (!checker_seal_module(state, mod)) {
+                    ok = false;
+                }
+            }
+            break;
+
+        case DECL_SIG:
+            scope = bind->type->sig.scope;
             for (i = 0; i < scope->bindings_count; i++) {
                 if (!checker_resolve_binding(state, &scope->bindings[i])) {
                     ok = false;
@@ -960,20 +1205,6 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
     bind->status = RESOLVE_DONE;
     return ok;
-}
-
-static bool
-checker_cmp(struct checker *state, struct type *t1, struct type *t2)
-{
-    /*
-     * Treat invalid types as wildcard to prevent error cascades
-     */
-    if (type_is_invalid(t1) || type_is_invalid(t2))
-        return true;
-
-    // XXX
-    assert(t1->tag != TYPE_RAW && t2->tag != TYPE_RAW);
-    return t1 == t2;
 }
 
 /*
@@ -1696,6 +1927,12 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
             TYCHK_ERROR(state, expr->expr.span,
                         "Module '%pS' has no member named '%pS'\n",
                         type->module.scope->name, expr->field);
+            return false;
+        }
+
+        if (!checker_binding_visible(state, type->module.scope, bind,
+                                     expr->expr.span)) {
+            expr->expr.type = type_get_invalid();
             return false;
         }
 
@@ -2435,7 +2672,7 @@ checker_proc_returns(struct expr *expr)
 
         case EXPR_INDEX:
             return checker_proc_returns(((struct expr_index *)expr)->op)
-                && checker_proc_returns(((struct expr_index *)expr)->index);
+                || checker_proc_returns(((struct expr_index *)expr)->index);
 
         case EXPR_ACCESS:
             return checker_proc_returns(((struct expr_access *)expr)->op);
@@ -2710,12 +2947,97 @@ checker_register_module(struct checker *state, struct decl_module *decl)
 }
 
 static bool
+checker_register_sig(struct checker *state, struct decl_sig *decl)
+{
+    struct expr_block *block;
+    struct decl *item;
+    struct decl_proc *proc;
+    struct decl_var *var;
+    size_t i;
+    bool ok = true;
+
+    if (!decl->block || decl->block->tag != EXPR_BLOCK) {
+        TYCHK_ERROR(state, decl->decl.span,
+                    "Signature '%pS' has a malformed body\n",
+                    decl->sym);
+        return false;
+    }
+
+    block = (struct expr_block *)decl->block;
+    for (i = 0; i < block->items_count; i++) {
+        item = block->items[i];
+
+        switch (item->tag) {
+            case DECL_PROC:
+                proc = (struct decl_proc *)item;
+                if (proc->body) {
+                    TYCHK_ERROR(state, item->span,
+                                "Procedure '%pS' in signature '%pS' cannot have a body\n",
+                                proc->sym, decl->sym);
+                    ok = false;
+                }
+                break;
+
+            case DECL_VAR:
+                var = (struct decl_var *)item;
+                if (!var->type) {
+                    TYCHK_ERROR(state, item->span,
+                                "Variable '%pS' in signature '%pS' must have a type\n",
+                                var->sym, decl->sym);
+                    ok = false;
+                    var->type = type_get_invalid();
+                }
+
+                if (var->value) {
+                    TYCHK_ERROR(state, item->span,
+                                "Variable '%pS' in signature '%pS' cannot have an initializer\n",
+                                var->sym, decl->sym);
+                    ok = false;
+                    var->type = type_get_invalid();
+                }
+                break;
+
+            case DECL_TYPE:
+                break;
+
+            case DECL_STRUCT:
+                TYCHK_ERROR(state, item->span,
+                            "Struct declarations are not allowed inside signature '%pS', use 'type' instead\n",
+                            decl->sym);
+                ok = false;
+                continue;
+
+            case DECL_IMPORT:
+                TYCHK_ERROR(state, item->span,
+                            "Imports are not allowed inside signature '%pS'\n",
+                            decl->sym);
+                ok = false;
+                continue;
+
+            default:
+                TYCHK_ERROR(state, item->span,
+                            "Declaration of this kind is not allowed inside signature '%pS'\n",
+                            decl->sym);
+                ok = false;
+                continue;
+        }
+
+        if (!checker_register_decl(state, item)) {
+            ok = false;
+        }
+    }
+
+    return ok;
+}
+
+static bool
 checker_register_decl(struct checker *state, struct decl *decl)
 {
     struct decl_proc *proc;
     struct decl_struct *strukt;
     struct decl_type *d_type;
     struct decl_module *mod;
+    struct decl_sig *sig;
     struct decl_var *var;
     struct scope *saved, *scope;
     struct binding *bind;
@@ -2786,18 +3108,16 @@ checker_register_decl(struct checker *state, struct decl *decl)
                 ok = false;
             }
 
-            /*
-             * Principal modules get their prefix from their path,
-             * while module declarations inherit it from the enclosing scope
-             */
-            prefix = mod->prefix
-                   ? mod->prefix
-                   : symbol_mangle(state->curr_scope->prefix, mod->sym);
-
             if (!mod->type) {
+                /*
+                 * File modules are handled in checker_register_file, while
+                 * module decls inherit the prefix from the enclosing scope
+                 */
+                prefix = symbol_mangle(state->curr_scope->prefix, mod->sym);
+
                 scope = scope_make(mod->sym, prefix, state->curr_scope, NULL);
                 mod->type = type_get_module(decl->attr, scope);
-                scope->mod = mod;
+                scope->decl = decl;
             }
 
             bind = scope_push(state->curr_scope, mod->sym, mod->type, decl, 0);
@@ -2814,9 +3134,36 @@ checker_register_decl(struct checker *state, struct decl *decl)
             return ok;
 
         case DECL_SIG:
-            TYCHK_ERROR(state, decl->span,
-                        "Signature declarations are not yet supported\n");
-            return false;
+            sig = (struct decl_sig *)decl;
+            if (!checker_register_binding(state, decl, sig->sym)) {
+                ok = false;
+            }
+
+            if (!sig->type) {
+                /*
+                 * Signature declarations always inherit the prefix from their
+                 * enclosing scope just like modules
+                 */
+                prefix = symbol_mangle(state->curr_scope->prefix, sig->sym);
+
+                scope = scope_make(sig->sym, prefix, state->curr_scope, NULL);
+                sig->type = type_get_sig(decl->attr, scope);
+                scope->decl = decl;
+            }
+
+            bind = scope_push(state->curr_scope, sig->sym, sig->type, decl,
+                              BIND_TYPE);
+            decl->bind = bind;
+
+            saved = state->curr_scope;
+            state->curr_scope = sig->type->sig.scope;
+
+            if (!checker_register_sig(state, sig)) {
+                ok = false;
+            }
+
+            state->curr_scope = saved;
+            return ok;
 
         case DECL_IMPORT:
             return checker_decl_import(state, (struct decl_import *)decl);
@@ -2857,9 +3204,12 @@ checker_register_file(struct checker *state, struct modfile *file)
 
     mod = (struct decl_module *)file->decl;
     if (!mod->type) {
-        scope = scope_make(mod->sym, mod->prefix, state->root_scope, file);
+        /*
+         * Principal modules calculate their prefix from their file path
+         */
+        scope = scope_make(mod->sym, file->prefix, state->root_scope, file);
         mod->type = type_get_module(mod->decl.attr, scope);
-        scope->mod = mod;
+        scope->decl = file->decl;
     }
 
     saved_scope = state->curr_scope;
