@@ -24,6 +24,7 @@ options_init(struct options *opts, int argc, const char **argv)
 
     memset(opts, 0, sizeof(struct options));
     opts->output = "a.out";
+    opts->ir_file = "test.ll";
 
     for (i = 1; i < argc; i++) {
         if (argv[i][0] != '-') {
@@ -43,6 +44,15 @@ options_init(struct options *opts, int argc, const char **argv)
                 return false;
             }
             opts->output = argv[i];
+            continue;
+        }
+
+        if (!strcmp(argv[i], "-i")) {
+            if (++i >= argc) {
+                report_error(NULL, NULL, "Missing argument for -i\n");
+                return false;
+            }
+            opts->ir_file = argv[i];
             continue;
         }
 
@@ -79,6 +89,7 @@ options_help(const char *prog)
     printf("Usage: %s [options] file...\n\n", prog);
     printf("Options:\n");
     printf("  -o <file>         Select output file\n");
+    printf("  -i <file>         Select LLVM IR file\n");
     printf("  -C <clang_arg>    Pass option directly to the clang backend\n");
     printf("  -h, --help        Display this help message\n");
 }

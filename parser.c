@@ -1249,6 +1249,7 @@ parser_decl(struct parser *state, struct decl **decl)
         }
     }
 
+    // TODO: Ambiguity between decl (optional) bodies and unrelated expr blocks
     if (!parser_expr(state, &expr))
         return false;
 

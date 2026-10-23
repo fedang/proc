@@ -8,6 +8,7 @@ struct options {
     size_t inputs_count;
     size_t inputs_size;
     const char *output;
+    const char *ir_file;
     const char **clang_args;
     size_t clang_args_count;
     size_t clang_args_size;

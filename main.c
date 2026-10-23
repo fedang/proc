@@ -28,7 +28,7 @@ check_extension(const char *str, const char *ext)
 }
 
 static int
-run_clang(struct options *opts, const char *ir_file)
+run_clang(struct options *opts)
 {
     char cmd[1024];
     size_t i, cmd_len;
@@ -45,7 +45,7 @@ run_clang(struct options *opts, const char *ir_file)
     }
 
     cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                        " %s", ir_file);
+                        " %s", opts->ir_file);
 
     for (i = 0; i < opts->inputs_count; i++) {
         if (!check_extension(opts->inputs[i], ".c"))
@@ -70,7 +70,6 @@ main(int argc, const char **argv)
     struct modcache cache;
     struct checker check;
     struct irgen irgen;
-    const char *ir_file;
     FILE *ir_out;
     size_t i;
     bool ok = true;
@@ -110,8 +109,7 @@ main(int argc, const char **argv)
         return 1;
     }
 
-    ir_file = "test.ll"; // XXX
-    ir_out = fopen(ir_file, "wb");
+    ir_out = fopen(opts.ir_file, "wb");
     if (!ir_out) {
         report_info(NULL, NULL, "Failed to open IR output file\n");
         return 1;
@@ -128,7 +126,7 @@ main(int argc, const char **argv)
     }
 
     fclose(ir_out);
-    if (run_clang(&opts, ir_file)) {
+    if (run_clang(&opts)) {
         report_info(NULL, NULL, "Failed to compile IR\n");
         return 1;
     }
