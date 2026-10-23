@@ -20,6 +20,7 @@ struct modfile {
     char *abs_path;
     char *dir_path;
     bool registered;
+    bool resolved;
 };
 
 struct modcache {

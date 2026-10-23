@@ -1,0 +1,11 @@
+
+sig X {
+    proc foo()
+}
+
+module s: X
+
+proc foo() {}
+proc bar() {}
+
+struct PrivateType {}

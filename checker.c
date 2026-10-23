@@ -238,6 +238,8 @@ checker_binding_type(struct checker *state, struct binding *bind,
                        "Symbol '%pS' was originally declared here\n",
                        bind->sym);
         }
+
+        bind->type = type_get_invalid();
         return NULL;
     }
 
@@ -340,8 +342,8 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
 
             if (type->tag == TYPE_MODULE || type->tag == TYPE_SIG) {
                 TYCHK_ERROR(state, expr->span,
-                            "Cannot make a pointer type from '%pS'\n",
-                            type->module.scope->name);
+                            "Cannot make a pointer type from '%pT'\n",
+                            type);
                 return NULL;
             }
 
@@ -590,6 +592,8 @@ checker_resolve_type(struct checker *state, struct type **type_ptr)
 
 static bool checker_register_file(struct checker *state, struct modfile *file);
 
+static bool checker_resolve_file(struct checker *state, struct modfile *file);
+
 static struct scope *
 checker_eval_import(struct checker *state, struct scope *curr_scope,
                     struct expr *path, struct decl *decl)
@@ -669,6 +673,9 @@ checker_eval_import(struct checker *state, struct scope *curr_scope,
         }
 
         if (!checker_register_file(state, file))
+            return NULL;
+
+        if (!checker_resolve_file(state, file))
             return NULL;
 
         return ((struct decl_module *)file->decl)->type->module.scope;
@@ -778,6 +785,15 @@ checker_resolve_import(struct checker *state, struct binding *bind)
         return false;
     }
 
+    if (orig_bind->seal_type &&
+        !checker_cmp(state, bind->type, orig_bind->seal_type)) {
+        /*
+         * If we are inside the module (access to type != seal_type),
+         * propagate the sealing down the chain for other imports
+         */
+        bind->seal_type = orig_bind->seal_type;
+    }
+
     bind->link_sym = orig_bind->link_sym;
     bind->orig_decl = orig_bind->orig_decl
                     ? orig_bind->orig_decl
@@ -832,6 +848,8 @@ checker_resolve_layout(struct checker *state, struct type *type)
                 TYCHK_ERROR(state, bind->decl->span,
                             "Struct '%pS' has infinitely recursive layout\n",
                             bind->sym);
+
+                bind->type = type_get_invalid();
                 return false;
             }
 
@@ -851,7 +869,6 @@ checker_rebind_sig(struct type *type, struct scope *scope,
                    struct scope *sig_scope, bool seal)
 {
     struct binding *bind;
-    struct decl *orig_decl;
     struct type *item, *args[32];
     struct struct_field *fields;
     size_t i;
@@ -873,8 +890,7 @@ checker_rebind_sig(struct type *type, struct scope *scope,
                 return bind->type;
 
             if (!bind->seal_type) {
-                orig_decl = bind->orig_decl ? bind->orig_decl : bind->decl;
-                bind->seal_type = type_get_opaque(type->attr, orig_decl,
+                bind->seal_type = type_get_opaque(type->attr, bind->decl,
                                                   bind->sym);
             }
             return bind->seal_type;
@@ -954,12 +970,6 @@ checker_seal_module(struct checker *state, struct decl_module *mod)
             }
             ok = false;
             continue;
-        } else {
-            /*
-             * The module implements the binding from the signature,
-             * we can unseal its binding
-             */
-            BIND_CLEAR_FLAG(bind, BIND_SEALED);
         }
 
         if (BIND_IS_TYPE(sig_bind) != BIND_IS_TYPE(bind)) {
@@ -983,6 +993,11 @@ checker_seal_module(struct checker *state, struct decl_module *mod)
             ok = false;
             continue;
         }
+
+        /*
+         * The module's binding matches the signature, unseal it
+         */
+        BIND_CLEAR_FLAG(bind, BIND_SEALED);
 
         type = checker_rebind_sig(sig_bind->type, scope, sig_scope, false);
         if (!checker_cmp(state, bind->type, type)) {
@@ -1011,11 +1026,20 @@ checker_seal_module(struct checker *state, struct decl_module *mod)
 static bool
 checker_resolve_module(struct checker *state, struct decl_module *mod)
 {
-    struct scope *scope, *sig_scope;
+    struct scope *scope, *sig_scope, *saved;
     struct binding *bind, *sig_bind;
     struct decl_type *d_type;
     size_t i;
     bool seal, ok = true;
+
+    scope = mod->type->module.scope;
+    saved = state->curr_scope;
+
+    /*
+     * Nested modules resolve their signature in their enclosing scope,
+     * while file modules resolve their signature in the file's own scope
+     */
+    state->curr_scope = mod->decl.bind ? mod->decl.bind->scope : scope;
 
     if (mod->sig) {
         if (!checker_resolve_type(state, &mod->sig)) {
@@ -1035,17 +1059,8 @@ checker_resolve_module(struct checker *state, struct decl_module *mod)
         seal = false;
     }
 
-    scope = mod->type->module.scope;
-
     if (seal) {
         sig_scope = mod->sig->sig.scope;
-
-        /*
-         * Ensure that all bindings in the signature are resolved first
-         */
-        if (!checker_resolve_binding(state, sig_scope->decl->bind)) {
-            ok = false;
-        }
 
         /*
          * Forward complete types from the signature into the module scope
@@ -1065,9 +1080,12 @@ checker_resolve_module(struct checker *state, struct decl_module *mod)
             if (scope_lookup_local(scope, sig_bind->sym))
                 continue;
 
-            bind = scope_push(scope, sig_bind->sym, sig_bind->type,
+            /*
+             * Delay the resolution of the forwarded types so they can use
+             * the proper bindings from the module scope
+             */
+            bind = scope_push(scope, sig_bind->sym, NULL,
                               sig_bind->decl, sig_bind->flags);
-            bind->status = RESOLVE_DONE;
             bind->link_sym = sig_bind->link_sym;
             bind->orig_decl = sig_bind->orig_decl
                             ? sig_bind->orig_decl
@@ -1085,6 +1103,7 @@ checker_resolve_module(struct checker *state, struct decl_module *mod)
          ok = false;
     }
 
+    state->curr_scope = saved;
     return ok;
 }
 
@@ -1097,7 +1116,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct decl_var *var;
     struct type *type, *args[32];
     struct proc_arg *ptr;
-    struct scope *saved_scope, *scope;
+    struct scope *saved, *scope;
     size_t i;
     bool ok = true;
 
@@ -1122,10 +1141,12 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                        "Symbol '%pS' was originally declared here\n",
                        bind->sym);
         }
+
+        bind->type = type_get_invalid();
         return false;
     }
 
-    saved_scope = state->curr_scope;
+    saved = state->curr_scope;
     state->curr_scope = bind->scope;
 
     /*
@@ -1138,6 +1159,18 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             d_type = (struct decl_type *)bind->decl;
             if (!d_type->type)
                 break;
+
+            /*
+             * If this type declaration was forwarded from a signature,
+             * rebind any opaque signature types in it to this module's scope
+             */
+            if (bind->decl->bind && bind->decl->bind != bind) {
+                bind->type = checker_rebind_sig(bind->decl->bind->type,
+                                                bind->scope,
+                                                bind->decl->bind->scope,
+                                                false);
+                break;
+            }
 
             if (!checker_resolve_type(state, &d_type->type)) {
                 ok = false;
@@ -1269,7 +1302,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             unreachable();
     }
 
-    state->curr_scope = saved_scope;
+    state->curr_scope = saved;
 
     bind->status = RESOLVE_DONE;
     return ok;
@@ -3100,6 +3133,54 @@ checker_register_sig(struct checker *state, struct decl_sig *decl)
 }
 
 static bool
+checker_seal_file(struct checker *state, struct decl_module *mod)
+{
+    struct decl_module *file_mod;
+
+    /*
+     * Fail if we are in a module that is not in a file context
+     */
+    if (state->curr_scope->parent != state->root_scope
+            || !state->curr_scope->decl
+            || state->curr_scope->decl->tag != DECL_MODULE) {
+        TYCHK_ERROR(state, mod->decl.span,
+                    "Nested module '%pS' must have a body\n",
+                    mod->sym);
+        return false;
+    }
+
+    file_mod = (struct decl_module *)state->curr_scope->decl;
+    if (mod->sym != file_mod->sym) {
+        TYCHK_ERROR(state, mod->decl.span,
+                    "Module header '%pS' does not match file module name '%pS'\n",
+                    mod->sym, file_mod->sym);
+        return false;
+    }
+
+    if (!mod->sig) {
+        TYCHK_ERROR(state, mod->decl.span,
+                    "Module header '%pS' must specify a signature\n",
+                    mod->sym);
+        return false;
+    }
+
+    if (file_mod->sig) {
+        TYCHK_ERROR(state, mod->decl.span,
+                    "Duplicate signature specification for module '%pS'\n",
+                    mod->sym);
+
+        TYCHK_INFO(state, file_mod->decl.span,
+                   "Signature for module '%pS' was previously specified here\n",
+                   mod->sym);
+        return false;
+    }
+
+    file_mod->sig = mod->sig;
+    file_mod->decl.span = mod->decl.span;
+    return true;
+}
+
+static bool
 checker_register_decl(struct checker *state, struct decl *decl)
 {
     struct decl_proc *proc;
@@ -3181,6 +3262,15 @@ checker_register_decl(struct checker *state, struct decl *decl)
 
         case DECL_MODULE:
             mod = (struct decl_module *)decl;
+
+            /*
+             * Module declarations without a body get interpreted in a
+             * special way to support sealing file-level modules
+             */
+            if (!mod->block) {
+                return checker_seal_file(state, mod);
+            }
+
             if (!checker_register_binding(state, decl, mod->sym)) {
                 ok = false;
             }
@@ -3280,7 +3370,7 @@ static bool
 checker_register_file(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
-    struct scope *saved_scope, *scope;
+    struct scope *saved, *scope;
     bool ok;
 
     if (file->registered)
@@ -3298,12 +3388,12 @@ checker_register_file(struct checker *state, struct modfile *file)
         scope->decl = file->decl;
     }
 
-    saved_scope = state->curr_scope;
+    saved = state->curr_scope;
     state->curr_scope = mod->type->module.scope;
 
     ok = checker_register_module(state, mod);
 
-    state->curr_scope = saved_scope;
+    state->curr_scope = saved;
     return ok;
 }
 
@@ -3321,6 +3411,13 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
     if (decl->tag == DECL_MODULE) {
         mod = (struct decl_module *)decl;
+        if (!mod->block) {
+            /*
+             * Should be already reported by register at this point
+             */
+            return true;
+        }
+
         assert(mod->type && "impossible for nested modules");
 
         if (mod->type->tag != TYPE_MODULE) {
@@ -3328,13 +3425,6 @@ checker_validate_decl(struct checker *state, struct decl *decl)
                         "Module '%pS' was not registered\n",
                         mod->sym);
             return false;
-        }
-
-        if (!mod->block) {
-            /*
-             * Should be already reported by register at this point
-             */
-            return true;
         }
 
         saved = state->curr_scope;
@@ -3422,9 +3512,11 @@ static bool
 checker_resolve_file(struct checker *state, struct modfile *file)
 {
     struct decl_module *mod;
-    struct scope *scope;
-    size_t i;
-    bool ok = true;
+
+    if (file->resolved)
+        return true;
+
+    file->resolved = true;
 
     mod = (struct decl_module *)file->decl;
     if (!mod->type) {
@@ -3434,13 +3526,7 @@ checker_resolve_file(struct checker *state, struct modfile *file)
         return false;
     }
 
-    scope = mod->type->module.scope;
-    for (i = 0; i < scope->bindings_count; i++) {
-        if (!checker_resolve_binding(state, &scope->bindings[i]))
-            ok = false;
-    }
-
-    return ok;
+    return checker_resolve_module(state, mod);
 }
 
 bool

@@ -1,0 +1,10 @@
+import s
+
+type MyType = s.PrivateType
+
+proc main() {
+    s.foo()
+    s.bar()
+
+    var x: MyType
+}
