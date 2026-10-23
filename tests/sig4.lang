@@ -1,0 +1,13 @@
+sig X {
+    proc foo(): int
+}
+
+module Y : X {
+    proc foo() : int { return 10 }
+    proc bar() { }
+}
+
+proc main() {
+    Y.foo()
+    Y.bar()
+}

@@ -1,0 +1,23 @@
+module Y : X {
+    proc foo(): int { return 10 }
+}
+sig X {
+    proc foo(): int
+}
+
+sig A {
+    type S
+    proc make(): *S
+}
+
+module B : A {
+    type S = int
+
+    proc make(): *S {
+        return @cast(*S, 0)
+    }
+
+    module Inner {
+        import B { S; make }
+    }
+}

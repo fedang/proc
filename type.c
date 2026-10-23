@@ -419,11 +419,22 @@ type_alignof(const struct type *type)
 }
 
 static void
+scope_format_path(FILE *out, const struct scope *scope)
+{
+    if (!scope || !scope->parent || !scope->name)
+        return;
+
+    if (scope->parent->parent) {
+        scope_format_path(out, scope->parent);
+        fprintf(out, "%.*s.", (int)scope->name->len, scope->name->str);
+    }
+}
+
+static void
 type_format_named(FILE *out, struct decl *decl, struct symbol *name)
 {
-    if (decl && decl->bind && decl->bind->scope && decl->bind->scope->name) {
-        fprintf(out, "%.*s.", (int)decl->bind->scope->name->len,
-                decl->bind->scope->name->str);
+    if (decl && decl->bind && decl->bind->scope) {
+        scope_format_path(out, decl->bind->scope);
     }
     fprintf(out, "%.*s", (int)name->len, name->str);
 }

@@ -1,0 +1,15 @@
+sig Y {
+    proc foo()
+}
+
+module X: Y {
+    proc foo()
+    proc bar()
+}
+
+import X {foo;bar}
+
+proc main()
+{
+    bar()
+}

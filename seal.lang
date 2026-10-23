@@ -1,0 +1,12 @@
+sig Sig {
+    proc foo()
+}
+
+module M : Sig {
+    import sub { foo }
+    module sub { proc foo() {} }
+}
+
+proc main() {
+    M.foo()
+}

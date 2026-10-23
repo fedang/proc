@@ -1,0 +1,2 @@
+import a { A_Struct }
+struct B_Struct { y: int }

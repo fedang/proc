@@ -1,0 +1,10 @@
+sig S {
+    type T
+    type Ptr = *T
+    proc use(x: *T)
+}
+
+module M: S {
+    type T = u32
+    proc use(x: *T) {}
+}
