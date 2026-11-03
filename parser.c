@@ -565,10 +565,16 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         goto done;
     }
 
-    if (parser_match(state, TOKEN_LBRACE)) {
+    if (parser_curr(state)->tag == TOKEN_LBRACE) {
+        if (state->no_block) {
+            parser_error(state, "Block expression is not allowed in this context");
+            return false;
+        }
+
         /*
          * Parse as a full-fledged block, not as a struct literal
          */
+        parser_advance(state);
         return parser_expr_block(state, expr);
     }
 
