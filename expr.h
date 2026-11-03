@@ -8,6 +8,7 @@
 #include "symbol.h"
 #include "type.h"
 #include "span.h"
+#include "value.h"
 
 struct binding;
 
@@ -30,13 +31,6 @@ enum expr_tag {
     EXPR_RETURN,
     EXPR_BREAK,
     EXPR_CONTINUE,
-};
-
-enum literal_tag {
-    LIT_INVALID,
-    LIT_INTEGER,
-    LIT_STRING,
-    LIT_BOOL,
 };
 
 enum binop_tag {
@@ -108,15 +102,7 @@ struct expr {
     struct span span;
     struct type *type;
     enum expr_tag tag;
-};
-
-struct expr_literal {
-    struct expr expr;
-    enum literal_tag literal;
-    union {
-        int64_t integer;
-        const char *string;
-    };
+    struct value ctval;
 };
 
 struct expr_ident {
@@ -215,7 +201,13 @@ expr_set_span(struct expr *expr, struct span span)
     expr->span = span;
 }
 
-struct expr *expr_make_literal(enum literal_tag literal, intptr_t value);
+static inline void
+expr_set_ctval(struct expr *expr, struct value ctval)
+{
+    expr->ctval = ctval;
+}
+
+struct expr *expr_make_literal(void);
 
 struct expr *expr_make_ident(struct symbol *sym);
 

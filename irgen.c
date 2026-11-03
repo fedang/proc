@@ -554,15 +554,15 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
 }
 
 static struct irval
-irgen_expr_literal(struct irgen *state, struct expr_literal *expr)
+irgen_expr_literal(struct irgen *state, struct expr *expr)
 {
-    switch (expr->literal) {
-        case LIT_INTEGER:
-        case LIT_BOOL:
-            return IRVAL_INT(expr->integer);
+    switch (expr->ctval.tag) {
+        case VALUE_INTEGER:
+        case VALUE_BOOL:
+            return IRVAL_INT(expr->ctval.integer);
 
-        case LIT_STRING:
-            state->strings[state->strings_count] = expr->string;
+        case VALUE_STRING:
+            state->strings[state->strings_count] = expr->ctval.string;
             assert(state->strings_count < 256 && "too many strings!");
             return IRVAL_STRING(state->strings_count++);
 
@@ -1070,7 +1070,7 @@ irgen_expr(struct irgen *state, struct expr *expr)
 
     switch (expr->tag) {
         case EXPR_LITERAL:
-            return irgen_expr_literal(state, (struct expr_literal *)expr);
+            return irgen_expr_literal(state, expr);
 
         case EXPR_BINOP:
             return irgen_expr_binop(state, (struct expr_binop *)expr);
@@ -1360,22 +1360,19 @@ static void
 irgen_decl_var(struct irgen *state, struct decl_var *decl)
 {
     struct symbol *link_sym;
-    struct expr_literal *lit;
 
     link_sym = irgen_link_sym(state, &decl->decl);
     IR_EMITF(state, "\n@\"%s\" = global ", link_sym->str);
     irgen_type(state, decl->type);
 
     if (decl->value && decl->value->tag == EXPR_LITERAL) {
-        lit = (struct expr_literal *)decl->value;
-
-        switch (lit->literal) {
-            case LIT_INTEGER:
-            case LIT_BOOL:
-                IR_EMITF(state, " %ld\n", (long)lit->integer);
+        switch (decl->value->ctval.tag) {
+            case VALUE_INTEGER:
+            case VALUE_BOOL:
+                IR_EMITF(state, " %ld\n", (long)decl->value->ctval.integer);
                 return;
 
-            case LIT_STRING:
+            case VALUE_STRING:
                 // TODO
                 break;
 

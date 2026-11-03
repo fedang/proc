@@ -94,7 +94,6 @@ static bool checker_expr_macro(struct checker *state, struct expr_macro *expr);
 static bool
 checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 {
-    struct expr_literal *lit;
     struct expr_unop *unop;
     struct expr_binop *binop;
     struct expr_macro *macro;
@@ -102,14 +101,13 @@ checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 
     switch (expr->tag) {
         case EXPR_LITERAL: {
-            lit = (struct expr_literal *)expr;
-            if (lit->literal != LIT_INTEGER) {
+            if (expr->ctval.tag != VALUE_INTEGER) {
                 TYCHK_ERROR(state, expr->span,
                         "Expected integer literal in constant expression\n");
                 return false;
             }
 
-            *out = lit->integer;
+            *out = expr->ctval.integer;
             return true;
         }
 
@@ -1347,7 +1345,6 @@ static bool
 checker_expr_coerce(struct checker *state, struct expr *expr,
                     struct type *target)
 {
-    struct expr_literal *lit;
     struct expr_unop *unop;
     struct expr_binop *binop;
     struct expr_array *array;
@@ -1382,15 +1379,16 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
 
     switch (expr->tag) {
         case EXPR_LITERAL:
-            lit = (struct expr_literal *)expr;
             if (expr->type->tag != TYPE_ANY_INT)
                 break;
 
             type = target ? target : type_get_int(NULL, 0);
-            if (!checker_literal_width(lit->integer, type)) {
+            assert(expr->ctval.tag == VALUE_INTEGER);
+
+            if (!checker_literal_width(expr->ctval.integer, type)) {
                 TYCHK_ERROR(state, expr->span,
                             "Integer literal '%ld' out of range for '%pT'\n",
-                            lit->integer, type);
+                            expr->ctval.integer, type);
                 expr->type = type_get_invalid();
                 return false;
             }
@@ -1629,19 +1627,19 @@ checker_expr_typed(struct checker *state, struct expr *expr,
 }
 
 static bool
-checker_expr_literal(struct checker *state, struct expr_literal *expr)
+checker_expr_literal(struct checker *state, struct expr *expr)
 {
-    switch (expr->literal) {
-        case LIT_INTEGER:
-            expr->expr.type = type_get_any_int();
+    switch (expr->ctval.tag) {
+        case VALUE_INTEGER:
+            expr->type = type_get_any_int();
             break;
 
-        case LIT_STRING:
-            expr->expr.type = type_get_ptr(NULL, type_get_uint(NULL, 8));
+        case VALUE_STRING:
+            expr->type = type_get_ptr(NULL, type_get_uint(NULL, 8));
             break;
 
-        case LIT_BOOL:
-            expr->expr.type = type_get_bool(NULL);
+        case VALUE_BOOL:
+            expr->type = type_get_bool(NULL);
             break;
 
         default:
@@ -2668,7 +2666,7 @@ checker_expr(struct checker *state, struct expr *expr)
 {
     switch (expr->tag) {
         case EXPR_LITERAL:
-            return checker_expr_literal(state, (struct expr_literal *)expr);
+            return checker_expr_literal(state, expr);
 
         case EXPR_IDENT:
             return checker_expr_ident(state, (struct expr_ident *)expr);
@@ -3461,8 +3459,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
         }
 
         if (var->value->tag != EXPR_LITERAL
-            || (((struct expr_literal *)var->value)->literal != LIT_INTEGER
-            && ((struct expr_literal *)var->value)->literal != LIT_BOOL)) {
+            || (var->value->ctval.tag != VALUE_INTEGER
+            && var->value->ctval.tag != VALUE_BOOL)) {
             TYCHK_ERROR(state, var->value->span,
                         "Cannot initialize global with non-literal value of type '%pT'\n",
                         var->value->type);
