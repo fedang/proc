@@ -108,6 +108,137 @@ eval_expr_unop(struct eval *state, struct expr_unop *expr, struct value *out)
 }
 
 static enum eval_status
+eval_binop_arith(struct eval *state, struct expr_binop *expr,
+                 int64_t lhs, int64_t rhs, struct value *out)
+{
+    size_t width;
+    int64_t result;
+    uint64_t u_lhs, u_rhs;
+    bool unsigned_op;
+
+    width = expr->expr.type->tag != TYPE_ANY_INT
+          ? type_bit_width(expr->expr.type)
+          : INT_SIZE * 8;
+
+    unsigned_op = expr->expr.type->tag == TYPE_UINT
+               || expr->expr.type->tag == TYPE_PTR;
+
+    u_lhs = (uint64_t)lhs;
+    u_rhs = (uint64_t)rhs;
+
+    switch (expr->binop) {
+        case BINOP_ADD:
+            result = (int64_t)(u_lhs + u_rhs);
+            break;
+
+        case BINOP_SUB:
+            result = (int64_t)(u_lhs - u_rhs);
+            break;
+
+        case BINOP_MUL:
+            result = (int64_t)(u_lhs * u_rhs);
+            break;
+
+        case BINOP_DIV:
+            if (rhs == 0) {
+                EVAL_REPORT(state, expr->expr.span,
+                            "Division by zero in constant expression\n");
+                return EVAL_ERROR;
+            }
+            result = unsigned_op ? (int64_t)(u_lhs / u_rhs) : lhs / rhs;
+            break;
+
+        case BINOP_MOD:
+            if (rhs == 0) {
+                EVAL_REPORT(state, expr->expr.span,
+                            "Modulo by zero in constant expression\n");
+                return EVAL_ERROR;
+            }
+            result = unsigned_op ? (int64_t)(u_lhs % u_rhs) : lhs % rhs;
+            break;
+
+        case BINOP_SHL:
+            if (rhs < 0 || (size_t)rhs >= width) {
+                EVAL_REPORT(state, expr->expr.span,
+                            "Shift amount out of bounds in constant expression\n");
+                return EVAL_ERROR;
+            }
+            result = (int64_t)(u_lhs << rhs);
+            break;
+
+        case BINOP_SHR:
+            if (rhs < 0 || (size_t)rhs >= width) {
+                EVAL_REPORT(state, expr->expr.span,
+                            "Shift amount out of bounds in constant expression\n");
+                return EVAL_ERROR;
+            }
+            result = unsigned_op ? (int64_t)(u_lhs >> rhs) : lhs >> rhs;
+            break;
+
+        case BINOP_OR:
+            result = (int64_t)(u_lhs | u_rhs);
+            break;
+
+        case BINOP_AND:
+            result = (int64_t)(u_lhs & u_rhs);
+            break;
+
+        case BINOP_XOR:
+            result = (int64_t)(u_lhs ^ u_rhs);
+            break;
+
+        default:
+            return EVAL_NOT_CONST;
+    }
+
+    *out = value_make_integer(eval_normalize(expr->expr.type, result));
+    return EVAL_OK;
+}
+
+static enum eval_status
+eval_binop_compare(struct eval *state, struct expr_binop *expr,
+                   int64_t lhs, int64_t rhs, struct value *out)
+{
+    uint64_t u_lhs, u_rhs;
+    bool unsigned_op;
+
+    unsigned_op = expr->op_lhs->type->tag == TYPE_UINT
+               || expr->op_lhs->type->tag == TYPE_PTR;
+
+    u_lhs = (uint64_t)lhs;
+    u_rhs = (uint64_t)rhs;
+
+    switch (expr->binop) {
+        case BINOP_EQ:
+			*out = value_make_bool(lhs == rhs);
+            return EVAL_OK;
+
+        case BINOP_NOTEQ:
+			*out = value_make_bool(lhs != rhs);
+            return EVAL_OK;
+
+        case BINOP_GT:
+			*out = value_make_bool(unsigned_op ? u_lhs >  u_rhs : lhs >  rhs);
+            return EVAL_OK;
+
+        case BINOP_GTEQ:
+			*out = value_make_bool(unsigned_op ? u_lhs >= u_rhs : lhs >= rhs);
+            return EVAL_OK;
+
+        case BINOP_LT:
+			*out = value_make_bool(unsigned_op ? u_lhs <  u_rhs : lhs <  rhs);
+            return EVAL_OK;
+
+        case BINOP_LTEQ:
+			*out = value_make_bool(unsigned_op ? u_lhs <= u_rhs : lhs <= rhs);
+            return EVAL_OK;
+
+        default:
+            return EVAL_NOT_CONST;
+    }
+}
+
+static enum eval_status
 eval_expr_binop(struct eval *state, struct expr_binop *expr, struct value *out)
 {
     enum eval_status status;
@@ -144,63 +275,18 @@ eval_expr_binop(struct eval *state, struct expr_binop *expr, struct value *out)
         return EVAL_OK;
     }
 
-    out->tag = VALUE_INTEGER;
-    switch (expr->binop) {
-        case BINOP_ADD:
-            out->integer = lhs.integer + rhs.integer;
-            return EVAL_OK;
+    if (expr->binop >= BINOP_EQ && expr->binop <= BINOP_LTEQ) {
+        if (lhs.tag != VALUE_INTEGER && lhs.tag != VALUE_BOOL)
+            return EVAL_NOT_CONST;
 
-        case BINOP_SUB:
-            out->integer = lhs.integer - rhs.integer;
-            return EVAL_OK;
+        if (rhs.tag != VALUE_INTEGER && rhs.tag != VALUE_BOOL)
+            return EVAL_NOT_CONST;
 
-        case BINOP_MUL:
-            out->integer = lhs.integer * rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_DIV:
-            if (rhs.integer == 0) {
-                EVAL_REPORT(state, expr->expr.span,
-                           "Division by zero in constant expression\n");
-                return EVAL_ERROR;
-            }
-            out->integer = lhs.integer / rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_MOD:
-            if (rhs.integer == 0) {
-                EVAL_REPORT(state, expr->expr.span,
-                           "Modulo by zero in constant expression\n");
-                return EVAL_ERROR;
-            }
-            out->integer = lhs.integer % rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_SHL:
-            out->integer = lhs.integer << rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_SHR:
-            out->integer = lhs.integer >> rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_OR:
-            out->integer = lhs.integer | rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_AND:
-            out->integer = lhs.integer & rhs.integer;
-            return EVAL_OK;
-
-        case BINOP_XOR:
-            out->integer = lhs.integer ^ rhs.integer;
-            return EVAL_OK;
-
-        default:
-            EVAL_REPORT(state, expr->expr.span,
-                       "Operator not allowed in constant expression\n");
-            return EVAL_ERROR;
+        return eval_binop_compare(state, expr, lhs.integer, rhs.integer, out);
     }
+
+    assert(lhs.tag == VALUE_INTEGER && rhs.tag == VALUE_INTEGER);
+    return eval_binop_arith(state, expr, lhs.integer, rhs.integer, out);
 }
 
 static enum eval_status
