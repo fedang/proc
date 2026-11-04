@@ -6,6 +6,9 @@ var E: u32 = 7 / 2                  // 3 (unsigned division)
 var F: int = -7 / 2                 // -3 (signed division)
 var G: i32 = @size_of(i32) * 2      // 8
 
+var X: [i32, true]
+var Y: [i32, @size_of(bool)]
+
 var BAD1: int = foo()               // not a compile-time constant
 var BAD2: int = 1 / 0               // division by zero
 

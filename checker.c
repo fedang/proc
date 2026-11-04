@@ -96,16 +96,18 @@ static bool checker_expr_macro(struct checker *state, struct expr_macro *expr);
 static bool
 checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 {
+    if (!type_is_integer(expr->type)) {
+        TYCHK_ERROR(state, expr->span,
+                    "Expected integer constant expression, but got '%pT'\n",
+                    expr->type);
+        return false;
+    }
+
     switch (eval_try_ctval(&state->eval, expr)) {
         case EVAL_OK:
-            if (expr->ctval.tag == VALUE_INTEGER) {
-                *out = expr->ctval.integer;
-                return true;
-            }
-
-            TYCHK_ERROR(state, expr->span,
-                        "Expected integer constant expression\n");
-            return false;
+            assert(expr->ctval.tag == VALUE_INTEGER);
+            *out = expr->ctval.integer;
+            return true;
 
         case EVAL_NOT_CONST:
             TYCHK_ERROR(state, expr->span,
@@ -319,6 +321,10 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
             if (array->args_count == 1)
                 return type_get_slice(NULL, type);
 
+            /*
+             * We deliberatly allow untyped integers here as they are safe
+             * to evaluate in the constant folder
+             */
             if (!checker_expr(state, array->args[1]))
                 return NULL;
 

@@ -6,6 +6,13 @@
 #define EVAL_REPORT(state, span, ...) \
     report_error((state)->src_map, &(span), __VA_ARGS__)
 
+#define EVAL_BURN(state) \
+    do { \
+        if ((state)->fuel == 0) \
+            return EVAL_EXHAUSTED; \
+        (state)->fuel--; \
+    } while (false)
+
 void
 eval_init(struct eval *state, struct source_map *src_map)
 {
@@ -31,23 +38,221 @@ eval_env_pop(struct eval *state)
 void
 eval_env_bind(struct eval *state, struct named var)
 {
+    assert(state->env != NULL);
     assert(state->env->vars_count < 64 && "too many vars!");
     state->env->vars[state->env->vars_count] = var;
     state->env->vars_count++;
 }
 
+static int64_t
+eval_normalize(struct type *type, int64_t val)
+{
+    size_t bits;
+    uint64_t mask, tmp;
+
+    /*
+     * Don't change the value while in an untyped contex (e.g. array sizes)
+     */
+    switch (type->tag) {
+        case TYPE_INT:
+        case TYPE_UINT:
+        case TYPE_PTR:
+            break;
+
+        case TYPE_BOOL:
+            return val ? 1 : 0;
+
+        default:
+            return val;
+    }
+
+    bits = type_bit_width(type);
+    if (bits >= 64)
+        return val;
+
+    mask = (1ULL << bits) - 1;
+    tmp = (uint64_t)val & mask;
+
+    if (type->tag == TYPE_INT && (tmp & (1ULL << (bits - 1))))
+        return (int64_t)(tmp | ~mask);
+
+    return (int64_t)tmp;
+}
+
+static enum eval_status eval_expr(struct eval *state, struct expr *expr,
+                                  struct value *out);
+
+static enum eval_status
+eval_expr_unop(struct eval *state, struct expr_unop *expr, struct value *out)
+{
+    enum eval_status status;
+
+    status = eval_expr(state, expr->op, out);
+    if (status != EVAL_OK)
+        return status;
+
+    switch (expr->unop) {
+        case UNOP_NEG:
+            assert(out->tag == VALUE_INTEGER);
+            out->integer = eval_normalize(expr->expr.type, -out->integer);
+            return EVAL_OK;
+
+        case UNOP_NOT:
+            assert(out->tag == VALUE_BOOL);
+            out->integer = !out->integer;
+            return EVAL_OK;
+
+        default:
+            return EVAL_NOT_CONST;
+    }
+}
+
+static enum eval_status
+eval_expr_binop(struct eval *state, struct expr_binop *expr, struct value *out)
+{
+    enum eval_status status;
+    struct value lhs, rhs;
+
+    status = eval_expr(state, expr->op_lhs, &lhs);
+    if (status != EVAL_OK)
+        return status;
+
+    /*
+     * Short-circuit logic for && and ||
+     */
+    if (expr->binop == BINOP_BOOL_AND) {
+        assert(lhs.tag == VALUE_BOOL);
+        if (!lhs.integer) {
+            *out = value_make_bool(false);
+            return EVAL_OK;
+        }
+    } else if (expr->binop == BINOP_BOOL_OR) {
+        assert(lhs.tag == VALUE_BOOL);
+        if (lhs.integer) {
+            *out = value_make_bool(true);
+            return EVAL_OK;
+        }
+    }
+
+    status = eval_expr(state, expr->op_rhs, &rhs);
+    if (status != EVAL_OK)
+        return status;
+
+    if (expr->binop == BINOP_BOOL_AND || expr->binop == BINOP_BOOL_OR) {
+        assert(lhs.tag == VALUE_BOOL && rhs.tag == VALUE_BOOL);
+        *out = value_make_bool(rhs.integer != 0);
+        return EVAL_OK;
+    }
+
+    out->tag = VALUE_INTEGER;
+    switch (expr->binop) {
+        case BINOP_ADD:
+            out->integer = lhs.integer + rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_SUB:
+            out->integer = lhs.integer - rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_MUL:
+            out->integer = lhs.integer * rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_DIV:
+            if (rhs.integer == 0) {
+                EVAL_REPORT(state, expr->expr.span,
+                           "Division by zero in constant expression\n");
+                return EVAL_ERROR;
+            }
+            out->integer = lhs.integer / rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_MOD:
+            if (rhs.integer == 0) {
+                EVAL_REPORT(state, expr->expr.span,
+                           "Modulo by zero in constant expression\n");
+                return EVAL_ERROR;
+            }
+            out->integer = lhs.integer % rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_SHL:
+            out->integer = lhs.integer << rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_SHR:
+            out->integer = lhs.integer >> rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_OR:
+            out->integer = lhs.integer | rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_AND:
+            out->integer = lhs.integer & rhs.integer;
+            return EVAL_OK;
+
+        case BINOP_XOR:
+            out->integer = lhs.integer ^ rhs.integer;
+            return EVAL_OK;
+
+        default:
+            EVAL_REPORT(state, expr->expr.span,
+                       "Operator not allowed in constant expression\n");
+            return EVAL_ERROR;
+    }
+}
+
+static enum eval_status
+eval_expr_macro(struct eval *state, struct expr_macro *expr, struct value *out)
+{
+    enum eval_status status;
+    struct value op;
+
+    switch (expr->macro.tag) {
+        case MACRO_SIZEOF:
+        case MACRO_ALIGNOF:
+            *out = value_make_integer(expr->macro.value);
+            return EVAL_OK;
+
+        case MACRO_CAST:
+            status = eval_expr(state, expr->args[1], &op);
+            if (status != EVAL_OK)
+                return status;
+
+            if (op.tag != VALUE_INTEGER && op.tag != VALUE_BOOL)
+                return EVAL_NOT_CONST;
+
+            switch (expr->expr.type->tag) {
+                case TYPE_INT:
+                case TYPE_UINT:
+                case TYPE_PTR:
+                    *out = value_make_integer(eval_normalize(expr->expr.type,
+                                                             op.integer));
+                    return EVAL_OK;
+
+                case TYPE_BOOL:
+                    *out = value_make_bool(op.integer != 0);
+                    return EVAL_OK;
+
+                default:
+                    return EVAL_NOT_CONST;
+            }
+
+        case MACRO_EXPR:
+            if (!expr->macro.expr)
+                return EVAL_NOT_CONST;
+            return eval_expr(state, expr->macro.expr, out);
+
+        default:
+            return EVAL_NOT_CONST;
+    }
+}
+
 static enum eval_status
 eval_expr(struct eval *state, struct expr *expr, struct value *out)
 {
-    enum eval_status status;
-    struct expr_unop *unop;
-    struct expr_binop *binop;
-    struct expr_macro *macro;
-    struct value lhs, rhs;
-
-    if (state->fuel == 0)
-        return EVAL_EXHAUSTED;
-    state->fuel--;
+    EVAL_BURN(state);
 
     switch (expr->tag) {
         case EXPR_LITERAL:
@@ -55,109 +260,13 @@ eval_expr(struct eval *state, struct expr *expr, struct value *out)
             return EVAL_OK;
 
         case EXPR_UNOP:
-            unop = (struct expr_unop *)expr;
-            status = eval_expr(state, unop->op, out);
-            if (status != EVAL_OK)
-                return status;
-
-            if (unop->unop == UNOP_NEG) {
-                out->integer *= -1;
-                return EVAL_OK;
-            }
-
-            if (unop->unop == UNOP_NOT) {
-                out->integer = !out->integer;
-                return EVAL_OK;
-            }
-
-            EVAL_REPORT(state, expr->span,
-                      "Invalid unary operator in constant expression\n");
-            return EVAL_ERROR;
+            return eval_expr_unop(state, (struct expr_unop *)expr, out);
 
         case EXPR_BINOP:
-            binop = (struct expr_binop *)expr;
-            status = eval_expr(state, binop->op_lhs, &lhs);
-            if (status != EVAL_OK)
-                return status;
-
-            status = eval_expr(state, binop->op_rhs, &rhs);
-            if (status != EVAL_OK)
-                return status;
-
-            out->tag = VALUE_INTEGER;
-            switch (binop->binop) {
-                case BINOP_ADD:
-                    out->integer = lhs.integer + rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_SUB:
-                    out->integer = lhs.integer - rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_MUL:
-                    out->integer = lhs.integer * rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_DIV:
-                    if (rhs.integer == 0) {
-                        EVAL_REPORT(state, expr->span,
-                                   "Division by zero in constant expression\n");
-                        return EVAL_ERROR;
-                    }
-                    out->integer = lhs.integer / rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_MOD:
-                    if (rhs.integer == 0) {
-                        EVAL_REPORT(state, expr->span,
-                                   "Modulo by zero in constant expression\n");
-                        return EVAL_ERROR;
-                    }
-                    out->integer = lhs.integer % rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_SHL:
-                    out->integer = lhs.integer << rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_SHR:
-                    out->integer = lhs.integer >> rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_OR:
-                    out->integer = lhs.integer | rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_AND:
-                    out->integer = lhs.integer & rhs.integer;
-                    return EVAL_OK;
-
-                case BINOP_XOR:
-                    out->integer = lhs.integer ^ rhs.integer;
-                    return EVAL_OK;
-
-                default:
-                    EVAL_REPORT(state, expr->span,
-                               "Operator not allowed in constant expression\n");
-                    return EVAL_ERROR;
-            }
+            return eval_expr_binop(state, (struct expr_binop *)expr, out);
 
         case EXPR_MACRO:
-            macro = (struct expr_macro *)expr;
-            switch (macro->macro.tag) {
-                case MACRO_SIZEOF:
-                case MACRO_ALIGNOF:
-                    *out = value_make_integer(macro->macro.value);
-                    return EVAL_OK;
-
-                case MACRO_EXPR:
-                    if (!macro->macro.expr)
-                        return EVAL_NOT_CONST;
-                    return eval_expr(state, macro->macro.expr, out);
-
-                default:
-                    return EVAL_NOT_CONST;
-            }
+            return eval_expr_macro(state, (struct expr_macro *)expr, out);
 
         default:
             return EVAL_NOT_CONST;
@@ -178,6 +287,12 @@ eval_try_ctval(struct eval *state, struct expr *expr)
         return EVAL_OK;
     }
 
+    if (!expr->type || type_is_invalid(expr->type))
+        return EVAL_ERROR;
+
+    /*
+     * Refill the steps limit. In the future this should be tweakable
+     */
     state->fuel = DEFAULT_FUEL;
 
     status = eval_expr(state, expr, &ctval);
