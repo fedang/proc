@@ -1,0 +1,12 @@
+var A: int = 1 + 2 * 3              // 7
+var B: bool = 1 < 2                 // true
+var C: bool = !false                // true
+var D: u8 = 200 + 100               // 44 (wraps, matches runtime)
+var E: u32 = 7 / 2                  // 3 (unsigned division)
+var F: int = -7 / 2                 // -3 (signed division)
+var G: i32 = @size_of(i32) * 2      // 8
+
+var BAD1: int = foo()               // not a compile-time constant
+var BAD2: int = 1 / 0               // division by zero
+
+proc foo(): int { return 10 }

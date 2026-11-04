@@ -56,6 +56,8 @@ checker_init(struct checker *state, struct modcache *cache)
     checker_root_push(state, #type, init);
     TYPE_LIST(X)
 #undef X
+
+    eval_init(&state->eval, &cache->src_map);
 }
 
 static bool
@@ -94,127 +96,28 @@ static bool checker_expr_macro(struct checker *state, struct expr_macro *expr);
 static bool
 checker_eval_const(struct checker *state, struct expr *expr, int64_t *out)
 {
-    struct expr_unop *unop;
-    struct expr_binop *binop;
-    struct expr_macro *macro;
-    int64_t lhs, rhs;
-
-    switch (expr->tag) {
-        case EXPR_LITERAL: {
-            if (expr->ctval.tag != VALUE_INTEGER) {
-                TYCHK_ERROR(state, expr->span,
-                        "Expected integer literal in constant expression\n");
-                return false;
-            }
-
-            *out = expr->ctval.integer;
-            return true;
-        }
-
-        case EXPR_UNOP: {
-            unop = (struct expr_unop *)expr;
-            if (!checker_eval_const(state, unop->op, out))
-                return false;
-
-            if (unop->unop == UNOP_NEG) {
-                *out *= -1;
+    switch (eval_try_ctval(&state->eval, expr)) {
+        case EVAL_OK:
+            if (expr->ctval.tag == VALUE_INTEGER) {
+                *out = expr->ctval.integer;
                 return true;
             }
 
             TYCHK_ERROR(state, expr->span,
-                        "Invalid unary operator in constant expression\n");
+                        "Expected integer constant expression\n");
             return false;
-        }
 
-        case EXPR_BINOP: {
-            binop = (struct expr_binop *)expr;
-            if (!checker_eval_const(state, binop->op_lhs, &lhs) ||
-                !checker_eval_const(state, binop->op_rhs, &rhs))
-                return false;
+        case EVAL_NOT_CONST:
+            TYCHK_ERROR(state, expr->span,
+                        "Expression is not a compile-time constant\n");
+            return false;
 
-            switch (binop->binop) {
-                case BINOP_ADD:
-                    *out = lhs + rhs;
-                    return true;
-
-                case BINOP_SUB:
-                    *out = lhs - rhs;
-                    return true;
-
-                case BINOP_MUL:
-                    *out = lhs * rhs;
-                    return true;
-
-                case BINOP_DIV:
-                    if (rhs == 0) {
-                        TYCHK_ERROR(state, expr->span,
-                                    "Division by zero in constant expression\n");
-                        return false;
-                    }
-                    *out = lhs / rhs;
-                    return true;
-
-                case BINOP_MOD:
-                    if (rhs == 0) {
-                        TYCHK_ERROR(state, expr->span,
-                                    "Modulo by zero in constant expression\n");
-                        return false;
-                    }
-                    *out = lhs % rhs;
-                    return true;
-
-                case BINOP_SHL:
-                    *out = lhs << rhs;
-                    return true;
-
-                case BINOP_SHR:
-                    *out = lhs >> rhs;
-                    return true;
-
-                case BINOP_OR:
-                    *out = lhs | rhs;
-                    return true;
-
-                case BINOP_AND:
-                    *out = lhs & rhs;
-                    return true;
-
-                case BINOP_XOR:
-                    *out = lhs ^ rhs;
-                    return true;
-
-                default:
-                    TYCHK_ERROR(state, expr->span,
-                                "Operator not allowed in constant expression\n");
-                    return false;
-            }
-        }
-
-        case EXPR_MACRO: {
-            macro = (struct expr_macro *)expr;
-            if (!checker_expr_macro(state, macro))
-                return false;
-
-            switch (macro->macro.tag) {
-                case MACRO_SIZEOF:
-                case MACRO_ALIGNOF:
-                    *out = macro->macro.value;
-                    return true;
-
-                case MACRO_EXPR:
-                    return checker_eval_const(state, macro->macro.expr, out);
-
-                default:
-                    TYCHK_ERROR(state, expr->span,
-                                "Macro '@%pS' cannot be evaluated at compile time\n",
-                                macro->name);
-                    return false;
-            }
-        }
+        case EVAL_ERROR:
+            return false;
 
         default:
             TYCHK_ERROR(state, expr->span,
-                        "Expression is not a compile-time constant\n");
+                        "Unexpected control flow in constant expression\n");
             return false;
     }
 }
@@ -473,8 +376,8 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
                 fields[i].type = checker_resolve_raw(state, strukt->fields[i].value);
                 fields[i].index = i;
 
-                if (!fields[i].type)
-                    return NULL;
+                if (!fields[i].type || type_is_invalid(fields[i].type))
+                    return type_get_invalid();
 
                 if (!type_is_sized(fields[i].type)) {
                     TYCHK_ERROR(state, strukt->fields[i].value->span,
@@ -3458,16 +3361,31 @@ checker_validate_decl(struct checker *state, struct decl *decl)
             return false;
         }
 
-        if (var->value->tag != EXPR_LITERAL
-            || (var->value->ctval.tag != VALUE_INTEGER
-            && var->value->ctval.tag != VALUE_BOOL)) {
-            TYCHK_ERROR(state, var->value->span,
-                        "Cannot initialize global with non-literal value of type '%pT'\n",
-                        var->value->type);
-            return false;
+        switch (eval_try_ctval(&state->eval, var->value)) {
+            case EVAL_OK:
+                if (var->value->ctval.tag == VALUE_INTEGER ||
+                    var->value->ctval.tag == VALUE_BOOL)
+                    return true;
+
+                TYCHK_ERROR(state, var->value->span,
+                            "Global variable '%pS' has unsupported constant type '%pT'\n",
+                            var->sym, var->value->type);
+                break;
+
+            case EVAL_NOT_CONST:
+                TYCHK_ERROR(state, var->value->span,
+                            "Global variable '%pS' does not have a constant initializer\n",
+                            var->sym);
+                break;
+
+            case EVAL_ERROR:
+                break;
+
+            default:
+                unreachable();
         }
 
-        return true;
+        return false;
     }
 
     if (decl->tag != DECL_PROC)

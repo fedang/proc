@@ -7,6 +7,7 @@
 #include "decl.h"
 #include "modcache.h"
 #include "scope.h"
+#include "eval.h"
 
 struct local_var {
     struct symbol *sym;
@@ -15,6 +16,7 @@ struct local_var {
 
 struct checker {
     struct modcache *cache;
+    struct eval eval;
     unsigned loop_depth;
     struct type *ret_type;
     struct scope *root_scope;

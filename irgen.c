@@ -1365,7 +1365,7 @@ irgen_decl_var(struct irgen *state, struct decl_var *decl)
     IR_EMITF(state, "\n@\"%s\" = global ", link_sym->str);
     irgen_type(state, decl->type);
 
-    if (decl->value && decl->value->tag == EXPR_LITERAL) {
+    if (decl->value) {
         switch (decl->value->ctval.tag) {
             case VALUE_INTEGER:
             case VALUE_BOOL:

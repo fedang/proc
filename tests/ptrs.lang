@@ -1,0 +1,7 @@
+// Fails if Z is resolved before K, even though Z only holds a pointer!
+struct Z { a: *K }
+struct K { b: Z }
+
+// Also fails if A is resolved before B:
+struct A { p: *B }
+struct B { a: [int, @size_of(A)] }
