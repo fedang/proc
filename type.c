@@ -361,7 +361,9 @@ type_sizeof(const struct type *type)
             return PTR_SIZE;
 
         case TYPE_ARRAY:
-            return type->array.count * type_sizeof(type->array.item);
+            size = type_sizeof(type->array.item);
+            assert(type->array.count > 0 && size > SIZE_MAX / type->array.count);
+            return type->array.count * size;
 
         case TYPE_SLICE:
             return PTR_SIZE + 8;

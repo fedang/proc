@@ -337,6 +337,12 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
                 return NULL;
             }
 
+            if (count > 0 && type_sizeof(type) > SIZE_MAX / count) {
+                TYCHK_ERROR(state, expr->span,
+                            "Array type is too large\n");
+                return NULL;
+            }
+
             return type_get_array(NULL, type, count);
 
         case EXPR_STRUCT:
