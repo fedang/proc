@@ -253,18 +253,25 @@ parser_expr_block(struct parser *state, struct expr **expr)
 
     for (items_count = 0; !parser_eof(state); items_count++) {
         if (parser_match(state, TOKEN_RBRACE))
-            break;
+            goto done;
 
         assert(items_count < 64 && "too many block items!");
         if (!parser_decl(state, &items[items_count]))
             return false;
     }
 
+    if (!parser_check(state, TOKEN_RBRACE, "Expected '}' after block body"))
+        return false;
+
+done:
     state->parens = saved_parens;
     state->no_block = saved_noblock;
 
     *expr = expr_make_block(items_count);
-    memcpy(((struct expr_block *)*expr)->items, items, items_count * sizeof(struct decl *));
+    if (items_count > 0) {
+        memcpy(((struct expr_block *)*expr)->items, items,
+               items_count * sizeof(struct decl *));
+    }
     expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
     return true;
 }
@@ -1306,7 +1313,10 @@ parser_module(struct parser *state, struct decl **decl)
      * Simulate parser_expr_block and create the block manually
      */
     block = expr_make_block(items_count);
-    memcpy(((struct expr_block *)block)->items, items, items_count * sizeof(struct decl *));
+    if (items_count > 0) {
+        memcpy(((struct expr_block *)block)->items, items,
+               items_count * sizeof(struct decl *));
+    }
     expr_set_span(block, span);
     free(items);
 

@@ -121,7 +121,7 @@ static void
 lexer_int(struct lexer *state, char c)
 {
     if (c == '0') {
-        c = tolower(lexer_curr(state));
+        c = lexer_curr(state);
         if (c == 'o' || c == 'x' || c == 'b')
             lexer_advance(state);
     }

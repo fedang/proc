@@ -815,6 +815,7 @@ checker_rebind_sig(struct type *type, struct scope *scope,
             return type_get_slice(type->attr, item);
 
         case TYPE_PROC:
+            assert(type->proc.args_count < 32);
             for (i = 0; i < type->proc.args_count; i++) {
                 args[i] = checker_rebind_sig(type->proc.args[i], scope,
                                              sig_scope, seal);
