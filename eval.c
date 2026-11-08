@@ -165,8 +165,9 @@ eval_binop_arith(struct eval *state, struct expr_binop *expr,
                 return EVAL_ERROR;
             }
             if (!unsigned_op && lhs == INT64_MIN && rhs == -1) {
-                result = 0;
-                break;
+                EVAL_REPORT(state, expr->expr.span,
+                            "Integer overflow in constant expression\n");
+                return EVAL_ERROR;
             }
             result = unsigned_op ? (int64_t)(u_lhs % u_rhs) : lhs % rhs;
             break;

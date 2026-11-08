@@ -243,7 +243,7 @@ expr_is_mem(const struct expr *expr)
 
         case EXPR_ACCESS:
             access = (const struct expr_access *)expr;
-            if (access->op->type->tag == TYPE_PTR)
+            if (index->op->type && access->op->type->tag == TYPE_PTR)
                 return true;
             return expr_is_mem(access->op);
 
