@@ -94,6 +94,11 @@ eval_expr_unop(struct eval *state, struct expr_unop *expr, struct value *out)
     switch (expr->unop) {
         case UNOP_NEG:
             assert(out->tag == VALUE_INTEGER);
+            if (out->integer == INT64_MIN) {
+                EVAL_REPORT(state, expr->expr.span,
+                            "Integer overflow in constant expression\n");
+                return EVAL_ERROR;
+            }
             out->integer = eval_normalize(expr->expr.type, -out->integer);
             return EVAL_OK;
 
@@ -145,6 +150,11 @@ eval_binop_arith(struct eval *state, struct expr_binop *expr,
                             "Division by zero in constant expression\n");
                 return EVAL_ERROR;
             }
+            if (!unsigned_op && lhs == INT64_MIN && rhs == -1) {
+                EVAL_REPORT(state, expr->expr.span,
+                            "Integer overflow in constant expression\n");
+                return EVAL_ERROR;
+            }
             result = unsigned_op ? (int64_t)(u_lhs / u_rhs) : lhs / rhs;
             break;
 
@@ -153,6 +163,10 @@ eval_binop_arith(struct eval *state, struct expr_binop *expr,
                 EVAL_REPORT(state, expr->expr.span,
                             "Modulo by zero in constant expression\n");
                 return EVAL_ERROR;
+            }
+            if (!unsigned_op && lhs == INT64_MIN && rhs == -1) {
+                result = 0;
+                break;
             }
             result = unsigned_op ? (int64_t)(u_lhs % u_rhs) : lhs % rhs;
             break;
@@ -210,27 +224,27 @@ eval_binop_compare(struct eval *state, struct expr_binop *expr,
 
     switch (expr->binop) {
         case BINOP_EQ:
-			*out = value_make_bool(lhs == rhs);
+            *out = value_make_bool(lhs == rhs);
             return EVAL_OK;
 
         case BINOP_NOTEQ:
-			*out = value_make_bool(lhs != rhs);
+            *out = value_make_bool(lhs != rhs);
             return EVAL_OK;
 
         case BINOP_GT:
-			*out = value_make_bool(unsigned_op ? u_lhs >  u_rhs : lhs >  rhs);
+            *out = value_make_bool(unsigned_op ? u_lhs >  u_rhs : lhs >  rhs);
             return EVAL_OK;
 
         case BINOP_GTEQ:
-			*out = value_make_bool(unsigned_op ? u_lhs >= u_rhs : lhs >= rhs);
+            *out = value_make_bool(unsigned_op ? u_lhs >= u_rhs : lhs >= rhs);
             return EVAL_OK;
 
         case BINOP_LT:
-			*out = value_make_bool(unsigned_op ? u_lhs <  u_rhs : lhs <  rhs);
+            *out = value_make_bool(unsigned_op ? u_lhs <  u_rhs : lhs <  rhs);
             return EVAL_OK;
 
         case BINOP_LTEQ:
-			*out = value_make_bool(unsigned_op ? u_lhs <= u_rhs : lhs <= rhs);
+            *out = value_make_bool(unsigned_op ? u_lhs <= u_rhs : lhs <= rhs);
             return EVAL_OK;
 
         default:

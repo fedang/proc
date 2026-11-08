@@ -562,8 +562,8 @@ irgen_expr_literal(struct irgen *state, struct expr *expr)
             return IRVAL_INT(expr->ctval.integer);
 
         case VALUE_STRING:
-            state->strings[state->strings_count] = expr->ctval.string;
             assert(state->strings_count < 256 && "too many strings!");
+            state->strings[state->strings_count] = expr->ctval.string;
             return IRVAL_STRING(state->strings_count++);
 
         default:
@@ -753,7 +753,7 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
 static struct irval
 irgen_expr_call(struct irgen *state, struct expr_call *expr)
 {
-    struct irval func, out, vals[expr->args_count];
+    struct irval func, out, vals[expr->args_count + 1];
     unsigned i, k;
 
     func = irgen_expr(state, expr->op);
@@ -851,6 +851,15 @@ irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
         case MACRO_CAST:
             arg = expr->args[1];
             val = irgen_expr(state, arg);
+
+            if (expr->expr.type->tag == TYPE_BOOL && arg->type->tag != TYPE_BOOL) {
+                /*
+                 * Special case for booleans, do not simply truncate to i1
+                 */
+                return irgen_emit_simple2(state, "icmp ne", arg->type,
+                                          val, IRVAL_INT(0));
+            }
+
             instr = irgen_cast_instr(arg->type, expr->expr.type);
             return instr
                  ? irgen_emit_conv(state, instr, val, arg->type, expr->expr.type)
@@ -1474,7 +1483,9 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
      * Emit collected string literals
      */
     for (i = 0; i < state->strings_count; i++) {
+        // FIXME: store length separately / embedded \0 problems!
         len = strlen(state->strings[i]);
+
         IR_EMITF(state, "\n@.str.%zu ="
                  " private unnamed_addr constant [%zu x i8] c\"",
                  i, len + 1);
