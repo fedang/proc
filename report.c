@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "report.h"
 #include "type.h"
@@ -9,12 +10,14 @@
 #define REPORT_WARNING  1
 #define REPORT_INFO     2
 
-#define TERM_NORM   "\033[0m"
-#define TERM_BOLD   "\033[1m"
-#define TERM_RED    "\033[1;31m"
-#define TERM_GREEN  "\033[1;32m"
-#define TERM_MAG    "\033[1;35m"
-#define TERM_CYAN   "\033[1;36m"
+#define TERM_NORM   (use_color > 0 ? "\033[0m" : "")
+#define TERM_BOLD   (use_color > 0 ? "\033[1m" : "")
+#define TERM_RED    (use_color > 0 ? "\033[1;31m" : "")
+#define TERM_GREEN  (use_color > 0 ? "\033[1;32m" : "")
+#define TERM_MAG    (use_color > 0 ? "\033[1;35m" : "")
+#define TERM_CYAN   (use_color > 0 ? "\033[1;36m" : "")
+
+static int use_color = -1;
 
 static void
 report_format(FILE *out, const struct source_map *map,
@@ -180,14 +183,14 @@ report_source_span(const struct source *src, const struct span *span,
                 fprintf(stderr, "%s", color);
                 in_color = true;
             } else if (!in_span && in_color) {
-                fprintf(stderr, TERM_NORM);
+                fprintf(stderr, "%s", TERM_NORM);
                 in_color = false;
             }
             fputc(*tmp, stderr);
         }
 
         if (in_color) {
-            fprintf(stderr, TERM_NORM);
+            fprintf(stderr, "%s", TERM_NORM);
         }
         fprintf(stderr, "\n");
 
@@ -203,7 +206,7 @@ report_source_span(const struct source *src, const struct span *span,
                     fputc(*tmp == '\t' ? '\t' : ' ', stderr);
                 }
             }
-            fprintf(stderr, TERM_NORM "\n");
+            fprintf(stderr, "%s\n", TERM_NORM);
         }
 
 done:
@@ -231,10 +234,14 @@ report_message(const struct source_map *map, const struct span *span,
 
     assert(((span && map) || (!span && !map)) && "either both or neither");
 
+    if (use_color < 0) {
+        use_color = isatty(STDOUT_FILENO);
+    }
+
     if (span) {
         src = source_map_get(map, span->src_id);
 
-        fprintf(stderr, TERM_BOLD "%s:", src->path);
+        fprintf(stderr, "%s%s:", TERM_BOLD, src->path);
 
         if (span->line > 0)
             fprintf(stderr, "%u:", span->line);
@@ -255,7 +262,7 @@ report_message(const struct source_map *map, const struct span *span,
         unreachable();
     }
 
-    fprintf(stderr, TERM_NORM "%s%s: " TERM_NORM, color, label);
+    fprintf(stderr, "%s%s%s:%s ", TERM_NORM, color, label, TERM_NORM);
     report_format(stderr, map, fmt, args);
 
     if (span && span->line > 0)
