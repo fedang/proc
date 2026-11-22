@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Redefinition of symbol 'x'
+    1 | import lib { x = a; x = b }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+main.lang:1: info: Symbol 'x' was originally declared here
+    1 | import lib { x = a; x = b }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

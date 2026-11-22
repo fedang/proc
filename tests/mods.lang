@@ -1,0 +1,27 @@
+module Lib {
+    proc helper(): int { return 42 }
+}
+
+sig SubSig {
+    proc sub_fn(): int
+}
+
+sig MainSig {
+    module Inner : SubSig
+    import Lib { helper }
+    import Lib
+}
+
+module App : MainSig {
+    module Inner {
+        proc sub_fn(): int { return helper() }
+        proc secret() {}
+    }
+}
+
+proc main() {
+    App.Inner.sub_fn()
+    App.helper()
+    App.Lib.helper()
+    App.Inner.secret()
+}

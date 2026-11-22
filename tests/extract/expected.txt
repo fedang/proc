@@ -1,0 +1,6 @@
+=== COMPILE EXIT: 1 ===
+<BUILD>/extract/out.ll:9:13: error: invalid redefinition of function 'main'
+    9 | define void @"main"() {
+      |             ^
+1 error generated.
+info: Failed to compile IR

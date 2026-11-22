@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+b.lang:1: error: Module 'a' has no member named 'y'
+    1 | import a { y }
+      | ^~~~~~~~~~~~~~
+info: Failed semantic analysis

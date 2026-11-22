@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+a.lang:2: error: Cyclic definition involving symbol 'SomeType'
+    2 | proc foo(): SomeType {
+      |             ^~~~~~~~
+a.lang:1: info: Symbol 'SomeType' was originally declared here
+    1 | import b { SomeType }
+      | ^~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

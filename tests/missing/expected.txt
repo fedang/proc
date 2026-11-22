@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Module 'lib' has no member named 'missing'
+    1 | import lib { missing }
+      | ^~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

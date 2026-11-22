@@ -1,0 +1,26 @@
+=== COMPILE EXIT: 1 ===
+k.lang:3: error: Symbol 'PrivateType' is not exposed by signature 'X' of module 's'
+    3 | type MyType = s.PrivateType
+      |               ^~~~~~~~~~~~~
+s.lang:2: info: Module 's' is sealed by signature 'X' declared here
+    2 | sig X {
+      | ^~~~~~~~
+    3 |     proc foo()
+    4 | }
+      |
+s.lang:11: info: Symbol 'PrivateType' was declared in module 's' here
+   11 | struct PrivateType {}
+      | ^~~~~~~~~~~~~~~~~~~~~
+k.lang:7: error: Symbol 'bar' is not exposed by signature 'X' of module 's'
+    7 |     s.bar()
+      |     ^~~~~
+s.lang:2: info: Module 's' is sealed by signature 'X' declared here
+    2 | sig X {
+      | ^~~~~~~~
+    3 |     proc foo()
+    4 | }
+      |
+s.lang:9: info: Symbol 'bar' was declared in module 's' here
+    9 | proc bar() {}
+      | ^~~~~~~~~~~~~
+info: Failed semantic analysis

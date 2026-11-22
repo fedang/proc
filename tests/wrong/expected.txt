@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: 'foo' is not a module
+    1 | import lib.foo.bar
+      |        ^~~~~~~
+info: Failed semantic analysis
