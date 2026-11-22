@@ -193,6 +193,66 @@ checker_binding_visible(struct checker *state, struct scope *scope,
     return false;
 }
 
+/*
+ * Check type layout completeness, forbidding cycles that are not
+ * wrapped by pointers or slices
+ */
+static bool
+checker_resolve_layout(struct checker *state, struct type *type)
+{
+    struct decl_struct *decl;
+    struct binding *bind;
+    size_t i;
+
+    if (!type || type_is_invalid(type))
+        return false;
+
+    switch (type->tag) {
+        case TYPE_PTR:
+        case TYPE_SLICE:
+            return true;
+
+        case TYPE_ARRAY:
+            return checker_resolve_layout(state, type->array.item);
+
+        case TYPE_STRUCT:
+            decl = type->strukt.decl;
+            if (!decl) {
+                /*
+                 * Anonymous struct types do not have an associated declaration
+                 */
+                for (i = 0; i < type->strukt.fields_count; i++) {
+                    if (!checker_resolve_layout(state, type->strukt.fields[i].type))
+                        return false;
+                }
+
+                return true;
+            }
+
+            bind = decl->decl.bind;
+            assert(bind && "named struct must have a binding");
+
+            if (bind->status == RESOLVE_PENDING) {
+                assert(bind->scope && bind->scope->file && "root type cycle?");
+                TYCHK_ERROR(state, bind->decl->span,
+                            "Struct '%pS' has infinitely recursive layout\n",
+                            bind->sym);
+
+                bind->type = type_get_invalid();
+                return false;
+            }
+
+            if (bind->status == RESOLVE_NONE &&
+                !checker_resolve_binding(state, bind))
+                return false;
+
+            return bind->type && !type_is_invalid(bind->type);
+
+        default:
+            return true;
+    }
+}
+
 static struct type *
 checker_resolve_raw(struct checker *state, struct expr *expr)
 {
@@ -321,6 +381,9 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
             if (array->args_count == 1)
                 return type_get_slice(NULL, type);
 
+            if (!checker_resolve_layout(state, type))
+                return NULL;
+
             /*
              * We deliberatly allow untyped integers here as they are safe
              * to evaluate in the constant folder
@@ -333,11 +396,11 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
 
             if (count < 0) {
                 TYCHK_ERROR(state, array->args[1]->span,
-                            "Array size must be positive\n");
+                            "Array size cannot be negative\n");
                 return NULL;
             }
 
-            if (count > 0 && type_sizeof(type) > SIZE_MAX / count) {
+            if (count > 0 && type_sizeof(type) > (size_t)INT64_MAX / count) {
                 TYCHK_ERROR(state, expr->span,
                             "Array type is too large\n");
                 return NULL;
@@ -715,66 +778,6 @@ checker_resolve_import(struct checker *state, struct binding *bind)
     BIND_CLEAR_FLAG(bind, BIND_SEALED);
 
     return !type_is_invalid(bind->type);
-}
-
-/*
- * Check type layout completeness, forbidding cycles that are not
- * wrapped by pointers or slices
- */
-static bool
-checker_resolve_layout(struct checker *state, struct type *type)
-{
-    struct decl_struct *decl;
-    struct binding *bind;
-    size_t i;
-
-    if (!type || type_is_invalid(type))
-        return false;
-
-    switch (type->tag) {
-        case TYPE_PTR:
-        case TYPE_SLICE:
-            return true;
-
-        case TYPE_ARRAY:
-            return checker_resolve_layout(state, type->array.item);
-
-        case TYPE_STRUCT:
-            decl = type->strukt.decl;
-            if (!decl) {
-                /*
-                 * Anonymous struct types do not have an associated declaration
-                 */
-                for (i = 0; i < type->strukt.fields_count; i++) {
-                    if (!checker_resolve_layout(state, type->strukt.fields[i].type))
-                        return false;
-                }
-
-                return true;
-            }
-
-            bind = decl->decl.bind;
-            assert(bind && "named struct must have a binding");
-
-            if (bind->status == RESOLVE_PENDING) {
-                assert(bind->scope && bind->scope->file && "root type cycle?");
-                TYCHK_ERROR(state, bind->decl->span,
-                            "Struct '%pS' has infinitely recursive layout\n",
-                            bind->sym);
-
-                bind->type = type_get_invalid();
-                return false;
-            }
-
-            if (bind->status == RESOLVE_NONE &&
-                !checker_resolve_binding(state, bind))
-                return false;
-
-            return bind->type && !type_is_invalid(bind->type);
-
-        default:
-            return true;
-    }
 }
 
 static struct type *

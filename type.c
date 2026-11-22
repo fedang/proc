@@ -336,7 +336,7 @@ type_get_sig(struct attr *attr, struct scope *scope)
 }
 
 #define ROUND_UP(x, y) \
-    ((x) + (y) - 1) & ~((y) - 1)
+    (((x) + (y) - 1) & ~((y) - 1))
 
 size_t
 type_sizeof(const struct type *type)
@@ -362,7 +362,7 @@ type_sizeof(const struct type *type)
 
         case TYPE_ARRAY:
             size = type_sizeof(type->array.item);
-            assert(type->array.count > 0 && size > SIZE_MAX / type->array.count);
+            assert(type->array.count == 0 || size <= (size_t)INT64_MAX / type->array.count);
             return type->array.count * size;
 
         case TYPE_SLICE:
