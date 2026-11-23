@@ -1,7 +1,41 @@
-=== COMPILE EXIT: 1 ===
+=== COMPILE EXIT: 0 ===
 info: Input file 'test.c' will be passed directly to clang
-<BUILD>/misctest/out.ll:63:24: error: integer constant must have integer type
-   63 |         %11 = icmp ne ptr %2, 0
-      |                               ^
-1 error generated.
-info: Failed to compile IR
+=== RUN EXIT: 0 ===
+PRINT 42
+PRINT 32
+Once
+cast true
+cast true
+0 = 0 !
+everything is ok
+sizeof zst is:
+PRINT 0
+in sliced!
+PRINT 1
+PRINT 1
+PRINT 2
+PRINT 3
+in sliced!
+PRINT 4
+PRINT 4
+PRINT 5
+PRINT 6
+PRINT 2
+sizeof is
+PRINT 4
+PRINT 4
+Test print!
+PRINT 99
+Hello World
+Hello World
+Hello World
+Hello World
+Hello World
+PRINT 1
+PRINT 2
+PRINT 3
+PRINT 10
+PRINT 15
+STRUCT TEST
+PRINT 3
+PRINT 99

@@ -857,7 +857,7 @@ irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
                  * Special case for booleans, do not simply truncate to i1
                  */
                 return irgen_emit_simple2(state, "icmp ne", arg->type,
-                                          val, IRVAL_INT(0));
+                                          val, IRVAL_ZERO());
             }
 
             instr = irgen_cast_instr(arg->type, expr->expr.type);
