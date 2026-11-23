@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+negmin.lang:1: error: Integer overflow in constant expression
+    1 | var x: i64 = -@cast(i64, 0 - 9223372036854775807 - 1)
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

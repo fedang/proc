@@ -1,0 +1,7 @@
+=== COMPILE EXIT: 1 ===
+info: Input file 'test.c' will be passed directly to clang
+<BUILD>/misctest/out.ll:63:24: error: integer constant must have integer type
+   63 |         %11 = icmp ne ptr %2, 0
+      |                               ^
+1 error generated.
+info: Failed to compile IR

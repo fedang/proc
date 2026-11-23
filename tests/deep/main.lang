@@ -1,2 +1,5 @@
 import deep.A.B.C.D.E
-proc main() { E.deep() }
+proc main(): int {
+    E.deep()
+    return 0
+}

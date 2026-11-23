@@ -1,0 +1,56 @@
+=== COMPILE EXIT: 1 ===
+mods.lang:10: error: Declaration of this kind is not allowed inside signature 'MainSig'
+   10 |     module Inner : SubSig
+      |     ^~~~~~~~~~~~~~~~~~~~~
+mods.lang:11: error: Imports are not allowed inside signature 'MainSig'
+   11 |     import Lib { helper }
+      |     ^~~~~~~~~~~~~~~~~~~~~
+mods.lang:12: error: Imports are not allowed inside signature 'MainSig'
+   12 |     import Lib
+      |     ^~~~~~~~~~
+mods.lang:17: error: Undefined variable 'helper'
+   17 |         proc sub_fn(): int { return helper() }
+      |                                     ^~~~~~
+mods.lang:23: error: Symbol 'Inner' is not exposed by signature 'MainSig' of module 'App'
+   23 |     App.Inner.sub_fn()
+      |     ^~~~~~~~~
+mods.lang:9: info: Module 'App' is sealed by signature 'MainSig' declared here
+    9 | sig MainSig {
+      | ^~~~~~~~~~~~~~
+   10 |     module Inner : SubSig
+      | ...
+   12 |     import Lib
+   13 | }
+      |
+mods.lang:16: info: Symbol 'Inner' was declared in module 'App' here
+   16 |     module Inner {
+      |     ^~~~~~~~~~~~~~~
+   17 |         proc sub_fn(): int { return helper() }
+   18 |         proc secret() {}
+   19 |     }
+      |
+mods.lang:24: error: Module 'App' has no member named 'helper'
+   24 |     App.helper()
+      |     ^~~~~~~~~~
+mods.lang:25: error: Module 'App' has no member named 'Lib'
+   25 |     App.Lib.helper()
+      |     ^~~~~~~
+mods.lang:26: error: Symbol 'Inner' is not exposed by signature 'MainSig' of module 'App'
+   26 |     App.Inner.secret()
+      |     ^~~~~~~~~
+mods.lang:9: info: Module 'App' is sealed by signature 'MainSig' declared here
+    9 | sig MainSig {
+      | ^~~~~~~~~~~~~~
+   10 |     module Inner : SubSig
+      | ...
+   12 |     import Lib
+   13 | }
+      |
+mods.lang:16: info: Symbol 'Inner' was declared in module 'App' here
+   16 |     module Inner {
+      |     ^~~~~~~~~~~~~~~
+   17 |         proc sub_fn(): int { return helper() }
+   18 |         proc secret() {}
+   19 |     }
+      |
+info: Failed semantic analysis

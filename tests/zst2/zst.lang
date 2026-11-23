@@ -1,0 +1,14 @@
+struct zst { }
+
+var x: void
+var y: zst
+
+proc main(): int {
+    var X: void = x
+    var Y: zst = y
+    if (@size_of(void) == 0) {
+        return 0
+    } else {
+        return 1
+    }
+}

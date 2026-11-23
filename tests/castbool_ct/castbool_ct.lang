@@ -1,0 +1,5 @@
+var b: bool = @cast(bool, 2)
+proc main() : i32 {
+    if b { return 1 }
+    return 0
+}

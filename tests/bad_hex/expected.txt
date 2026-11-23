@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+bad_hex.lang:1: error: Invalid digit in integer literal
+    1 | proc main() { var x: i32 = 0x }
+      |                            ^~

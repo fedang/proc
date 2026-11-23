@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+inner.lang:5: error: Redefinition of symbol 'Helper'
+    5 |     import Helper
+      |     ^~~~~~~~~~~~~
+inner.lang:4: info: Symbol 'Helper' was originally declared here
+    4 |     module Helper { proc inner() {} }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

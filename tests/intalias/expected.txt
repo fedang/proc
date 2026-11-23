@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+intalias.lang:6: error: Cannot initialize variable of type 'i32' with type 'int'
+    6 |     var b: i32 = a
+      |     ^~~~~~~~~~~~~~
+intalias.lang:7: error: Argument has type 'int', expected 'i32'
+    7 |     return f(a)
+      |            ^~~~
+info: Failed semantic analysis

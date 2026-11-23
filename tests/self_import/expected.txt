@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Cannot find module 'selfimp' to import
+    1 | import selfimp
+      |        ^~~~~~~
+info: Failed semantic analysis

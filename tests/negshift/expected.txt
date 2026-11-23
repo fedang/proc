@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+negshift.lang:1: error: Shift amount out of bounds in constant expression
+    1 | var x: i32 = 1 << @cast(i32, 0 - 1)
+      |              ^~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

@@ -1,0 +1,2 @@
+import m13
+proc f12() {}

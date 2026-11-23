@@ -1,0 +1,6 @@
+struct S { a: i32; b: i32 }
+proc main() : i32 {
+    var a: S = S{a = 1; b = 2}
+    var b: S = a
+    return b.a
+}

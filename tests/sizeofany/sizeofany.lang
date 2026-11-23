@@ -1,0 +1,3 @@
+proc main() : i64 {
+    return @size_of(@type_of([1, 2, 3]))
+}

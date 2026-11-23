@@ -1,0 +1,20 @@
+=== COMPILE EXIT: 1 ===
+main.lang:4: error: Redefinition of symbol 'z'
+    4 | var z = 0xafaf;
+      | ^~~~~~~~~~~~~~~
+main.lang:3: info: Symbol 'z' was originally declared here
+    3 | var z = 0b10;
+      | ^~~~~~~~~~~~~
+main.lang:1: error: Global variable 'x' requires explicit type annotation
+    1 | var x = 0x10;
+      | ^~~~~~~~~~~~~
+main.lang:2: error: Global variable 'y' requires explicit type annotation
+    2 | var y = 0o10;
+      | ^~~~~~~~~~~~~
+main.lang:3: error: Global variable 'z' requires explicit type annotation
+    3 | var z = 0b10;
+      | ^~~~~~~~~~~~~
+main.lang:4: error: Global variable 'z' requires explicit type annotation
+    4 | var z = 0xafaf;
+      | ^~~~~~~~~~~~~~~
+info: Failed semantic analysis

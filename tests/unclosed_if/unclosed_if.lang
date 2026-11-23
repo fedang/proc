@@ -1,0 +1,4 @@
+proc main() : i32 {
+    if true {
+        return 1
+}

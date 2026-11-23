@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+unclosed_module.lang:3: error: Expected '}' after block body
+    3 | 
+      | 

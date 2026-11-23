@@ -1,0 +1,20 @@
+=== COMPILE EXIT: 1 ===
+vars.lang:20: error: Global variable 'GLOBAL_INFERRED_BAD' requires explicit type annotation
+   20 | var GLOBAL_INFERRED_BAD = 7
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+vars.lang:21: error: Global variable 'c' requires explicit type annotation
+   21 | var c = d
+      | ^~~~~~~~~
+vars.lang:25: error: Unknown type 'NoSuchType'
+   25 | var BAD_TYPE: NoSuchType = 5
+      |               ^~~~~~~~~~
+vars.lang:22: error: Global variable 'a' does not have a constant initializer
+   22 | var a: int = b
+      |              ^
+vars.lang:23: error: Global variable 'b' does not have a constant initializer
+   23 | var b: int = a
+      |              ^
+vars.lang:24: error: Global variable 'BAD_SLICE' does not have a constant initializer
+   24 | var BAD_SLICE: [int] = @slice([1, 2, 3])
+      |                        ^~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

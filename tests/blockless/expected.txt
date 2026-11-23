@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+blockless.lang:4: error: Expected '}' after block body
+    4 | 
+      | 

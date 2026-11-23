@@ -1,0 +1,2 @@
+import m33
+proc f32() {}

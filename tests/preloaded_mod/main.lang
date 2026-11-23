@@ -1,0 +1,6 @@
+import geometry
+
+proc main(): int {
+    var p: geometry.Point
+    return 0
+}

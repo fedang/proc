@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+infermix.lang:4: error: Cannot apply binary operator to 'int' and 'i32'
+    4 |     return x + y
+      |            ^~~~~
+info: Failed semantic analysis

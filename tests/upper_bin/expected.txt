@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+upper_bin.lang:1: error: Malformed integer literal
+    1 | proc main() : i32 { return 0B101 }
+      |                            ^~~~~

@@ -1,0 +1,8 @@
+type S
+
+proc m(): *S {
+    return @cast(*S, 0)
+}
+
+
+proc main(): int { return 0 }

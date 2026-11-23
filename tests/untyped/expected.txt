@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+untyped.lang:138: error: Cannot apply binary operator to '*int' and '<integer>'
+  138 |     x + 1
+      |     ^~~~~
+info: Failed semantic analysis

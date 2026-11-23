@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+main.lang:3: error: Invalid expression in import path
+    3 | import 42
+      |        ^~
+main.lang:1: error: Cannot find module 'does_not_exist' to import
+    1 | import does_not_exist
+      |        ^~~~~~~~~~~~~~
+info: Failed semantic analysis

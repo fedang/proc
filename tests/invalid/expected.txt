@@ -1,0 +1,123 @@
+=== COMPILE EXIT: 1 ===
+invalid.lang:64: error: Redefinition of symbol 'XYZ'
+   64 | import XYZ
+      | ^~~~~~~~~~
+invalid.lang:61: info: Symbol 'XYZ' was originally declared here
+   61 | module XYZ {
+      | ^~~~~~~~~~~~~
+   62 | }
+      |
+invalid.lang:69: error: Redefinition of symbol 'Alias'
+   69 | type Alias = XYZ
+      | ^~~~~~~~~~~~~~~~
+invalid.lang:3: info: Symbol 'Alias' was originally declared here
+    3 | type Alias = @type_of(trigger_null(1));
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+invalid.lang:1: error: Unknown type 'NoSuchType'
+    1 | proc trigger_null(x: NoSuchType) {}
+      |                      ^~~~~~~~~~
+invalid.lang:7: error: Unknown type 'NoSuchType'
+    7 |     bad_field: NoSuchType
+      |                ^~~~~~~~~~
+invalid.lang:11: error: Expected integer constant expression, but got '<invalid>'
+   11 |     arr: [int, @size_of(Broken)]
+      |                ^~~~~~~~~~~~~~~~
+invalid.lang:67: error: Cyclic definition involving symbol 'A'
+   67 | type B = A
+      |          ^
+invalid.lang:66: info: Symbol 'A' was originally declared here
+   66 | type A = B
+      | ^~~~~~~~~~
+invalid.lang:69: error: Cannot alias type 'Alias' to '<module>'
+   69 | type Alias = XYZ
+      | ^~~~~~~~~~~~~~~~
+invalid.lang:71: error: Field 'a' of anonymous struct type has no type
+   71 | proc anon(x: struct {a;b;}) {
+      |                      ^
+invalid.lang:84: error: Struct type must use ':' instead of '='
+   84 | proc anon_bad_type(x: struct { a = 1 }) {
+      |                       ^~~~~~~~~~~~~~~~
+invalid.lang:16: error: Cannot apply binary operator to '<integer>' and '*u8'
+   16 |     var x = 1+"a"
+      |             ^~~~~
+invalid.lang:21: error: Undefined variable 'does_not_exist'
+   21 |     var x = does_not_exist()
+      |             ^~~~~~~~~~~~~~
+invalid.lang:28: error: Procedure 'missing_return' does not return a value on all branches
+   28 | proc missing_return(flag: bool): int {
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   29 |     if flag {
+      | ...
+   31 |     }
+   32 | }
+      |
+invalid.lang:39: error: Cannot initialize variable of type 'int' with type '*u8'
+   39 |     var text: int = "hello"
+      |     ^~~~~~~~~~~~~~~~~~~~~~~
+invalid.lang:42: error: Cannot apply binary operator to 'void' and '<integer>'
+   42 |     empty = 10
+      |     ^~~~~~~~~~
+invalid.lang:51: error: Field 'a' type mismatch, got '*u8' instead of 'int'
+   51 |         a = "a"; b = 10
+      |             ^~~
+invalid.lang:51: error: Struct 'K' has no field named 'b'
+   51 |         a = "a"; b = 10
+      |                  ^
+invalid.lang:45: info: Struct 'K' was declared here
+   45 | struct K {
+      | ^~~~~~~~~~~
+   46 |     a: int
+   47 | }
+      |
+invalid.lang:55: error: Cannot apply binary operator to '<integer>' and '<module>'
+   55 |     1 + XYZ
+      |     ^~~~~~~
+invalid.lang:57: error: Variable 'sus' has unsized type '<module>', consider using a pointer instead
+   57 |     var sus: XYZ
+      |     ^~~~~~~~~~~~
+invalid.lang:58: error: Cannot make a pointer type from '<module>'
+   58 |     var sus2: *XYZ
+      |               ^~~~
+invalid.lang:75: error: Field 'a' initialized more than once
+   75 |         a = 2 // double field! structurally wrong for anon structs
+      |         ^
+invalid.lang:85: error: Field 'a' of anonymous struct type has no type
+   85 |     var p: struct { a }
+      |                     ^
+invalid.lang:86: error: Undefined variable 'a'
+   86 |     var q = struct { a }
+      |                      ^
+invalid.lang:87: error: Undefined variable 'a'
+   87 |     var r = struct { a; b = 1 }
+      |                      ^
+invalid.lang:88: error: Struct literals use '=', not ':'
+   88 |     var s = struct { a: int }
+      |             ^~~~~~~~~~~~~~~~~
+invalid.lang:90: error: Undefined variable 'a'
+   90 |     var q = SS { a }
+      |                  ^
+invalid.lang:91: error: Undefined variable 'a'
+   91 |     var r = SS { a; b = 1 }
+      |                  ^
+invalid.lang:92: error: Struct literals use '=', not ':'
+   92 |     var s = SS { a: int }
+      |             ^~~~~~~~~~~~~
+invalid.lang:98: error: Cannot apply binary operator to 'int' and 'i32'
+   98 |     x + y
+      |     ^~~~~
+invalid.lang:104: error: Cannot apply binary operator to 'u32' and 'i32'
+  104 |     var c = a + b
+      |             ^~~~~
+invalid.lang:105: error: Cannot initialize variable of type 'u32' with type 'i32'
+  105 |     var d: u32 = b
+      |     ^~~~~~~~~~~~~~
+invalid.lang:106: error: Cannot initialize variable of type '[u32, 3]' with type '[<integer>, 2]'
+  106 |     var e: [u32, 3] = [1, 2]
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~
+invalid.lang:112: error: Expression statement has unsized type '<module>'
+  112 |     AII
+      |     ^~~
+invalid.lang:114: error: Equality operator requires scalar type, but got '<module>'
+  114 |     AII == AII
+      |     ^~~~~~~~~~
+info: Failed semantic analysis

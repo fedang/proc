@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Extraction alias must be a simple identifier
+    1 | import lib { foo = lib.bar }
+      |                    ^~~~~~~
+info: Failed semantic analysis

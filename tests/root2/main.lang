@@ -1,2 +1,2 @@
 import nest1
-proc main() { nest1.use_n2() }
+proc main() : int { nest1.use_n2(); return 0 }

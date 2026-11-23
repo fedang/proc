@@ -1,4 +1,2 @@
-
-
-  import outer.Middle.Inner
-  proc main() { Inner.hi() }
+import outer.Middle.Inner
+proc main(): int { return 0 }

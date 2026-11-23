@@ -1,0 +1,2 @@
+import m25
+proc f24() {}

@@ -1,0 +1,26 @@
+=== COMPILE EXIT: 1 ===
+invalid2.lang:2: error: Redefinition of symbol 'Foo'
+    2 | proc Foo() { }              // error: redefinition of 'Foo'
+      | ^~~~~~~~~~~~~~
+invalid2.lang:1: info: Symbol 'Foo' was originally declared here
+    1 | struct Foo { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~
+invalid2.lang:5: error: Redefinition of symbol 'RedefValue'
+    5 | struct RedefValue { x: int }  // error: redefinition of 'RedefValue'
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+invalid2.lang:4: info: Symbol 'RedefValue' was originally declared here
+    4 | proc RedefValue() { }
+      | ^~~~~~~~~~~~~~~~~~~~~
+invalid2.lang:9: error: Type 'SomeType' cannot be used as a value
+    9 |     var x = SomeType          // error: 'SomeType' is a type, not a value
+      |             ^~~~~~~~
+invalid2.lang:14: error: 'some_proc' is not a type
+   14 |     var x: some_proc          // error: 'some_proc' is a value, not a type
+      |            ^~~~~~~~~
+invalid2.lang:23: error: Type 'Inner' cannot be used as a value
+   23 |     var x = M.Inner           // error: 'M.Inner' is a type, not a value
+      |             ^~~~~~~
+invalid2.lang:26: error: 'p' is not a type
+   26 |     var x: M.p                // error: 'M.p' is a value, not a type
+      |            ^~~
+info: Failed semantic analysis

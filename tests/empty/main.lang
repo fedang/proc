@@ -1,2 +1,2 @@
 import empty
-proc main() {}
+proc main(): int { return 0 }

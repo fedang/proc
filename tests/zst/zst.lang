@@ -1,0 +1,7 @@
+struct E {}
+
+proc main(): int {
+    var e: E = E{}
+    var arr: [E, 3] = [E{}, E{}, E{}]
+    return 0
+}

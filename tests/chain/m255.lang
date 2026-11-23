@@ -1,0 +1,2 @@
+import m256
+proc f255() {}

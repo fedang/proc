@@ -1,0 +1,8 @@
+proc f(x: i32) : i32 {
+    return x
+}
+proc main() : i32 {
+    var a: int = 1
+    var b: i32 = a
+    return f(a)
+}

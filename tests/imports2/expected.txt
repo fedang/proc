@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+file4.lang:2: error: Redefinition of symbol 'file2'
+    2 | import file2
+      | ^~~~~~~~~~~~
+file4.lang:1: info: Symbol 'file2' was originally declared here
+    1 | import file2
+      | ^~~~~~~~~~~~
+info: Failed semantic analysis

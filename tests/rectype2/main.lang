@@ -1,0 +1,17 @@
+// GOOD
+
+struct Fine {
+    next: *Fine
+}
+
+struct B { a: A }
+struct A { b: *B }
+
+struct K { b: Z }
+struct Z { a: *K }
+
+struct OK {
+    y: [*OK, 4]
+}
+
+proc main(): int { return 0 }

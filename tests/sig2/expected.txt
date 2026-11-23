@@ -1,0 +1,74 @@
+=== COMPILE EXIT: 1 ===
+sig2.lang:2: error: Declaration of this kind is not allowed inside signature 'X'
+    2 |     sig Y {
+      |     ^~~~~~~~
+    3 |         proc foo()
+    4 |     }
+      |
+sig2.lang:9: error: Variable 'x' in signature 'X' must have a type
+    9 |     var x = 10
+      |     ^~~~~~~~~~
+sig2.lang:9: error: Variable 'x' in signature 'X' cannot have an initializer
+    9 |     var x = 10
+      |     ^~~~~~~~~~
+sig2.lang:10: error: Variable 'y' in signature 'X' must have a type
+   10 |     var y
+      |     ^~~~~
+sig2.lang:11: error: Variable 'z' in signature 'X' cannot have an initializer
+   11 |     var z: int = 10
+      |     ^~~~~~~~~~~~~~~
+sig2.lang:15: error: Module 'Z' is missing 'x' required by signature 'X'
+   15 | module Z : X {
+      | ^~~~~~~~~~~~~~~
+   16 |     proc foo()
+   17 |     proc bar()
+   18 | }
+      |
+sig2.lang:9: info: Symbol 'x' is required by signature 'X' here
+    9 |     var x = 10
+      |     ^~~~~~~~~~
+sig2.lang:15: error: Module 'Z' is missing 'y' required by signature 'X'
+   15 | module Z : X {
+      | ^~~~~~~~~~~~~~~
+   16 |     proc foo()
+   17 |     proc bar()
+   18 | }
+      |
+sig2.lang:10: info: Symbol 'y' is required by signature 'X' here
+   10 |     var y
+      |     ^~~~~
+sig2.lang:15: error: Module 'Z' is missing 'z' required by signature 'X'
+   15 | module Z : X {
+      | ^~~~~~~~~~~~~~~
+   16 |     proc foo()
+   17 |     proc bar()
+   18 | }
+      |
+sig2.lang:11: info: Symbol 'z' is required by signature 'X' here
+   11 |     var z: int = 10
+      |     ^~~~~~~~~~~~~~~
+sig2.lang:15: error: Module 'Z' is missing 'l' required by signature 'X'
+   15 | module Z : X {
+      | ^~~~~~~~~~~~~~~
+   16 |     proc foo()
+   17 |     proc bar()
+   18 | }
+      |
+sig2.lang:12: info: Symbol 'l' is required by signature 'X' here
+   12 |     var l: int
+      |     ^~~~~~~~~~
+sig2.lang:21: error: Symbol 'foo' is not exposed by signature 'X' of module 'Z'
+   21 |     Z.foo()
+      |     ^~~~~
+sig2.lang:1: info: Module 'Z' is sealed by signature 'X' declared here
+    1 | sig X {
+      | ^~~~~~~~
+    2 |     sig Y {
+      | ...
+   12 |     var l: int
+   13 | }
+      |
+sig2.lang:16: info: Symbol 'foo' was declared in module 'Z' here
+   16 |     proc foo()
+      |     ^~~~~~~~~~
+info: Failed semantic analysis

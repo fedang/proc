@@ -1,0 +1,15 @@
+// BAD
+struct Node {
+    next: Node
+}
+
+struct C { a: D }
+struct D { b: C }
+
+
+struct L { x: struct { y: L } }
+struct OP {
+    y: [OP, 4]
+}
+
+proc main() {}

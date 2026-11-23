@@ -1,0 +1,4 @@
+proc main() : i32 {
+    var x = 1
+    return x
+}

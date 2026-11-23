@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+mod1.lang:8: error: Variable 'm' has unsized type '<module>', consider using a pointer instead
+    8 |     var m = Lib.Math
+      |     ^~~~~~~~~~~~~~~~
+info: Failed semantic analysis

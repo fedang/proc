@@ -1,2 +1,2 @@
 import pkg
-proc main() { pkg.use() }
+proc main(): int { pkg.use(); return 0 }

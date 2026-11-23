@@ -1,0 +1,4 @@
+proc main() : i32 {
+    struct { a = 1; b = 2 }
+    return 0
+}

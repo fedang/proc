@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+naming.lang:20: error: Cannot apply binary operator to '*A.B.C.K' and '*Z.B.C.K'
+   20 |     x = y
+      |     ^~~~~
+info: Failed semantic analysis

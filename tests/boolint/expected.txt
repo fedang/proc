@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+boolint.lang:2: error: Cannot initialize variable of type 'bool' with type '<integer>'
+    2 |     var b: bool = 5
+      |     ^~~~~~~~~~~~~~~
+info: Failed semantic analysis

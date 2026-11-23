@@ -1,0 +1,3 @@
+=== COMPILE EXIT: 0 ===
+info: Input file 'test.c' will be passed directly to clang
+=== RUN EXIT: 0 ===

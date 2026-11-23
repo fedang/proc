@@ -1,2 +1,2 @@
 import pkg
-proc main() { pkg.which() }
+proc main(): int { pkg.which(); return 0 }

@@ -1,0 +1,2 @@
+import m80
+proc f79() {}

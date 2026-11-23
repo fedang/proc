@@ -1,0 +1,7 @@
+var a = 0x;
+var a = 0000;
+var a = 0xZZZ;
+var a = 0b789;
+
+// overflows
+var x = 0xffffffffffffffff;

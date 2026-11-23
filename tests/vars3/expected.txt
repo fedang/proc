@@ -1,0 +1,11 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Expected integer constant expression, but got 'bool'
+    1 | var X: [i32, true]
+      |              ^~~~
+main.lang:4: error: Global variable 'BAD1' does not have a constant initializer
+    4 | var BAD1: int = foo()               // not a compile-time constant
+      |                 ^~~~~
+main.lang:5: error: Division by zero in constant expression
+    5 | var BAD2: int = 1 / 0               // division by zero
+      |                 ^~~~~
+info: Failed semantic analysis

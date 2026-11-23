@@ -1,0 +1,56 @@
+=== COMPILE EXIT: 1 ===
+baduntyped.lang:2: error: Cannot initialize variable of type 'bool' with type '<integer>'
+    2 |     var b: bool = 1
+      |     ^~~~~~~~~~~~~~~
+baduntyped.lang:6: error: Cannot initialize variable of type '*u8' with type '<integer>'
+    6 |     var p: *u8 = 1
+      |     ^~~~~~~~~~~~~~
+baduntyped.lang:10: error: Cannot apply binary operator to '<integer>' and '*u8'
+   10 |     var x = 1 + "str"
+      |             ^~~~~~~~~
+baduntyped.lang:14: error: Cannot apply binary operator to '*u8' and '<integer>'
+   14 |     var x = "str" + 1
+      |             ^~~~~~~~~
+baduntyped.lang:18: error: Cannot return type '<integer>' from procedure expecting '*u8'
+   18 |     return 1
+      |     ^~~~~~~~
+baduntyped.lang:23: error: Integer literal '3000000000000' out of range for 'u8'
+   23 |     var x: u8 = (3000000000000 + 1) + 2
+      |                  ^~~~~~~~~~~~~
+baduntyped.lang:24: error: Integer literal '300' out of range for 'u8'
+   24 |     var x: u8 = -300
+      |                  ^~~
+baduntyped.lang:25: error: Integer literal '3000000000000' out of range for 'int'
+   25 |     var x = -3000000000000
+      |              ^~~~~~~~~~~~~
+baduntyped.lang:32: error: Cannot initialize variable of type '[i32]' with type '[u32]'
+   32 |     var z: [i32] = @slice([1, k, 3])
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:35: error: Cannot initialize variable of type '[i32]' with type '[u32]'
+   35 |     var z: [i32] = @slice(&[1, k, 3])
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:40: error: Cannot initialize variable of type 'uint' with type 'int'
+   40 |     var x: uint = struct { a = struct { b = 1 } }.a.b
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:42: error: Cannot initialize variable of type 'struct { x: u32 }' with type 'struct { x: <integer>; y: <integer> }'
+   42 |     var c: struct { x: u32 } = struct { x = 1; y = 2 }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:50: error: Cannot initialize variable of type 'uint' with type 'int'
+   50 |     var x: uint = struct { a = 1 }.a
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:56: error: Cannot initialize variable of type 'NamedStruct' with type 'struct { x: <integer> }'
+   56 |     var b: NamedStruct = struct { x = 1 }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:57: error: Cannot initialize variable of type 'struct { x: int }' with type 'NamedStruct'
+   57 |     var a: struct {x: int} = NamedStruct { x = 1 }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+baduntyped.lang:62: error: Elements have mismatched types '<integer>' and '[u32, 2]'
+   62 |     var x = [1, 2, a]
+      |              ^
+baduntyped.lang:81: error: Equality operator requires scalar type, but got '[<integer>, 2]'
+   81 |     ([1, 2] == [1, 2])
+      |      ^~~~~~~~~~~~~~~~
+baduntyped.lang:82: error: Equality operator requires scalar type, but got '[u32, 2]'
+   82 |     if x == [1,2] {
+      |        ^~~~~~~~~~
+info: Failed semantic analysis

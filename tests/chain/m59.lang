@@ -1,0 +1,2 @@
+import m60
+proc f59() {}

@@ -1,0 +1,4 @@
+proc main():int {
+    var s: *u8 = "a\0b"
+    return 0
+}

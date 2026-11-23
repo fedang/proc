@@ -1,0 +1,7 @@
+// GOOD: zero-sized array of huge count must NOT overflow
+var z: u64 = @size_of([void, 4611686018427387904])
+
+// GOOD: zero-length array of non-ZST
+var e: [i32, 0]
+
+proc main(): int { return 0 }

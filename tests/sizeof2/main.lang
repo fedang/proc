@@ -1,0 +1,19 @@
+// BAD: direct array overflow (2^64)
+var a: u64 = @size_of([i32, 4611686018427387904])
+
+// BAD: signed int64_t wraparound (2^63, would wrap @size_of to negative!)
+var b: u64 = @size_of([i16, 4611686018427387904])
+
+// BAD: struct field sum overflow (would wrap to 0 and become a ZST!)
+struct Huge {
+    x: [u8, 4611686018427387904]
+    y: [u8, 4611686018427387904]
+}
+
+// BAD: struct padding overflow near INT64_MAX
+struct PadOverflow {
+    a: [u8, 9223372036854775807]
+    b: i64
+}
+
+proc main() {}

@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+ptrs.lang:2: error: Struct 'Z' has infinitely recursive layout
+    2 | struct Z { a: *K }
+      | ^~~~~~~~~~~~~~~~~~
+ptrs.lang:6: error: Struct 'A' has infinitely recursive layout
+    6 | struct A { p: *B }
+      | ^~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

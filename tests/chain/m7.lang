@@ -1,0 +1,2 @@
+import m8
+proc f7() {}

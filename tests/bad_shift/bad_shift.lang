@@ -1,0 +1,2 @@
+var x: i32 = 1 << 40
+proc main() : i32 { return x }

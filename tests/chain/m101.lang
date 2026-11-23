@@ -1,0 +1,2 @@
+import m102
+proc f101() {}

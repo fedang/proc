@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+huge_array.lang:1: error: Array type is too large
+    1 | proc main() { var a: [i32, 9223372036854775807] }
+      |                      ^~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

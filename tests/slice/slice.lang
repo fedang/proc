@@ -1,0 +1,8 @@
+proc sum(s: [i32]) : i32 {
+    return s.ptr[0] + @cast(i32, s.len)
+}
+proc main() : i32 {
+    var a: [i32, 3] = [1, 2, 3]
+    var s: [i32] = @slice(a)
+    return sum(s)
+}

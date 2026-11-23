@@ -1,0 +1,11 @@
+=== COMPILE EXIT: 1 ===
+main.lang:23: error: Cannot apply binary operator to 'bool' and '<integer>'
+   23 |     true + 1
+      |     ^~~~~~~~
+main.lang:24: error: Cannot initialize variable of type 'int' with type 'bool'
+   24 |     var x: int = true
+      |     ^~~~~~~~~~~~~~~~~
+main.lang:28: error: Expected integer constant expression, but got 'bool'
+   28 |     var a: [int, true]
+      |                  ^~~~
+info: Failed semantic analysis

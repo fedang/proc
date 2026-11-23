@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+anonvar.lang:3: error: Cannot return type 'int' from procedure expecting 'i32'
+    3 |     return x.a
+      |     ^~~~~~~~~~
+info: Failed semantic analysis

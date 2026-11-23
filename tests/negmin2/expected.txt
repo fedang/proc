@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+/usr/x86_64-pc-linux-gnu/binutils-bin/2.47/ld.bfd: /usr/lib/gcc/x86_64-pc-linux-gnu/16/../../../../lib64/Scrt1.o: in function `_start':
+(.text+0x1b): undefined reference to `main'
+clang: error: linker command failed with exit code 1 (use -v to see invocation)
+info: Failed to compile IR

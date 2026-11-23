@@ -1,0 +1,4 @@
+proc main() : i32 {
+    var p: *u8 = @cast(*u8, 0)
+    return 0
+}

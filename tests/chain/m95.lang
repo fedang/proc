@@ -1,0 +1,2 @@
+import m96
+proc f95() {}

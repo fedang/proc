@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+highbytes.lang:1: error: Expected newline or ';' after statement
+    1 | proc main() { var x: i32 = 1 ÿ }
+      |                              ^

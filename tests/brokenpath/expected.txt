@@ -1,0 +1,2 @@
+=== COMPILE EXIT: 1 ===
+mod-broken.lang: error: Invalid filename 'mod-broken' does not contain only [0-9A-Za-z_]

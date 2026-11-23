@@ -1,0 +1,17 @@
+import file2
+
+proc main():int {
+    file2.hello()
+    puts("yola")
+    return 0
+}
+
+proc puts(_: *u8)
+
+proc myfun() {
+}
+
+module A {
+    proc foo() { }
+ //   type T = *A
+}

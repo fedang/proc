@@ -1,0 +1,16 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Invalid digit in integer literal
+    1 | var a = 0x;
+      |         ^~
+main.lang:2: error: Malformed integer literal
+    2 | var a = 0000;
+      |         ^~~~
+main.lang:3: error: Invalid digit in integer literal
+    3 | var a = 0xZZZ;
+      |         ^~~~~
+main.lang:4: error: Invalid digit in integer literal
+    4 | var a = 0b789;
+      |         ^~~~~
+main.lang:7: error: Integer literal out of range
+    7 | var x = 0xffffffffffffffff;
+      |         ^~~~~~~~~~~~~~~~~~

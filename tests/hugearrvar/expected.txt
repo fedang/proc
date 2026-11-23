@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+hugearrvar.lang:2: error: Array type is too large
+    2 |     var a: [i32, 4611686018427387904] = 0
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

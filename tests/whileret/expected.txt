@@ -1,0 +1,10 @@
+=== COMPILE EXIT: 1 ===
+whileret.lang:1: error: Procedure 'f' does not return a value on all branches
+    1 | proc f() : i32 {
+      | ^~~~~~~~~~~~~~~~~
+    2 |     while true {
+      | ...
+    4 |     }
+    5 | }
+      |
+info: Failed semantic analysis

@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Expected newline or ';' after expression
+    1 | macro foo(args: [expr], block: expr): expr {
+      |       ^~~

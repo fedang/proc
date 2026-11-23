@@ -7,6 +7,7 @@ COMPILER=${COMPILER:-"./comp"}
 TESTDIR=${TESTDIR:-"./tests"}
 TIMEOUT="${TIMEOUT:-10}"
 BLESS=0
+FORCE=0
 VERBOSE=0
 DRY=0
 
@@ -16,6 +17,8 @@ Usage: $0 [options] [test ...]
 Options:
   -b,--bless
         update expected output for matching tests
+  -f,--force
+        overwrite existing expected output when used with -b
   -v,--verbose
         show full output for matching tests
   -d,--dry
@@ -30,6 +33,10 @@ while [ $# -gt 0 ]; do
     case "$1" in
         -b|--bless)
             BLESS=1
+            shift
+            ;;
+        -f|--force)
+            FORCE=1
             shift
             ;;
         -v|--verbose)
@@ -150,6 +157,12 @@ run_test() {
             print_result "$C_YELLOW" "MISSING" "$name"
             MISSING=$((MISSING + 1))
         fi
+        return
+    fi
+
+    if [ "$BLESS" -eq 1 ] && [ "$FORCE" -eq 0 ] && [ -f "$exp" ]
+    then
+        SKIP=$((SKIP + 1))
         return
     fi
 

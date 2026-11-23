@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+main.lang:2: error: Array type is too large
+    2 | var a: u64 = @size_of([i32, 4611686018427387904])
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+main.lang:5: error: Array type is too large
+    5 | var b: u64 = @size_of([i16, 4611686018427387904])
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

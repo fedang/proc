@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+unclosed.lang:3: error: Expected '}' after block body
+    3 | 
+      | 

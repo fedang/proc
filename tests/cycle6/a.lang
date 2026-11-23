@@ -1,4 +1,4 @@
 import b { B_Struct }
 struct A_Struct { x: int }
 
-proc main() {}
+proc main(): int { return 0 }

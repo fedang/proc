@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+mod.lang:1: error: Module header 'mod' must specify a signature
+    1 | module mod
+      | ^~~~~~~~~~
+mod.lang:16: error: Nested module 'nest3' must have a body
+   16 |             module nest3
+      |             ^~~~~~~~~~~~
+info: Failed semantic analysis

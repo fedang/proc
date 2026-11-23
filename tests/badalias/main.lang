@@ -1,0 +1,3 @@
+import lib { foo = lib.bar }
+
+proc main() { }

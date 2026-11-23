@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+huge_array4.lang:1: error: Array type is too large
+    1 | var a: [i32, 4611686018427387904]
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

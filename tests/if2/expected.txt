@@ -1,0 +1,10 @@
+=== COMPILE EXIT: 1 ===
+main.lang:21: error: Procedure 'if_chain_missing_return' does not return a value on all branches
+   21 | proc if_chain_missing_return(x: int) : int {
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   22 |     if x == 0 {
+      | ...
+   27 |     // error: not all branches return
+   28 | }
+      |
+info: Failed semantic analysis

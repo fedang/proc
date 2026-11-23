@@ -1,0 +1,6 @@
+proc f(x: int) : int {
+    return x
+}
+proc main() : i32 {
+    return f(1)
+}

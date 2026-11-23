@@ -1,0 +1,20 @@
+=== COMPILE EXIT: 1 ===
+main.lang:2: error: Struct 'Node' has infinitely recursive layout
+    2 | struct Node {
+      | ^~~~~~~~~~~~~~
+    3 |     next: Node
+    4 | }
+      |
+main.lang:6: error: Struct 'C' has infinitely recursive layout
+    6 | struct C { a: D }
+      | ^~~~~~~~~~~~~~~~~
+main.lang:10: error: Struct 'L' has infinitely recursive layout
+   10 | struct L { x: struct { y: L } }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+main.lang:11: error: Struct 'OP' has infinitely recursive layout
+   11 | struct OP {
+      | ^~~~~~~~~~~~
+   12 |     y: [OP, 4]
+   13 | }
+      |
+info: Failed semantic analysis

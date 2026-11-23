@@ -1,0 +1,182 @@
+=== COMPILE EXIT: 1 ===
+dups.lang:2: error: Redefinition of symbol 'Foo'
+    2 | proc Foo() {
+      | ^~~~~~~~~~~~~
+    3 |     var x = NoSuchVar1
+    4 | }
+      |
+dups.lang:1: info: Symbol 'Foo' was originally declared here
+    1 | struct Foo { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~
+dups.lang:7: error: Redefinition of symbol 'Bar'
+    7 | proc Bar(): NoSuchReturn { return 0 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:6: info: Symbol 'Bar' was originally declared here
+    6 | struct Bar { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~
+dups.lang:12: error: Redefinition of symbol 'baz'
+   12 | proc baz(_: NoSuchArg)
+      | ^~~~~~~~~~~~~~~~~~~~~~
+dups.lang:11: info: Symbol 'baz' was originally declared here
+   11 | proc baz(_: *u8)
+      | ^~~~~~~~~~~~~~~~
+dups.lang:18: error: Redefinition of symbol 'Qux'
+   18 | proc Qux(): Unsized1 { return 0 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:16: info: Symbol 'Qux' was originally declared here
+   16 | struct Qux { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~
+dups.lang:23: error: Redefinition of symbol 'Alpha'
+   23 | struct Alpha { y: NoSuchField }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:22: info: Symbol 'Alpha' was originally declared here
+   22 | struct Alpha { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:29: error: Redefinition of symbol 'Beta'
+   29 | struct Beta { y: Unsized2 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:27: info: Symbol 'Beta' was originally declared here
+   27 | struct Beta { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~~
+dups.lang:34: error: Redefinition of symbol 'Gamma'
+   34 | type Gamma = NoSuchAlias
+      | ^~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:33: info: Symbol 'Gamma' was originally declared here
+   33 | type Gamma = int
+      | ^~~~~~~~~~~~~~~~
+dups.lang:39: error: Redefinition of symbol 'Delta'
+   39 | type Delta = int
+      | ^~~~~~~~~~~~~~~~
+dups.lang:38: info: Symbol 'Delta' was originally declared here
+   38 | module Delta { }
+      | ^~~~~~~~~~~~~~~~
+dups.lang:43: error: Redefinition of symbol 'Mod'
+   43 | module Mod {
+      | ^~~~~~~~~~~~~
+   44 |     proc A() { var x = NoSuchVar1 }
+   45 |     proc B() { var y = NoSuchVar2 }
+   46 | }
+      |
+dups.lang:42: info: Symbol 'Mod' was originally declared here
+   42 | module Mod { }
+      | ^~~~~~~~~~~~~~
+dups.lang:51: error: Redefinition of symbol 'N'
+   51 | module N {
+      | ^~~~~~~~~~~
+   52 |     struct S { x: NoSuchFieldType }
+   53 | }
+      |
+dups.lang:50: info: Symbol 'N' was originally declared here
+   50 | module N { }
+      | ^~~~~~~~~~~~
+dups.lang:58: error: Redefinition of symbol 'P'
+   58 | module P {
+      | ^~~~~~~~~~~
+   59 |     module Q {
+      | ...
+   61 |     }
+   62 | }
+      |
+dups.lang:57: info: Symbol 'P' was originally declared here
+   57 | module P { }
+      | ^~~~~~~~~~~~
+dups.lang:67: error: Redefinition of symbol 'S1'
+   67 | proc S1() {
+      | ^~~~~~~~~~~~
+   68 |     S1()
+   69 | }
+      |
+dups.lang:66: info: Symbol 'S1' was originally declared here
+   66 | struct S1 { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~
+dups.lang:73: error: Redefinition of symbol 'dup'
+   73 | proc dup(_: *u8) {
+      | ^~~~~~~~~~~~~~~~~~~
+   74 |     var x: NoSuchType = 0
+   75 | }
+      |
+dups.lang:72: info: Symbol 'dup' was originally declared here
+   72 | proc dup(_: *u8) { }
+      | ^~~~~~~~~~~~~~~~~~~~
+dups.lang:95: error: Redefinition of symbol 'Arg0'
+   95 | proc Arg0(_: NoSuchType) {
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+   96 |     return
+   97 | }
+      |
+dups.lang:94: info: Symbol 'Arg0' was originally declared here
+   94 | struct Arg0 { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~~
+dups.lang:102: error: Redefinition of symbol 'external'
+  102 | proc external(_: *u8)
+      | ^~~~~~~~~~~~~~~~~~~~~
+dups.lang:101: info: Symbol 'external' was originally declared here
+  101 | proc external(_: *u8)
+      | ^~~~~~~~~~~~~~~~~~~~~
+dups.lang:107: error: Redefinition of symbol 'BothA'
+  107 | struct BothA { x: NoSuchType2 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:106: info: Symbol 'BothA' was originally declared here
+  106 | struct BothA { x: NoSuchType1 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:115: error: Redefinition of symbol 'Shared'
+  115 | proc Shared() { }
+      | ^~~~~~~~~~~~~~~~~
+dups.lang:114: info: Symbol 'Shared' was originally declared here
+  114 | struct Shared { x: int }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:7: error: Unknown type 'NoSuchReturn'
+    7 | proc Bar(): NoSuchReturn { return 0 }
+      |             ^~~~~~~~~~~~
+dups.lang:12: error: Unknown type 'NoSuchArg'
+   12 | proc baz(_: NoSuchArg)
+      |             ^~~~~~~~~
+dups.lang:18: error: Procedure 'Qux' has unsized return type 'Unsized1'
+   18 | proc Qux(): Unsized1 { return 0 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:23: error: Unknown type 'NoSuchField'
+   23 | struct Alpha { y: NoSuchField }
+      |                   ^~~~~~~~~~~
+dups.lang:29: error: Struct field 'y' has unsized type 'Unsized2'
+   29 | struct Beta { y: Unsized2 }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+dups.lang:34: error: Unknown type 'NoSuchAlias'
+   34 | type Gamma = NoSuchAlias
+      |              ^~~~~~~~~~~
+dups.lang:52: error: Unknown type 'NoSuchFieldType'
+   52 |     struct S { x: NoSuchFieldType }
+      |                   ^~~~~~~~~~~~~~~
+dups.lang:95: error: Unknown type 'NoSuchType'
+   95 | proc Arg0(_: NoSuchType) {
+      |              ^~~~~~~~~~
+dups.lang:106: error: Unknown type 'NoSuchType1'
+  106 | struct BothA { x: NoSuchType1 }
+      |                   ^~~~~~~~~~~
+dups.lang:107: error: Unknown type 'NoSuchType2'
+  107 | struct BothA { x: NoSuchType2 }
+      |                   ^~~~~~~~~~~
+dups.lang:3: error: Undefined variable 'NoSuchVar1'
+    3 |     var x = NoSuchVar1
+      |             ^~~~~~~~~~
+dups.lang:44: error: Undefined variable 'NoSuchVar1'
+   44 |     proc A() { var x = NoSuchVar1 }
+      |                        ^~~~~~~~~~
+dups.lang:45: error: Undefined variable 'NoSuchVar2'
+   45 |     proc B() { var y = NoSuchVar2 }
+      |                        ^~~~~~~~~~
+dups.lang:60: error: Undefined variable 'NoSuchVar'
+   60 |         proc X() { var z = NoSuchVar }
+      |                            ^~~~~~~~~
+dups.lang:68: error: Type 'S1' cannot be used as a value
+   68 |     S1()
+      |     ^~
+dups.lang:74: error: Unknown type 'NoSuchType'
+   74 |     var x: NoSuchType = 0
+      |            ^~~~~~~~~~
+dups.lang:82: error: Argument has type '<integer>', expected '*u8'
+   82 |     puts(1)
+      |     ^~~~~~~
+dups.lang:89: error: Undefined variable 'NoSuchVar'
+   89 |         var x = NoSuchVar
+      |                 ^~~~~~~~~
+info: Failed semantic analysis

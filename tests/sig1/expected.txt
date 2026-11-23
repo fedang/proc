@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+sig.lang:24: error: Argument has type '*C.S', expected '*B.S'
+   24 |     B.use(C.make(10))
+      |     ^~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

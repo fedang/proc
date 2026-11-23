@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+bad_shift.lang:1: error: Shift amount out of bounds in constant expression
+    1 | var x: i32 = 1 << 40
+      |              ^~~~~~~
+info: Failed semantic analysis

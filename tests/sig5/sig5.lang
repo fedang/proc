@@ -1,0 +1,17 @@
+sig S {
+    type I
+    type PI = *I
+    proc foo(_: PI): *I
+}
+
+module X : S {
+    type I = int
+    proc foo(x: PI): *I {
+        return x
+    }
+}
+
+proc main(): int {
+    X.foo(@cast(X.PI, 0))
+    return 0;
+}

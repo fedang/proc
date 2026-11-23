@@ -1,0 +1,4 @@
+=== COMPILE EXIT: 1 ===
+main.lang:2: error: Block expression is not allowed in this context
+    2 |     if {} {
+      |        ^

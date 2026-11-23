@@ -1,0 +1,19 @@
+=== COMPILE EXIT: 1 ===
+sizeof.lang:1: error: Struct 'K' has infinitely recursive layout
+    1 | struct K {
+      | ^~~~~~~~~~~
+    2 |     k: [int, @size_of(K)]
+    3 | }
+      |
+sizeof.lang:5: error: Struct 'XK' has infinitely recursive layout
+    5 | struct XK {
+      | ^~~~~~~~~~~~
+    6 |     k: struct {
+      | ...
+    8 |     }
+    9 | }
+      |
+sizeof.lang:16: error: Struct 'Y' has infinitely recursive layout
+   16 | struct Y { a: [int, @size_of([Y, 2])] }
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

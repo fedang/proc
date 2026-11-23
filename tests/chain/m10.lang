@@ -1,0 +1,2 @@
+import m11
+proc f10() {}

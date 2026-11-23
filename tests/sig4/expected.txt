@@ -1,0 +1,14 @@
+=== COMPILE EXIT: 1 ===
+sig4.lang:12: error: Symbol 'bar' is not exposed by signature 'X' of module 'Y'
+   12 |     Y.bar()
+      |     ^~~~~
+sig4.lang:1: info: Module 'Y' is sealed by signature 'X' declared here
+    1 | sig X {
+      | ^~~~~~~~
+    2 |     proc foo(): int
+    3 | }
+      |
+sig4.lang:7: info: Symbol 'bar' was declared in module 'Y' here
+    7 |     proc bar() { }
+      |     ^~~~~~~~~~~~~~
+info: Failed semantic analysis

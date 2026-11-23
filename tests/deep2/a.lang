@@ -1,4 +1,4 @@
 import b
 import c
 
-proc main() {}
+proc main(): int { return 0 }
