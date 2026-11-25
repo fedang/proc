@@ -1,0 +1,9 @@
+proc test(): int {
+	while (@size_of(@type_of({return 10}))) > 10 {
+
+	}
+}
+
+proc main(): int {
+	return test()
+}

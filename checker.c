@@ -460,6 +460,9 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
                                 fields[i].name, fields[i].type);
                     return NULL;
                 }
+
+                if (!checker_resolve_layout(state, fields[i].type))
+                    return NULL;
             }
 
             return type_get_struct(NULL, NULL, NULL,
@@ -1034,7 +1037,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct type *type, *args[32];
     struct proc_arg *ptr, *prev;
     struct scope *saved, *scope;
-    size_t i;
+    size_t i, j;
     bool ok = true;
 
     if (bind->status == RESOLVE_DONE)
@@ -1107,6 +1110,16 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             type = bind->type;
 
             for (i = 0; i < type->strukt.fields_count; i++) {
+                for (j = 0; j < i; j++) {
+                    if (type->strukt.fields[j].name == type->strukt.fields[i].name) {
+                        TYCHK_ERROR(state, bind->decl->span,
+                                    "Field '%pS' declared more than once in struct '%pS'\n",
+                                    type->strukt.fields[i].name, bind->sym);
+                        ok = false;
+                        break;
+                    }
+                }
+
                 if (!checker_resolve_type(state, &type->strukt.fields[i].type)) {
                     ok = false;
                 } else if (!type_is_sized(type->strukt.fields[i].type)) {
@@ -2661,6 +2674,8 @@ checker_proc_returns(struct expr *expr)
     struct expr_macro *macro;
     struct expr_call *call;
     struct expr_array *array;
+    struct expr_struct *strukt;
+    struct expr_if *e_if;
     size_t i;
 
     if (!expr)
@@ -2671,8 +2686,10 @@ checker_proc_returns(struct expr *expr)
         case EXPR_IDENT:
         case EXPR_BREAK:
         case EXPR_CONTINUE:
-        case EXPR_WHILE:
             return false;
+
+        case EXPR_WHILE:
+            return checker_proc_returns(((struct expr_while *)expr)->cond);
 
         case EXPR_BINOP:
             binop = (struct expr_binop *)expr;
@@ -2716,13 +2733,26 @@ checker_proc_returns(struct expr *expr)
             return false;
 
         case EXPR_STRUCT:
-            // XXX
+            strukt = (struct expr_struct *)expr;
+            for (i = 0; i < strukt->fields_count; i++) {
+                if (checker_proc_returns(strukt->fields[i].value))
+                    return true;
+            }
             return false;
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
-            return macro->macro.tag == MACRO_EXPR
-                && checker_proc_returns(macro->macro.expr);
+            if (macro->macro.tag == MACRO_EXPR)
+                return checker_proc_returns(macro->macro.expr);
+            if (macro->macro.tag == MACRO_CAST)
+                return checker_proc_returns(macro->args[1]);
+            if (macro->macro.tag == MACRO_SLICE) {
+                if (macro->args_count == 2 &&
+                    checker_proc_returns(macro->args[1]))
+                    return true;
+                return checker_proc_returns(macro->args[0]);
+            }
+            return false;
 
         case EXPR_BLOCK:
             block = (struct expr_block *)expr;
@@ -2742,8 +2772,11 @@ checker_proc_returns(struct expr *expr)
             return false;
 
         case EXPR_IF:
-            return checker_proc_returns(((struct expr_if *)expr)->b_false)
-                && checker_proc_returns(((struct expr_if *)expr)->b_true);
+            e_if = (struct expr_if *)expr;
+            if (checker_proc_returns(e_if->cond))
+                return true;
+            return checker_proc_returns(e_if->b_false)
+                && checker_proc_returns(e_if->b_true);
 
         case EXPR_RETURN:
             return true;

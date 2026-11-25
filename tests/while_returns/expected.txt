@@ -1,0 +1,10 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Procedure 'test' does not return a value on all branches
+    1 | proc test(): int {
+      | ^~~~~~~~~~~~~~~~~~~
+    2 | 	while (@size_of(@type_of({return 10}))) > 10 {
+      | ...
+    4 | 	}
+    5 | }
+      |
+info: Failed semantic analysis

@@ -1,0 +1,10 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Field 'x' declared more than once in struct 'Bad'
+    1 | struct Bad {
+      | ^~~~~~~~~~~~~
+    2 |     x: i32
+      | ...
+    4 |     x: i64
+    5 | }
+      |
+info: Failed semantic analysis

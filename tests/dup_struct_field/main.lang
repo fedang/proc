@@ -1,0 +1,10 @@
+struct Bad {
+    x: i32
+    y: i32
+    x: i64
+}
+
+proc main(): i32 {
+    return 0
+}
+
