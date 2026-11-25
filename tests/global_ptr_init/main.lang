@@ -1,0 +1,12 @@
+var mmio: *u16 = @cast(*u16, 0xb8000)
+var nullp: *u8 = @cast(*u8, 0)
+
+proc main(): i32 {
+    if @cast(u64, mmio) != 0xb8000 {
+        return 1
+    }
+    if @cast(u64, nullp) != 0 {
+        return 2
+    }
+    return 0
+}

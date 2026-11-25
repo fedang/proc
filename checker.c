@@ -3391,7 +3391,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
         switch (eval_try_ctval(&state->eval, var->value)) {
             case EVAL_OK:
                 if (var->value->ctval.tag == VALUE_INTEGER ||
-                    var->value->ctval.tag == VALUE_BOOL)
+                    var->value->ctval.tag == VALUE_BOOL ||
+                    var->value->ctval.tag == VALUE_STRING)
                     return true;
 
                 TYCHK_ERROR(state, var->value->span,

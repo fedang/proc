@@ -29,6 +29,14 @@ irgen_fresh_label(struct irgen *state)
     return ++state->labels;
 }
 
+static struct irval
+irgen_emit_string(struct irgen *state, const char *string)
+{
+    assert(state->strings_count < 256 && "too many strings!");
+    state->strings[state->strings_count] = string;
+    return IRVAL_STRING(state->strings_count++);
+}
+
 static void
 irgen_val(struct irgen *state, struct irval val)
 {
@@ -559,9 +567,7 @@ irgen_expr_literal(struct irgen *state, struct expr *expr)
             return IRVAL_INT(expr->ctval.integer);
 
         case VALUE_STRING:
-            assert(state->strings_count < 256 && "too many strings!");
-            state->strings[state->strings_count] = expr->ctval.string;
-            return IRVAL_STRING(state->strings_count++);
+            return irgen_emit_string(state, expr->ctval.string);
 
         default:
             unreachable();
@@ -1408,13 +1414,26 @@ irgen_decl_var(struct irgen *state, struct decl_var *decl)
     if (decl->value) {
         switch (decl->value->ctval.tag) {
             case VALUE_INTEGER:
+                if (decl->type->tag == TYPE_PTR) {
+                    if (decl->value->ctval.integer == 0) {
+                        IR_EMITF(state, " null\n");
+                    } else {
+                        IR_EMITF(state, " inttoptr (i64 %ld to ptr)\n",
+                                 (long)decl->value->ctval.integer);
+                    }
+                    return;
+                }
+                /* fall through */
+
             case VALUE_BOOL:
                 IR_EMITF(state, " %ld\n", (long)decl->value->ctval.integer);
                 return;
 
             case VALUE_STRING:
-                // TODO
-                break;
+                IR_EMITC(state, ' ');
+                irgen_val(state, irgen_emit_string(state,
+                                                   decl->value->ctval.string));
+                return;
 
             default:
                 break;
