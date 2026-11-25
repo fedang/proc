@@ -109,6 +109,7 @@ struct expr_ident {
     struct expr expr;
     struct symbol *sym;
     struct binding *bind;
+    unsigned slot;
 };
 
 struct expr_binop {

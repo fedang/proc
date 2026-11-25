@@ -14,6 +14,7 @@ struct proc_arg {
     struct attr *attr;
     struct type *type;
     struct symbol *sym;
+    unsigned slot;
     struct proc_arg *next;
 };
 

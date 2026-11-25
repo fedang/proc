@@ -34,11 +34,6 @@ struct irval {
 #define IRVAL_GLOBAL(v) ((struct irval) { IRVAL_GLOBAL, { .global = (v) } })
 #define IRVAL_STRING(v) ((struct irval) { IRVAL_STRING, { .reg = (v) } })
 
-struct irvar {
-    struct symbol *sym;
-    struct irval val;
-};
-
 struct irgen {
     FILE *out;
     unsigned regs;
@@ -47,8 +42,7 @@ struct irgen {
     unsigned in_block;
     unsigned loop_cond;
     unsigned loop_exit;
-    struct irvar locals[256];
-    unsigned locals_count;
+    struct irval slots[256];
     struct symbol *externs[256];
     unsigned externs_count;
     const char *strings[256];

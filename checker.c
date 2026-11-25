@@ -20,7 +20,7 @@ checker_root_push(struct checker *state, const char *name, struct type *type)
     scope_push(state->root_scope, symbol_make(name), type, NULL, BIND_TYPE);
 }
 
-static void
+static unsigned
 checker_local_push(struct checker *state, struct symbol *sym,
                    struct type *type)
 {
@@ -28,7 +28,7 @@ checker_local_push(struct checker *state, struct symbol *sym,
 
     state->locals[state->locals_count].sym = sym;
     state->locals[state->locals_count].type = type;
-    state->locals_count++;
+    return state->locals_count++;
 }
 
 static void
@@ -1032,7 +1032,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct decl_module *mod;
     struct decl_var *var;
     struct type *type, *args[32];
-    struct proc_arg *ptr;
+    struct proc_arg *ptr, *prev;
     struct scope *saved, *scope;
     size_t i;
     bool ok = true;
@@ -1148,6 +1148,16 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
             }
 
             for (i = 0, ptr = proc->args; ptr != NULL; ptr = ptr->next) {
+                for (prev = proc->args; prev != ptr; prev = prev->next) {
+                    if (prev->sym == ptr->sym) {
+                        TYCHK_ERROR(state, proc->decl.span,
+                                    "Procedure '%pS' has duplicate parameter '%pS'\n",
+                                    proc->sym, ptr->sym);
+                        ok = false;
+                        break;
+                    }
+                }
+
                 if (!checker_resolve_type(state, &ptr->type)) {
                     ok = false;
                 } else if (!type_is_sized(ptr->type)) {
@@ -1573,11 +1583,12 @@ checker_expr_ident(struct checker *state, struct expr_ident *expr)
 {
     struct binding *bind;
     struct type *type;
-    size_t i;
+    int i;
 
-    for (i = state->locals_count; i > 0; i--) {
-        if (state->locals[i - 1].sym == expr->sym) {
-            expr->expr.type = state->locals[i - 1].type;
+    for (i = state->locals_count - 1; i >= 0; i--) {
+        if (state->locals[i].sym == expr->sym) {
+            expr->expr.type = state->locals[i].type;
+            expr->slot = i;
             return true;
         }
     }
@@ -2937,7 +2948,7 @@ checker_decl_var(struct checker *state, struct decl_var *decl)
         decl->type = type_get_invalid();
     }
 
-    checker_local_push(state, decl->sym, decl->type);
+    decl->slot = checker_local_push(state, decl->sym, decl->type);
     return ok;
 }
 
@@ -3415,7 +3426,7 @@ checker_validate_decl(struct checker *state, struct decl *decl)
 
     assert(state->locals_count == 0 && "leftover locals!");
     for (ptr = proc->args; ptr != NULL; ptr = ptr->next) {
-        checker_local_push(state, ptr->sym, ptr->type);
+        ptr->slot = checker_local_push(state, ptr->sym, ptr->type);
     }
 
     state->loop_depth = 0;

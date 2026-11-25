@@ -423,12 +423,9 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
                 return IRVAL_GLOBAL(ident->bind->link_sym->str);
             }
 
-            for (i = state->locals_count; i > 0; i--) {
-                if (state->locals[i - 1].sym == ident->sym)
-                    return state->locals[i - 1].val;
-            }
-
-            assert(false && "undefined vars slipped through!");
+            assert(ident->slot < 256 && "local slot out of bound!");
+            assert(state->slots[ident->slot].tag != IRVAL_INVALID && "invalid local slot!");
+            return state->slots[ident->slot];
 
         case EXPR_UNOP:
             unop = (struct expr_unop *)expr;
@@ -899,12 +896,8 @@ irgen_block_item(struct irgen *state, struct decl *decl)
     switch (decl->tag) {
         case DECL_VAR:
             var = (struct decl_var *)decl;
-            slot = IRVAL_REG(var->slot);
-
-            assert(state->locals_count < 256 && "too many locals!");
-            state->locals[state->locals_count].sym = var->sym;
-            state->locals[state->locals_count].val = slot;
-            state->locals_count++;
+            slot = state->slots[var->slot];
+            assert(slot.tag != IRVAL_INVALID && "invalid local slot!");
 
             if (var->value) {
                 val = irgen_expr(state, var->value);
@@ -924,9 +917,7 @@ irgen_block_item(struct irgen *state, struct decl *decl)
 static struct irval
 irgen_expr_block(struct irgen *state, struct expr_block *expr)
 {
-    size_t i, locals;
-
-    locals = state->locals_count;
+    size_t i;
 
     for (i = 0; i < expr->items_count; i++) {
         /*
@@ -938,7 +929,6 @@ irgen_expr_block(struct irgen *state, struct expr_block *expr)
         irgen_block_item(state, expr->items[i]);
     }
 
-    state->locals_count = locals;
     return IRVAL_POISON();
 }
 
@@ -1128,11 +1118,15 @@ static void
 irgen_hoist_decl(struct irgen *state, struct decl *decl)
 {
     struct decl_var *var;
+    struct irval slot;
 
     switch (decl->tag) {
         case DECL_VAR:
             var = (struct decl_var *)decl;
-            var->slot = irgen_emit_simple0(state, "alloca", var->type).reg;
+            slot = irgen_emit_simple0(state, "alloca", var->type);
+
+            assert(var->slot < 256 && "invalid local slot!");
+            state->slots[var->slot] = slot;
             irgen_hoist_expr(state, var->value);
             break;
 
@@ -1298,7 +1292,6 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
 
     state->regs = 0;
     state->labels = 0;
-    state->locals_count = 0;
 
     IR_EMITF(state, "\ndefine ");
     irgen_type_ret(state, decl->out);
@@ -1326,10 +1319,8 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
         if (!type_is_zst(ptr->type))
             irgen_emit_store(state, ptr->type, slot, IRVAL_REG(reg++));
 
-        assert(state->locals_count < 256 && "too many locals!");
-        state->locals[state->locals_count].sym = ptr->sym;
-        state->locals[state->locals_count].val = slot;
-        state->locals_count++;
+        assert(ptr->slot < 256 && "invalid local slot!");
+        state->slots[ptr->slot] = slot;
     }
 
     irgen_hoist_expr(state, decl->body);
