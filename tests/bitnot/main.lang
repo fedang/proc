@@ -1,0 +1,23 @@
+var g_mask8: u8 = !0x0f
+var g_mask32: i32 = !0
+
+proc main(): i32 {
+    if g_mask8 != 0xf0 {
+        return 1
+    }
+    if g_mask32 != -1 {
+        return 2
+    }
+
+    var flags: u32 = 0xff
+    flags &= !0x0c
+    if flags != 0xf3 {
+        return 3
+    }
+
+    var b: bool = false
+    if !b != true {
+        return 4
+    }
+    return 0
+}

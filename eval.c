@@ -103,8 +103,13 @@ eval_expr_unop(struct eval *state, struct expr_unop *expr, struct value *out)
             return EVAL_OK;
 
         case UNOP_NOT:
-            assert(out->tag == VALUE_BOOL);
-            out->integer = !out->integer;
+            if (out->tag == VALUE_BOOL) {
+                out->integer = !out->integer;
+                return EVAL_OK;
+            }
+            assert(out->tag == VALUE_INTEGER);
+            out->integer = eval_normalize(expr->expr.type,
+                                          (int64_t)(~(uint64_t)out->integer));
             return EVAL_OK;
 
         default:

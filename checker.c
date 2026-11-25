@@ -1813,14 +1813,15 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
             break;
 
         case UNOP_NOT:
-            if (expr->op->type->tag != TYPE_BOOL) {
+            if (expr->op->type->tag != TYPE_BOOL &&
+                !type_is_integer(expr->op->type)) {
                 TYCHK_ERROR(state, expr->expr.span,
-                            "Expected 'bool' type, but got '%pT'\n",
+                            "Expected 'bool' or integer type, but got '%pT'\n",
                             expr->op->type);
                 return false;
             }
 
-            expr->expr.type = type_get_bool(NULL);
+            expr->expr.type = expr->op->type;
             break;
 
         case UNOP_NEG:
