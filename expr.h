@@ -136,6 +136,7 @@ struct expr_index {
     struct expr expr;
     struct expr *op;
     struct expr *index;
+    unsigned slot;
 };
 
 struct expr_access {

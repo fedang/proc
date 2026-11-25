@@ -799,6 +799,37 @@ irgen_expr_access(struct irgen *state, struct expr_access *expr)
                                    expr->expr.type, expr->index);
 }
 
+static struct irval
+irgen_expr_index(struct irgen *state, struct expr_index *expr)
+{
+    struct irval val, idx, ptr;
+
+    val = irgen_expr(state, expr->op);
+    idx = irgen_expr(state, expr->index);
+    if (type_is_zst(expr->expr.type))
+        return IRVAL_POISON();
+
+    if (expr->op->type->tag == TYPE_SLICE) {
+        ptr = irgen_emit_extractvalue(state, val, expr->op->type,
+                                      type_get_ptr(NULL, expr->expr.type), 0);
+        ptr = irgen_emit_gep(state, expr->expr.type, ptr, 1,
+                             idx, expr->index->type);
+    } else {
+        assert(expr->op->type->tag == TYPE_ARRAY && "impossible");
+
+        /*
+         * Materialize the hoisted array into its temporary slot
+         */
+        ptr = IRVAL_REG(expr->slot);
+        irgen_emit_store(state, expr->op->type, ptr, val);
+        ptr = irgen_emit_gep(state, expr->op->type, ptr, 2,
+                             IRVAL_INT(0), NULL,
+                             idx, expr->index->type);
+    }
+
+    return irgen_emit_load(state, expr->expr.type, ptr);
+}
+
 static const char *
 irgen_cast_instr(const struct type *src, const struct type *dst)
 {
@@ -1080,6 +1111,9 @@ irgen_expr(struct irgen *state, struct expr *expr)
         case EXPR_CALL:
             return irgen_expr_call(state, (struct expr_call *)expr);
 
+        case EXPR_INDEX:
+            return irgen_expr_index(state, (struct expr_index *)expr);
+
         case EXPR_ACCESS:
             return irgen_expr_access(state, (struct expr_access *)expr);
 
@@ -1144,6 +1178,7 @@ irgen_hoist_expr(struct irgen *state, struct expr *expr)
 {
     struct expr_call *call;
     struct expr_array *array;
+    struct expr_index *index;
     struct expr_struct *strukt;
     struct expr_macro *macro;
     struct expr_block *block;
@@ -1175,8 +1210,13 @@ irgen_hoist_expr(struct irgen *state, struct expr *expr)
             break;
 
         case EXPR_INDEX:
-            irgen_hoist_expr(state, ((struct expr_index *)expr)->op);
-            irgen_hoist_expr(state, ((struct expr_index *)expr)->index);
+            index = (struct expr_index *)expr;
+            if (index->op->type->tag == TYPE_ARRAY && !expr_is_mem(index->op)) {
+                index->slot = irgen_emit_simple0(state, "alloca",
+                                                 index->op->type).reg;
+            }
+            irgen_hoist_expr(state, index->op);
+            irgen_hoist_expr(state, index->index);
             break;
 
         case EXPR_ACCESS:

@@ -1990,6 +1990,13 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
     }
 
     /*
+     * Automatically dereference struct and slice pointers
+     */
+    while (type->tag == TYPE_PTR) {
+        type = type->pointer;
+    }
+
+    /*
      * Slices expose the fields 'ptr' and 'len'
      */
     if (type->tag == TYPE_SLICE) {
@@ -2009,13 +2016,6 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
                     "Slices have no field named '%pS'\n",
                     expr->field);
         return false;
-    }
-
-    /*
-     * Automatically dereference struct pointers
-     */
-    while (type->tag == TYPE_PTR) {
-        type = type->pointer;
     }
 
     if (type->tag != TYPE_STRUCT) {
