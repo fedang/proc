@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+main.lang:1: error: Procedure 'bad' has duplicate parameter 'x'
+    1 | proc bad(x: i32, y: i32, x: i32): i32 {
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    2 |     return x + y
+    3 | }
+      |
+info: Failed semantic analysis

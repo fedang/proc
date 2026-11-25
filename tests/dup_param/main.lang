@@ -1,0 +1,7 @@
+proc bad(x: i32, y: i32, x: i32): i32 {
+    return x + y
+}
+
+proc main(): i32 {
+    return bad(1, 2, 3)
+}

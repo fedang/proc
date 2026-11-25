@@ -1,2 +1,5 @@
+proc clobber(): int { return 0 }
+
 proc main() {
+	clobber()
 }

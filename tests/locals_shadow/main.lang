@@ -1,0 +1,12 @@
+var g: i32 = 10
+
+proc main(): i32 {
+    var g: i32 = g + 5
+    var x: i32 = 3
+    var x: i32 = x + 4
+    {
+        var x: i32 = x * 2
+        g += x
+    }
+    return g + x
+}

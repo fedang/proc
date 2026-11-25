@@ -1,0 +1,5 @@
+=== COMPILE EXIT: 1 ===
+main.lang:3: error: Assignments require an lvalue as left operand
+    3 |     @slice(a)[0] = 9
+      |     ^~~~~~~~~~~~~~~~
+info: Failed semantic analysis
