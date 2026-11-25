@@ -56,9 +56,15 @@ parser_advance(struct parser *state)
 }
 
 static inline bool
+parser_peek(struct parser *state, enum token_tag tag)
+{
+    return parser_curr(state)->tag == tag;
+}
+
+static inline bool
 parser_match(struct parser *state, enum token_tag tag)
 {
-    if (parser_curr(state)->tag != tag)
+    if (!parser_peek(state, tag))
         return false;
 
     parser_advance(state);
@@ -109,7 +115,7 @@ parser_check_end(struct parser *state, const char *msg)
         return true;
 
     // XXX: {a;b;} or {a;b}
-    if (parser_curr(state)->tag == TOKEN_RBRACE)
+    if (parser_peek(state, TOKEN_RBRACE))
         return true;
 
     /*
@@ -127,7 +133,7 @@ parser_peek_sym(struct parser *state, struct symbol **sym)
 {
     struct token *token;
 
-    if (parser_curr(state)->tag != TOKEN_SYMBOL)
+    if (!parser_peek(state, TOKEN_SYMBOL))
         return false;
 
     token = parser_curr(state);
@@ -252,18 +258,17 @@ parser_expr_block(struct parser *state, struct expr **expr)
     state->no_block = false;
 
     for (items_count = 0; !parser_eof(state); items_count++) {
-        if (parser_match(state, TOKEN_RBRACE))
-            goto done;
+        if (parser_peek(state, TOKEN_RBRACE))
+            break;
 
         assert(items_count < 64 && "too many block items!");
         if (!parser_decl(state, &items[items_count]))
-            return false;
+            goto fail;
     }
 
     if (!parser_check(state, TOKEN_RBRACE, "Expected '}' after block body"))
-        return false;
+        goto fail;
 
-done:
     state->parens = saved_parens;
     state->no_block = saved_noblock;
 
@@ -274,6 +279,11 @@ done:
     }
     expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
     return true;
+
+fail:
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+    return false;
 }
 
 static bool
@@ -506,7 +516,7 @@ parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
     count = 0;
     while (!parser_match(state, TOKEN_RBRACE)) {
         if (!parser_check_sym(state, &field, "Expected field name"))
-            return false;
+            goto fail;
 
         lhs = expr_make_ident(field);
         expr_set_span(lhs, parser_prev(state)->span);
@@ -516,13 +526,13 @@ parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
 
         if (parser_match(state, TOKEN_EQ) || parser_match(state, TOKEN_COLON)) {
             if (!parser_expr(state, &rhs))
-                return false;
+                goto fail;
 
             if (!parser_check_end(state, "Expected newline or ';' after field assignment"))
-                return false;
+                goto fail;
         } else {
             if (!parser_check_end(state, "Expected separator or terminator after field name"))
-                return false;
+                goto fail;
         }
 
         assert(count < 32 && "too many fields");
@@ -536,8 +546,16 @@ parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
     state->no_block = saved_noblock;
 
     *expr = expr_make_struct(op, count);
-    memcpy(((struct expr_struct *)*expr)->fields, fields, count * sizeof(struct struct_init));
+    if (count > 0) {
+        memcpy(((struct expr_struct *)*expr)->fields, fields,
+                count * sizeof(struct struct_init));
+    }
     return true;
+
+fail:
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+    return false;
 }
 
 static bool
@@ -1016,13 +1034,13 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     if (parser_match(state, TOKEN_LBRACE)) {
         if (!parser_expr_block(state, &body))
             return false;
+
+        if (!parser_check_end(state, "Expected newline or ';' after declaration"))
+            return false;
     } else {
         if (!parser_check_end(state, "Expected '{' or termination after proc signature"))
             return false;
     }
-
-    if (!parser_check_end(state, "Expected newline or ';' after declaration"))
-        return false;
 
     *decl = decl_make_proc(sym, out, args, args_count, body);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
@@ -1071,8 +1089,11 @@ parser_decl_struct(struct parser *state, struct decl **decl)
     if (!parser_check_end(state, "Expected newline or ';' after declaration"))
         return false;
 
-    copy = malloc(fields_count * sizeof(struct struct_field));
-    memcpy(copy, fields, fields_count * sizeof(struct struct_field));
+    copy = NULL;
+    if (fields_count > 0) {
+        copy = malloc(fields_count * sizeof(struct struct_field));
+        memcpy(copy, fields, fields_count * sizeof(struct struct_field));
+    }
 
     *decl = decl_make_struct(sym, copy, fields_count);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
