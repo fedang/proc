@@ -16,7 +16,10 @@ struct options {
     const char *output;
     const char *ir_file;
     bool emit_asm;
-    bool term_color;
+    bool emit_obj;
+    bool emit_ir;
+    bool color;
+    bool help;
 };
 
 extern struct options opts;
@@ -25,6 +28,6 @@ bool options_init(int argc, const char **argv);
 
 void options_help(const char *prog);
 
-int options_run_clang(void);
+bool options_run_clang(void);
 
 #endif

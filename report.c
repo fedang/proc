@@ -10,12 +10,12 @@
 #define REPORT_WARNING  1
 #define REPORT_INFO     2
 
-#define TERM_NORM   (opts.term_color > 0 ? "\033[0m" : "")
-#define TERM_BOLD   (opts.term_color > 0 ? "\033[1m" : "")
-#define TERM_RED    (opts.term_color > 0 ? "\033[1;31m" : "")
-#define TERM_GREEN  (opts.term_color > 0 ? "\033[1;32m" : "")
-#define TERM_MAG    (opts.term_color > 0 ? "\033[1;35m" : "")
-#define TERM_CYAN   (opts.term_color > 0 ? "\033[1;36m" : "")
+#define TERM_NORM   (opts.color > 0 ? "\033[0m" : "")
+#define TERM_BOLD   (opts.color > 0 ? "\033[1m" : "")
+#define TERM_RED    (opts.color > 0 ? "\033[1;31m" : "")
+#define TERM_GREEN  (opts.color > 0 ? "\033[1;32m" : "")
+#define TERM_MAG    (opts.color > 0 ? "\033[1;35m" : "")
+#define TERM_CYAN   (opts.color > 0 ? "\033[1;36m" : "")
 
 static void
 report_format(FILE *out, const struct source_map *map,

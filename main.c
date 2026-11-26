@@ -63,7 +63,10 @@ main(int argc, const char **argv)
     }
 
     fclose(ir_out);
-    if (options_run_clang()) {
+    if (opts.emit_ir)
+        return 0;
+
+    if (!options_run_clang()) {
         report_info(NULL, NULL, "Failed to compile IR\n");
         return 1;
     }

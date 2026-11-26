@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #include "options.h"
 #include "report.h"
@@ -50,7 +51,7 @@ options_init(int argc, const char **argv)
 
     opts.output = "a.out";
     opts.ir_file = "test.ll";
-    opts.term_color = isatty(STDERR_FILENO) && !getenv("NO_COLOR");
+    opts.color = isatty(STDERR_FILENO) && !getenv("NO_COLOR");
 
     for (i = 1; i < argc; i++) {
         if (argv[i][0] != '-') {
@@ -68,8 +69,18 @@ options_init(int argc, const char **argv)
         }
 
         if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
-            options_help(argv[0]);
-            return false;
+            opts.help = true;
+            continue;
+        }
+
+        if (!strcmp(argv[i], "-c")) {
+            opts.emit_obj = true;
+            continue;
+        }
+
+        if (!strcmp(argv[i], "--emit-ir")) {
+            opts.emit_ir = true;
+            continue;
         }
 
         if (!strcmp(argv[i], "-o")) {
@@ -106,16 +117,21 @@ options_init(int argc, const char **argv)
         }
 
         if (!strcmp(argv[i], "--color")) {
-            opts.term_color = true;
+            opts.color = true;
             continue;
         }
 
         if (!strcmp(argv[i], "--no-color")) {
-            opts.term_color = false;
-             continue;
-         }
+            opts.color = false;
+            continue;
+        }
 
         report_error(NULL, NULL, "Unknown option '%s'\n", argv[i]);
+        return false;
+    }
+
+    if (opts.help) {
+        options_help(argv[0]);
         return false;
     }
 
@@ -135,41 +151,67 @@ options_help(const char *prog)
     printf("  -o <file>         Select output file\n");
     printf("  -i <file>         Select LLVM IR file\n");
     printf("  -C <clang_arg>    Pass option directly to the clang backend\n");
+    printf("  -c                Compile to object file without linking\n");
     printf("  -S                Emit assembly instead of linking\n");
+    printf("  --emit-ir         Emit LLVM IR only without invoking clang\n");
     printf("  --color           Force colored diagnostics\n");
     printf("  --no-color        Disable colored diagnostics\n");
     printf("  -h, --help        Display this help message\n");
 }
 
-int
+bool
 options_run_clang(void)
 {
-    char cmd[2048];
-    size_t i, cmd_len;
+    const char **argv;
+    size_t i, len, argc;
+    pid_t pid;
+    int status;
 
-    cmd_len = snprintf(cmd, sizeof(cmd),
-                       "clang -O1 -Wno-override-module");
+    len = 16 + opts.clang_inputs_count + opts.clang_args_count;
+    argv = malloc(len * sizeof(*argv));
+    assert(argv && "out of mem");
+
+    argc = 0;
+    argv[argc++] = "clang";
+    argv[argc++] = "-O1";
+    argv[argc++] = "-Wno-override-module";
 
     if (opts.emit_asm) {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " -S");
-    } else {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " -o %s", opts.output);
+        argv[argc++] = "-S";
+    } else if (opts.emit_obj) {
+        argv[argc++] = "-c";
     }
 
-    cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                        " %s", opts.ir_file);
+    argv[argc++] = "-o";
+    argv[argc++] = opts.output;
+    argv[argc++] = opts.ir_file;
 
     for (i = 0; i < opts.clang_inputs_count; i++) {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " %s", opts.clang_inputs[i]);
+        argv[argc++] = opts.clang_inputs[i];
     }
 
     for (i = 0; i < opts.clang_args_count; i++) {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " %s", opts.clang_args[i]);
+        argv[argc++] = opts.clang_args[i];
     }
 
-    return system(cmd);
+    argv[argc] = NULL;
+    assert(argc < len && "out of bounds");
+
+    pid = fork();
+    if (pid < 0) {
+        free(argv);
+        return false;
+     }
+
+    if (pid == 0) {
+        execvp("clang", (char **)argv);
+        perror("execvp(clang)");
+        _exit(127);
+    }
+
+    free(argv);
+    if (waitpid(pid, &status, 0) < 0)
+        return false;
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
