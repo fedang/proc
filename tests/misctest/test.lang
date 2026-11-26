@@ -302,6 +302,23 @@ proc list() {
     }
 }
 
+//if true {
+//	_ = 1
+//} else {
+//	_ = true
+//}
+//
+//var x = if t {
+//	1
+//} else {
+//	2
+//}
+//var x = if t {
+//	yield 1
+//} else {
+//	yield 2
+//}
+
 proc ret(): i64 {
     return 10
 }

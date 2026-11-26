@@ -1,23 +1,21 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "report.h"
 #include "type.h"
+#include "options.h"
 
 #define REPORT_ERROR    0
 #define REPORT_WARNING  1
 #define REPORT_INFO     2
 
-#define TERM_NORM   (use_color > 0 ? "\033[0m" : "")
-#define TERM_BOLD   (use_color > 0 ? "\033[1m" : "")
-#define TERM_RED    (use_color > 0 ? "\033[1;31m" : "")
-#define TERM_GREEN  (use_color > 0 ? "\033[1;32m" : "")
-#define TERM_MAG    (use_color > 0 ? "\033[1;35m" : "")
-#define TERM_CYAN   (use_color > 0 ? "\033[1;36m" : "")
-
-static int use_color = -1;
+#define TERM_NORM   (opts.term_color > 0 ? "\033[0m" : "")
+#define TERM_BOLD   (opts.term_color > 0 ? "\033[1m" : "")
+#define TERM_RED    (opts.term_color > 0 ? "\033[1;31m" : "")
+#define TERM_GREEN  (opts.term_color > 0 ? "\033[1;32m" : "")
+#define TERM_MAG    (opts.term_color > 0 ? "\033[1;35m" : "")
+#define TERM_CYAN   (opts.term_color > 0 ? "\033[1;36m" : "")
 
 static void
 report_format(FILE *out, const struct source_map *map,
@@ -233,10 +231,6 @@ report_message(const struct source_map *map, const struct span *span,
     const struct source *src;
 
     assert(((span && map) || (!span && !map)) && "either both or neither");
-
-    if (use_color < 0) {
-        use_color = isatty(STDOUT_FILENO);
-    }
 
     if (span) {
         src = source_map_get(map, span->src_id);

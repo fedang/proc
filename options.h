@@ -7,16 +7,24 @@ struct options {
     const char **inputs;
     size_t inputs_count;
     size_t inputs_size;
-    const char *output;
-    const char *ir_file;
+    const char **clang_inputs;
+    size_t clang_inputs_count;
+    size_t clang_inputs_size;
     const char **clang_args;
     size_t clang_args_count;
     size_t clang_args_size;
+    const char *output;
+    const char *ir_file;
     bool emit_asm;
+    bool term_color;
 };
 
-bool options_init(struct options *opts, int argc, const char **argv);
+extern struct options opts;
+
+bool options_init(int argc, const char **argv);
 
 void options_help(const char *prog);
+
+int options_run_clang(void);
 
 #endif

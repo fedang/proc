@@ -1,72 +1,16 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <stdbool.h>
 
-#include "lexer.h"
-#include "parser.h"
+#include "modcache.h"
 #include "checker.h"
 #include "irgen.h"
 #include "report.h"
 #include "options.h"
 
-static bool
-check_extension(const char *str, const char *ext)
-{
-    size_t str_len, ext_len;
-
-    str_len = strlen(str);
-    ext_len = strlen(ext);
-
-    if (str_len <= ext_len)
-        return false;
-
-    if (strcmp(str + (str_len - ext_len), ext))
-        return false;
-
-    return str[str_len - ext_len] == '.';
-}
-
-static int
-run_clang(struct options *opts)
-{
-    char cmd[1024];
-    size_t i, cmd_len;
-
-    cmd_len = snprintf(cmd, sizeof(cmd),
-                       "clang -O1 -Wno-override-module");
-
-    if (opts->emit_asm) {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " -S");
-    } else {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " -o %s", opts->output);
-    }
-
-    cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                        " %s", opts->ir_file);
-
-    for (i = 0; i < opts->inputs_count; i++) {
-        if (!check_extension(opts->inputs[i], ".c"))
-            continue;
-
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " %s", opts->inputs[i]);
-    }
-
-    for (i = 0; i < opts->clang_args_count; i++) {
-        cmd_len += snprintf(cmd + cmd_len, sizeof(cmd) - cmd_len,
-                            " %s", opts->clang_args[i]);
-    }
-
-    return system(cmd);
-}
-
 int
 main(int argc, const char **argv)
 {
-    struct options opts;
     struct modcache cache;
     struct checker check;
     struct irgen irgen;
@@ -74,7 +18,7 @@ main(int argc, const char **argv)
     size_t i;
     bool ok = true;
 
-    if (!options_init(&opts, argc, argv))
+    if (!options_init(argc, argv))
         return 1;
 
     symbol_init();
@@ -85,13 +29,6 @@ main(int argc, const char **argv)
      * Load all the root modules asked by the user
      */
     for (i = 0; i < opts.inputs_count; i++) {
-        if (check_extension(opts.inputs[i], ".c")) {
-            report_info(NULL, NULL,
-                        "Input file '%s' will be passed directly to clang\n",
-                        opts.inputs[i]);
-            continue;
-        }
-
         if (!modcache_load(&cache, opts.inputs[i], NULL, NULL)) {
             ok = false;
         }
@@ -126,7 +63,7 @@ main(int argc, const char **argv)
     }
 
     fclose(ir_out);
-    if (run_clang(&opts)) {
+    if (options_run_clang()) {
         report_info(NULL, NULL, "Failed to compile IR\n");
         return 1;
     }
