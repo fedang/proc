@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include "arena.h"
 #include "modcache.h"
 #include "checker.h"
 #include "irgen.h"
@@ -21,6 +22,7 @@ main(int argc, const char **argv)
     if (!options_init(argc, argv))
         return 1;
 
+    arena_init();
     symbol_init();
 
     modcache_init(&cache, ".");
