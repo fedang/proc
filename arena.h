@@ -27,6 +27,8 @@ void *arena_alloc(struct arena *arena, size_t size);
 
 void *arena_alloc_zero(struct arena *arena, size_t size);
 
+void *arena_append(struct arena *arena, size_t size);
+
 char *arena_strdup(struct arena *arena, const char *str);
 
 char *arena_strndup(struct arena *arena, const char *str, size_t len);

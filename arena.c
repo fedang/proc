@@ -21,7 +21,6 @@ arena_reserve(size_t size)
     ptr = mmap(NULL, size, PROT_READ | PROT_WRITE,
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     assert(ptr != MAP_FAILED && "mmap arena reserve failed");
-
     return ptr;
 }
 
@@ -47,16 +46,12 @@ void *
 arena_alloc(struct arena *arena, size_t size)
 {
     size_t aligned;
-    void *ptr;
 
     assert(arena->base && "arena not initialized");
-
     aligned = ROUND_UP(arena->top, ARENA_ALIGN);
-    assert(aligned <= arena->size && size <= arena->size - aligned && "arena exhausted");
-
-    ptr = arena->base + aligned;
-    arena->top = aligned + size;
-    return ptr;
+    assert(aligned <= arena->size && "arena exhausted");
+    arena->top = aligned;
+    return arena_append(arena, size);
 }
 
 void *
@@ -65,9 +60,21 @@ arena_alloc_zero(struct arena *arena, size_t size)
     void *ptr;
 
     ptr = arena_alloc(arena, size);
-    if (size > 0) {
+    if (size > 0)
         memset(ptr, 0, size);
-    }
+    return ptr;
+}
+
+void *
+arena_append(struct arena *arena, size_t size)
+{
+    void *ptr;
+
+    assert(arena->base && "arena not initialized");
+    assert(size <= arena->size - arena->top && "arena exhausted");
+
+    ptr = arena->base + arena->top;
+    arena->top += size;
     return ptr;
 }
 

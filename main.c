@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 #include "arena.h"
+#include "scratch.h"
 #include "modcache.h"
 #include "checker.h"
 #include "irgen.h"
@@ -23,6 +24,7 @@ main(int argc, const char **argv)
         return 1;
 
     arena_init();
+    scratch_init();
     symbol_init();
 
     modcache_init(&cache, ".");
