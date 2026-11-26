@@ -35,7 +35,9 @@ lexer_curr(struct lexer *state)
 static inline char
 lexer_peek(struct lexer *state)
 {
-    return lexer_eof(state) ? '\0' : state->src->str[state->curr + 1];
+    return (state->curr + 1 >= state->src->len)
+         ? '\0'
+         : state->src->str[state->curr + 1];
 }
 
 static inline char

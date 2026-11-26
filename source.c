@@ -1,8 +1,10 @@
-#define _XOPEN_SOURCE 500
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>
 #include <stdbool.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "source.h"
 #include "report.h"
@@ -10,38 +12,37 @@
 bool
 source_load(struct source *src, const char *abs_path)
 {
-    char *buf;
-    FILE *file;
-    long fsize;
+    const char *path;
+    struct stat st;
+    void *map;
+    int fd;
 
     assert(!src->str && !src->len && "double read?");
 
-    file = fopen(abs_path ? abs_path : src->path, "rb");
-    if (!file)
+    path = abs_path ? abs_path : src->path;
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
         return false;
 
-    fseek(file, 0, SEEK_END);
-    fsize = ftell(file);
-
-    if (fsize < 0) {
-        fclose(file);
+    if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
         return false;
     }
 
-    rewind(file);
-
-    buf = malloc(fsize + 1);
-    if (fread(buf, 1, fsize, file) != (size_t)fsize) {
-        free(buf);
-        fclose(file);
-        return false;
+    if (st.st_size == 0) {
+        close(fd);
+        src->str = "";
+        src->len = 0;
+        return true;
     }
 
-    fclose(file);
-    buf[fsize] = 0;
+    map = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (map == MAP_FAILED)
+        return false;
 
-    src->str = buf;
-    src->len = fsize;
+    src->str = map;
+    src->len = (size_t)st.st_size;
     return true;
 }
 

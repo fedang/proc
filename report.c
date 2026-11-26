@@ -121,7 +121,7 @@ static void
 report_source_span(const struct source *src, const struct span *span,
                    const char *color)
 {
-    const char *start, *end, *tmp, *line_head, *line_tail;
+    const char *start, *end, *src_end, *tmp, *line_head, *line_tail;
     bool in_color, in_span;
     unsigned line, start_line, end_line;
 
@@ -130,6 +130,8 @@ report_source_span(const struct source *src, const struct span *span,
 
     start = &src->str[span->start];
     end = &src->str[span->end];
+    src_end = &src->str[src->len];
+
     start_line = span->line;
     end_line = span->line;
 
@@ -150,12 +152,12 @@ report_source_span(const struct source *src, const struct span *span,
     }
 
     line = start_line;
-    while (line_head <= src->str + src->len && line <= end_line) {
+    while (line_head <= src_end && line <= end_line) {
         /*
          * Calculate the end of the current line
          */
         line_tail = line_head;
-        while (*line_tail != '\0' && *line_tail != '\n') {
+        while (line_tail < src_end && *line_tail != '\n') {
             line_tail++;
         }
 
@@ -208,7 +210,7 @@ report_source_span(const struct source *src, const struct span *span,
         }
 
 done:
-        if (*line_tail == '\0')
+        if (line_tail >= src_end)
             break;
 
         line_head = line_tail + 1;
