@@ -1,6 +1,4 @@
-=== COMPILE EXIT: 1 ===
-<BUILD>/imports/out.ll:33:12: error: invalid redefinition of function 'main'
-   33 | define i32 @"main"() {
-      |            ^
-1 error generated.
-info: Failed to compile IR
+=== COMPILE EXIT: 0 ===
+=== RUN EXIT: 0 ===
+hello
+yola

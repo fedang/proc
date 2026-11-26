@@ -7,9 +7,6 @@
 #include <stdbool.h>
 #include <assert.h>
 
-#define INT_SIZE (sizeof(int))
-#define PTR_SIZE (sizeof(void *))
-
 #define TYPE_LIST(X) \
     /* Primitives */ \
     X(i8, type_get_int(NULL, 8)) \
@@ -92,6 +89,10 @@ struct type {
     };
 };
 
+size_t type_ptr_size(void);
+
+size_t type_int_size(void);
+
 size_t type_sizeof(const struct type *type);
 
 size_t type_alignof(const struct type *type);
@@ -150,14 +151,14 @@ type_bit_width(const struct type *type)
     if (type->tag == TYPE_BOOL)
         return 1;
     if (type->tag == TYPE_PTR)
-        return PTR_SIZE * 8;
+        return type_ptr_size() * 8;
 
     assert(type_is_integer(type) && "integer/scalar only");
     assert(type_is_sized(type) && "no unsized");
 
     return type->bit_width
          ? type->bit_width
-         : INT_SIZE * 8;
+         : type_int_size() * 8;
 }
 
 struct type *type_make_raw(struct expr *raw);

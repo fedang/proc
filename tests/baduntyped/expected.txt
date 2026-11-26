@@ -20,9 +20,6 @@ baduntyped.lang:23: error: Integer literal '3000000000000' out of range for 'u8'
 baduntyped.lang:24: error: Integer literal '300' out of range for 'u8'
    24 |     var x: u8 = -300
       |                  ^~~
-baduntyped.lang:25: error: Integer literal '3000000000000' out of range for 'int'
-   25 |     var x = -3000000000000
-      |              ^~~~~~~~~~~~~
 baduntyped.lang:32: error: Cannot initialize variable of type '[i32]' with type '[u32]'
    32 |     var z: [i32] = @slice([1, k, 3])
       |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

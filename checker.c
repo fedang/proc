@@ -1433,7 +1433,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
             } else if (inner->tag == TYPE_SLICE) {
                 expr->type = access->index == 0
                            ? type_get_ptr(NULL, inner->slice.item)
-                           : type_get_int(NULL, 64);
+                           : type_get_int(NULL, 0);
             }
             break;
 
@@ -2021,7 +2021,7 @@ checker_expr_access(struct checker *state, struct expr_access *expr)
         }
 
         if (expr->field == symbol_len) {
-            expr->expr.type = type_get_int(NULL, 64);
+            expr->expr.type = type_get_int(NULL, 0);
             expr->index = 1;
             return true;
         }
@@ -2360,7 +2360,7 @@ checker_expr_macro(struct checker *state, struct expr_macro *expr)
             if (type->tag == TYPE_INT || type->tag == TYPE_UINT) {
                 target = type_get_uint(NULL, 64);
             } else if (type->tag == TYPE_PTR) {
-                target = type_get_uint(NULL, PTR_SIZE * 8);
+                target = type_get_uint(NULL, type_ptr_size() * 8);
             }
 
             if (!checker_expr_coerce(state, expr->args[1], target)) {

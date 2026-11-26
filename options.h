@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "target.h"
+
 struct options {
     const char **inputs;
     size_t inputs_count;
@@ -15,6 +17,7 @@ struct options {
     size_t clang_args_size;
     const char *output;
     const char *ir_file;
+    const struct target *target;
     bool emit_asm;
     bool emit_obj;
     bool emit_ir;

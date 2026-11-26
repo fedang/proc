@@ -1,2 +1,2 @@
 === COMPILE EXIT: 0 ===
-=== RUN EXIT: 12 ===
+=== RUN EXIT: 24 ===

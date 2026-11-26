@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "irgen.h"
+#include "options.h"
 #include "report.h"
 
 #define IR_EMITF(state, ...) \
@@ -115,7 +116,7 @@ irgen_type(struct irgen *state, struct type *type)
             break;
 
         case TYPE_SLICE:
-            IR_EMITF(state, "{ ptr, i64 }");
+            IR_EMITF(state, "{ ptr, i%zu }",  type_int_size() * 8);
             break;
 
         case TYPE_STRUCT:
@@ -916,7 +917,7 @@ irgen_expr_macro(struct irgen *state, struct expr_macro *expr)
             val = irgen_emit_insertvalue(state, val, expr->expr.type,
                                          ptr, type_get_ptr(NULL, type), 0);
             val = irgen_emit_insertvalue(state, val, expr->expr.type,
-                                         IRVAL_INT(count), type_get_int(NULL, 64), 1);
+                                         IRVAL_INT(count), type_get_int(NULL, 0), 1);
             return val;
 
         default:
@@ -1355,7 +1356,10 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
         k++;
     }
 
-    IR_EMITF(state, ") {\n");
+    IR_EMITF(state, ")");
+    if (opts.target->fn_attrs)
+        IR_EMITF(state, " #0");
+    IR_EMITF(state, " {\n");
 
     irgen_emit_block(state, 0);
     reg = 1;
@@ -1418,7 +1422,8 @@ irgen_decl_var(struct irgen *state, struct decl_var *decl)
                     if (decl->value->ctval.integer == 0) {
                         IR_EMITF(state, " null\n");
                     } else {
-                        IR_EMITF(state, " inttoptr (i64 %ld to ptr)\n",
+                        IR_EMITF(state, " inttoptr (i%zu %ld to ptr)\n",
+                                 type_ptr_size() * 8,
                                  (long)decl->value->ctval.integer);
                     }
                     return;
@@ -1513,7 +1518,8 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
     size_t i, j, len;
     uint8_t c;
 
-    IR_EMITF(state, "target triple = \"x86_64-pc-linux-gnu\"\n");
+    assert(opts.target && "no target!");
+    IR_EMITF(state, "target triple = \"%s\"\n", opts.target->triple);
 
     /*
      * Emit all types to avoid declaration ordering issues
@@ -1551,6 +1557,11 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
             }
         }
         IR_EMITF(state, "\\00\", align 1\n");
+    }
+
+    if (opts.target->fn_attrs) {
+        IR_EMITF(state, "\nattributes #0 = { %s }\n",
+                 opts.target->fn_attrs);
     }
 
     return true;

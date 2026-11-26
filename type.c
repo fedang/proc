@@ -6,6 +6,7 @@
 #include "type.h"
 #include "scope.h"
 #include "report.h"
+#include "options.h"
 
 #define MAX_TYPES 4096
 
@@ -339,6 +340,20 @@ type_get_sig(struct attr *attr, struct scope *scope)
     (((x) + (y) - 1) & ~((y) - 1))
 
 size_t
+type_ptr_size(void)
+{
+    assert(opts.target && "no target!");
+    return opts.target->word_size;
+}
+
+size_t
+type_int_size(void)
+{
+    assert(opts.target && "no target!");
+    return opts.target->word_size;
+}
+
+size_t
 type_sizeof(const struct type *type)
 {
     size_t i, size, align;
@@ -358,7 +373,7 @@ type_sizeof(const struct type *type)
             return type_bit_width(type) / 8;
 
         case TYPE_PTR:
-            return PTR_SIZE;
+            return type_ptr_size();
 
         case TYPE_ARRAY:
             size = type_sizeof(type->array.item);
@@ -366,7 +381,8 @@ type_sizeof(const struct type *type)
             return type->array.count * size;
 
         case TYPE_SLICE:
-            return PTR_SIZE + 8;
+            align = type_int_size();
+            return ROUND_UP(type_ptr_size(), align) + type_int_size();
 
         case TYPE_STRUCT:
             for (i = 0, size = 0; i < type->strukt.fields_count; i++) {
@@ -401,8 +417,12 @@ type_alignof(const struct type *type)
             return type_bit_width(type) / 8;
 
         case TYPE_PTR:
+            return type_ptr_size();
+
         case TYPE_SLICE:
-            return PTR_SIZE;
+            return type_ptr_size() > type_int_size()
+                ? type_ptr_size()
+                : type_int_size();
 
         case TYPE_ARRAY:
             return type_alignof(type->array.item);

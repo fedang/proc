@@ -2,7 +2,7 @@
 info: Input file 'test.c' will be passed directly to clang
 === RUN EXIT: 0 ===
 PRINT 42
-PRINT 32
+PRINT 128
 Once
 cast true
 cast true
@@ -22,8 +22,8 @@ PRINT 5
 PRINT 6
 PRINT 2
 sizeof is
-PRINT 4
-PRINT 4
+PRINT 8
+PRINT 8
 Test print!
 PRINT 99
 Hello World

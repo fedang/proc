@@ -39,7 +39,7 @@ options_push(const char ***strs, size_t *count, size_t *size, const char *value)
     if (*count >= *size) {
         *size = *size == 0 ? 8 : *size * 2;
         *strs = realloc(*strs, *size * sizeof(**strs));
-        assert(strs && "out of mem");
+        assert(*strs && "out of mem");
     }
     (*strs)[(*count)++] = value;
 }
@@ -101,6 +101,22 @@ options_init(int argc, const char **argv)
             continue;
         }
 
+        if (!strcmp(argv[i], "--target")) {
+            if (++i >= argc) {
+                report_error(NULL, NULL, "Missing argument for --target\n");
+                return false;
+            }
+
+            opts.target = target_find(argv[i]);
+            if (!opts.target) {
+                report_error(NULL, NULL, "Unknown target '%s'\n", argv[i]);
+                printf("Available targets:\n");
+                target_list();
+                return false;
+            }
+            continue;
+        }
+
         if (!strcmp(argv[i], "-S")) {
             opts.emit_asm = true;
             continue;
@@ -135,6 +151,9 @@ options_init(int argc, const char **argv)
         return false;
     }
 
+    if (!opts.target)
+        opts.target = target_default();
+
     if (opts.inputs_count == 0 && opts.clang_inputs_count == 0) {
         report_error(NULL, NULL, "No input files specified\n");
         return false;
@@ -148,15 +167,19 @@ options_help(const char *prog)
 {
     printf("Usage: %s [options] file...\n\n", prog);
     printf("Options:\n");
-    printf("  -o <file>         Select output file\n");
-    printf("  -i <file>         Select LLVM IR file\n");
-    printf("  -C <clang_arg>    Pass option directly to the clang backend\n");
-    printf("  -c                Compile to object file without linking\n");
-    printf("  -S                Emit assembly instead of linking\n");
-    printf("  --emit-ir         Emit LLVM IR only without invoking clang\n");
-    printf("  --color           Force colored diagnostics\n");
-    printf("  --no-color        Disable colored diagnostics\n");
-    printf("  -h, --help        Display this help message\n");
+    printf("  -o <file>          Select output file\n");
+    printf("  -i <file>          Select LLVM IR file\n");
+    printf("  -C <clang_arg>     Pass option directly to the clang backend\n");
+    printf("  -c                 Compile to object file without linking\n");
+    printf("  -S                 Emit assembly instead of linking\n");
+    printf("  --emit-ir          Emit LLVM IR only without invoking clang\n");
+    printf("  --color            Force colored diagnostics\n");
+    printf("  --no-color         Disable colored diagnostics\n");
+    printf("  -h, --help         Display this help message\n");
+    printf("  --target <name>    Set target name or triple (default: %s)\n",
+           target_default()->name);
+    printf("Available targets:\n");
+    target_list();
 }
 
 bool
@@ -192,6 +215,15 @@ options_run_clang(void)
 
     for (i = 0; i < opts.clang_args_count; i++) {
         argv[argc++] = opts.clang_args[i];
+    }
+
+    argv[argc++] = "-target";
+    argv[argc++] = opts.target->triple;
+
+    if (opts.target->freestanding) {
+        argv[argc++] = "-ffreestanding";
+        if (!opts.emit_asm && !opts.emit_obj)
+            argv[argc++] = "-nostdlib";
     }
 
     argv[argc] = NULL;

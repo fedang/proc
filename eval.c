@@ -128,7 +128,7 @@ eval_binop_arith(struct eval *state, struct expr_binop *expr,
 
     width = expr->expr.type->tag != TYPE_ANY_INT
           ? type_bit_width(expr->expr.type)
-          : INT_SIZE * 8;
+          : type_int_size() * 8;
 
     unsigned_op = expr->expr.type->tag == TYPE_UINT
                || expr->expr.type->tag == TYPE_PTR;
