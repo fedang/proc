@@ -280,28 +280,27 @@ type_get_proc(struct attr *attr, struct type *out,
 }
 
 struct type *
-type_get_opaque(struct attr *attr, struct decl *decl, struct symbol *name)
+type_get_opaque(struct attr *attr, struct binding *bind)
 {
     struct type *type;
     size_t i;
 
-    assert(!decl || decl->tag == DECL_TYPE || decl->tag == DECL_STRUCT);
+    assert(bind && "opaque type requires a binding");
 
     for (i = 0; i < type_count; i++) {
         type = &type_pool[i];
 
         /*
-         * Opaque types are identified by their declaration
+         * Opaque types are identified by their binding
          */
         if (type->tag == TYPE_OPAQUE && type->attr == attr
-                && type->opaque.decl == decl) {
+                && type->opaque.bind == bind) {
             return type;
         }
     }
 
     type = type_get_fresh(attr, TYPE_OPAQUE);
-    type->opaque.decl = decl;
-    type->opaque.name = name;
+    type->opaque.bind = bind;
     return type;
 }
 
@@ -531,7 +530,11 @@ type_format(FILE *out, const struct type *type)
             break;
 
         case TYPE_OPAQUE:
-            type_format_named(out, type->opaque.decl, type->opaque.name);
+            if (type->opaque.bind->scope) {
+                scope_format_path(out, type->opaque.bind->scope);
+            }
+            fprintf(out, "%.*s", (int)type->opaque.bind->sym->len,
+                    type->opaque.bind->sym->str);
             break;
 
         case TYPE_STRUCT:

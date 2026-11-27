@@ -49,6 +49,8 @@ struct struct_field {
 
 struct scope;
 
+struct binding;
+
 struct decl;
 
 struct type {
@@ -77,8 +79,7 @@ struct type {
             size_t args_count;
         } proc;
         struct {
-            struct decl *decl;
-            struct symbol *name;
+            struct binding *bind;
         } opaque;
         struct {
             struct scope *scope;
@@ -188,8 +189,7 @@ struct type *type_get_struct(struct attr *attr, struct decl *decl,
 struct type *type_get_proc(struct attr *attr, struct type *out,
                            struct type **args, size_t args_count);
 
-struct type *type_get_opaque(struct attr *attr, struct decl *decl,
-                             struct symbol *name);
+struct type *type_get_opaque(struct attr *attr, struct binding *bind);
 
 struct type *type_get_module(struct attr *attr, struct scope *scope);
 

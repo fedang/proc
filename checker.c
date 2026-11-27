@@ -814,11 +814,10 @@ checker_rebind_sig(struct type *type, struct scope *scope,
 
     switch (type->tag) {
         case TYPE_OPAQUE:
-            if (!type->opaque.decl || !type->opaque.decl->bind
-                || type->opaque.decl->bind->scope != sig_scope)
+            if (type->opaque.bind->scope != sig_scope)
                 return type;
 
-            bind = scope_lookup_local(scope, type->opaque.name);
+            bind = scope_lookup_local(scope, type->opaque.bind->sym);
             if (!bind || !BIND_IS_TYPE(bind) || !bind->type)
                 return type;
 
@@ -826,8 +825,7 @@ checker_rebind_sig(struct type *type, struct scope *scope,
                 return bind->type;
 
             if (!bind->seal_type) {
-                bind->seal_type = type_get_opaque(type->attr, bind->decl,
-                                                  bind->sym);
+                bind->seal_type = type_get_opaque(type->attr, bind);
             }
             return bind->seal_type;
 
@@ -3225,7 +3223,6 @@ checker_register_decl(struct checker *state, struct decl *decl)
     struct scope *saved, *scope;
     struct binding *bind;
     struct symbol *prefix;
-    struct type *type;
     bool ok = true;
 
     switch (decl->tag) {
@@ -3281,22 +3278,20 @@ checker_register_decl(struct checker *state, struct decl *decl)
                 ok = false;
             }
 
+            bind = scope_push(state->curr_scope, d_type->sym, NULL, decl,
+                              BIND_TYPE);
+
             /*
              * If no alias type is given, treat as opaque
              */
             if (!d_type->type) {
-                type = type_get_opaque(decl->attr, decl, d_type->sym);
+                bind->type = type_get_opaque(decl->attr, bind);
 
                 if (state->curr_scope->decl &&
                     state->curr_scope->decl->tag == DECL_SIG) {
                     SCOPE_SET_FLAG(state->curr_scope, SCOPE_OPAQUE);
                 }
-            } else {
-                type = NULL;
             }
-
-            bind = scope_push(state->curr_scope, d_type->sym, type, decl,
-                              BIND_TYPE);
             decl->bind = bind;
             return ok;
 

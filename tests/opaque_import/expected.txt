@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+main.lang:36: error: Argument has type '*A.H1', expected '*A.H2'
+   36 |     A.use2(a)
+      |     ^~~~~~~~~
+main.lang:37: error: Argument has type '*A.H1', expected '*B.H1'
+   37 |     B.use1(a)
+      |     ^~~~~~~~~
+info: Failed semantic analysis

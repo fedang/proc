@@ -1,0 +1,39 @@
+module Shared {
+    struct Impl1 {
+        x: int
+    }
+    struct Impl2 {
+        y: bool
+    }
+}
+
+sig S {
+    type H1
+    type H2
+    type Ptr1 = *H1
+    proc make1(): Ptr1
+    proc use1(p: *H1)
+    proc use2(p: *H2)
+}
+
+module A : S {
+    import Shared { H1 = Impl1; H2 = Impl2 }
+    proc make1(): Ptr1 { return @cast(Ptr1, 0) }
+    proc use1(p: *H1) {}
+    proc use2(p: *H2) {}
+}
+
+module B : S {
+    import Shared { H1 = Impl1; H2 = Impl2 }
+    proc make1(): Ptr1 { return @cast(Ptr1, 0) }
+    proc use1(p: *H1) {}
+    proc use2(p: *H2) {}
+}
+
+proc main(): int {
+    var a: A.Ptr1 = A.make1()
+    A.use1(a)
+    A.use2(a)
+    B.use1(a)
+    return 0
+}
