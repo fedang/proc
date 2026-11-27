@@ -29,6 +29,18 @@ modcache_init(struct modcache *cache, const char *rootdir)
     source_map_init(&cache->src_map);
 }
 
+const char *
+modcache_root_name(struct modcache *cache)
+{
+    struct decl_module *mod;
+
+    if (cache->mods_count == 0)
+        return NULL;
+
+    mod = (struct decl_module *)cache->mods[0].decl;
+    return mod->sym->str;
+}
+
 static bool
 modcache_detect(const char *path)
 {

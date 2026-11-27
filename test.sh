@@ -188,8 +188,8 @@ run_test() {
             exit 99
         fi
         [ -f flags ] && set -- "$@" $(grep -v '^[[:space:]]*#' flags)
-        printf 'cd %s && %s %s -o %s -i %s\n' "$dir" "$COMPILER" "$*" "$out/a.out" "$out/out.ll" >"$out/cmd.txt"
-        timeout "$TIMEOUT" $STDBUF "$COMPILER" "$@" -o "$out/a.out" -i "$out/out.ll" >"$out/c.out" 2>&1
+        printf 'cd %s && %s %s -o %s\n' "$dir" "$COMPILER" "$*" "$out/a.out" >"$out/cmd.txt"
+        timeout "$TIMEOUT" $STDBUF "$COMPILER" "$@" -o "$out/a.out" >"$out/c.out" 2>&1
         exit $?
     ) 2>/dev/null
     c_rc=$?

@@ -16,7 +16,6 @@ struct options {
     size_t clang_args_count;
     size_t clang_args_size;
     const char *output;
-    const char *ir_file;
     const struct target *target;
     bool emit_asm;
     bool emit_obj;
@@ -29,8 +28,10 @@ extern struct options opts;
 
 bool options_init(int argc, const char **argv);
 
+void options_set_output(const char *name);
+
 void options_help(const char *prog);
 
-bool options_run_clang(void);
+bool options_run_clang(const char *ir_file);
 
 #endif

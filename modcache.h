@@ -34,6 +34,8 @@ struct modcache {
 
 void modcache_init(struct modcache *cache, const char *rootdir);
 
+const char *modcache_root_name(struct modcache *cache);
+
 bool modcache_load(struct modcache *cache, const char *path,
                    struct symbol *name, struct modfile **out);
 

@@ -49,8 +49,6 @@ options_init(int argc, const char **argv)
 {
     int i;
 
-    opts.output = "a.out";
-    opts.ir_file = "test.ll";
     opts.color = isatty(STDERR_FILENO) && !getenv("NO_COLOR");
 
     for (i = 1; i < argc; i++) {
@@ -89,15 +87,6 @@ options_init(int argc, const char **argv)
                 return false;
             }
             opts.output = argv[i];
-            continue;
-        }
-
-        if (!strcmp(argv[i], "-i")) {
-            if (++i >= argc) {
-                report_error(NULL, NULL, "Missing argument for -i\n");
-                return false;
-            }
-            opts.ir_file = argv[i];
             continue;
         }
 
@@ -163,12 +152,41 @@ options_init(int argc, const char **argv)
 }
 
 void
+options_set_output(const char *name)
+{
+    const char *ext;
+    char *out;
+    size_t len;
+
+    assert((!name || name[0]) && "impossible");
+
+    if (opts.emit_ir)
+        ext = ".ll";
+    else if (opts.emit_asm)
+        ext = ".S";
+    else if (opts.emit_obj)
+        ext = ".o";
+    else if (!name)
+        ext = ".elf";
+    else
+        ext = "";
+
+    if (!name)
+        name = "out";
+
+    len = strlen(name) + strlen(ext) + 1;
+    out = malloc(len);
+    assert(out && "out of mem");
+    snprintf(out, len, "%s%s", name, ext);
+    opts.output = out;
+}
+
+void
 options_help(const char *prog)
 {
     printf("Usage: %s [options] file...\n\n", prog);
     printf("Options:\n");
     printf("  -o <file>          Select output file\n");
-    printf("  -i <file>          Select LLVM IR file\n");
     printf("  -C <clang_arg>     Pass option directly to the clang backend\n");
     printf("  -c                 Compile to object file without linking\n");
     printf("  -S                 Emit assembly instead of linking\n");
@@ -183,7 +201,7 @@ options_help(const char *prog)
 }
 
 bool
-options_run_clang(void)
+options_run_clang(const char *ir_file)
 {
     const char **argv;
     size_t i, len, argc;
@@ -207,7 +225,7 @@ options_run_clang(void)
 
     argv[argc++] = "-o";
     argv[argc++] = opts.output;
-    argv[argc++] = opts.ir_file;
+    argv[argc++] = ir_file;
 
     for (i = 0; i < opts.clang_inputs_count; i++) {
         argv[argc++] = opts.clang_inputs[i];

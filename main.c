@@ -1,3 +1,6 @@
+#define _DEFAULT_SOURCE
+#include <stdlib.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -10,12 +13,31 @@
 #include "report.h"
 #include "options.h"
 
+static bool
+open_ir_file(const char **path, FILE **out)
+{
+    // XXX: not reentrant
+    static char tmp[] = "/tmp/comp-XXXXXX.ll";
+    int fd;
+
+    if (opts.emit_ir) {
+        *path = opts.output;
+        *out = fopen(*path, "wb");
+    } else {
+        *path = tmp;
+        fd = mkstemps(tmp, 3);
+        *out = fd >= 0 ? fdopen(fd, "wb") : NULL;
+    }
+    return *out != NULL;
+}
+
 int
 main(int argc, const char **argv)
 {
     struct modcache cache;
     struct checker check;
     struct irgen irgen;
+    const char *ir_file;
     FILE *ir_out;
     size_t i;
     bool ok = true;
@@ -50,8 +72,11 @@ main(int argc, const char **argv)
         return 1;
     }
 
-    ir_out = fopen(opts.ir_file, "wb");
-    if (!ir_out) {
+    if (!opts.output) {
+        options_set_output(modcache_root_name(&cache));
+    }
+
+    if (!open_ir_file(&ir_file, &ir_out)) {
         report_info(NULL, NULL, "Failed to open IR output file\n");
         return 1;
     }
@@ -60,17 +85,21 @@ main(int argc, const char **argv)
      * Generate the LLVM IR
      */
     irgen_init(&irgen, ir_out);
-    if (!irgen_modcache(&irgen, &cache)) {
+    ok = irgen_modcache(&irgen, &cache);
+    fclose(ir_out);
+    if (!ok) {
         report_info(NULL, NULL, "Failed to generate IR\n");
-        fclose(ir_out);
+        if (!opts.emit_ir)
+            unlink(ir_file);
         return 1;
     }
 
-    fclose(ir_out);
     if (opts.emit_ir)
         return 0;
 
-    if (!options_run_clang()) {
+    ok = options_run_clang(ir_file);
+    unlink(ir_file);
+    if (!ok) {
         report_info(NULL, NULL, "Failed to compile IR\n");
         return 1;
     }
