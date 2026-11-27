@@ -826,11 +826,17 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         state->parens = true;
         state->no_block = false;
 
-        if (!parser_expr_prec(state, expr, 0))
+        if (!parser_expr_prec(state, expr, 0)) {
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
             return false;
+        }
 
-        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after expr"))
+        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after expr")) {
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
             return false;
+        }
 
         state->parens = saved_parens;
         state->no_block = saved_noblock;
@@ -896,7 +902,7 @@ fail:
 }
 
 static bool
-parser_expr_index(struct parser *state, struct expr **expr)
+parser_expr_index(struct parser *state, struct expr *op, struct expr **expr)
 {
     struct expr *rhs;
     bool saved_parens, saved_noblock;
@@ -915,7 +921,7 @@ parser_expr_index(struct parser *state, struct expr **expr)
     state->parens = saved_parens;
     state->no_block = saved_noblock;
 
-    *expr = expr_make_index(*expr, rhs);
+    *expr = expr_make_index(op, rhs);
     return true;
 
 fail:
@@ -1045,7 +1051,7 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
         }
 
         if (op_tag == TOKEN_LBRACK) {
-            if (!parser_expr_index(state, expr))
+            if (!parser_expr_index(state, *expr, expr))
                 return false;
 
             expr_set_span(*expr, span_merge(start, parser_prev(state)->span));

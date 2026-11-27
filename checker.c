@@ -1882,7 +1882,7 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
                     proc->proc.args_count, expr->args_count);
 
         bind = expr_get_binding(expr->op);
-        if (bind) {
+        if (bind && bind->decl) {
             TYCHK_INFO(state, bind->decl->span,
                        "Procedure '%pS' was declared here\n",
                        bind->sym);
