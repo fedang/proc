@@ -515,17 +515,20 @@ static bool
 parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
 {
     struct expr *lhs, *rhs;
-    struct struct_init fields[32];
+    struct scratch_frame scratch;
+    struct struct_init *slot;
     struct symbol *field;
     bool saved_parens, saved_noblock, colon;
-    unsigned count;
+    size_t fields_count;
 
     saved_parens = state->parens;
     saved_noblock = state->no_block;
     state->parens = true;
     state->no_block = false;
 
-    count = 0;
+    fields_count = 0;
+    scratch_begin(&scratch);
+
     while (!parser_match(state, TOKEN_RBRACE)) {
         if (!parser_check_sym(state, &field, "Expected field name"))
             goto fail;
@@ -534,7 +537,7 @@ parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
         expr_set_span(lhs, parser_prev(state)->span);
 
         rhs = NULL;
-        colon = parser_curr(state)->tag == TOKEN_COLON;
+        colon = parser_peek(state, TOKEN_COLON);
 
         if (parser_match(state, TOKEN_EQ) || parser_match(state, TOKEN_COLON)) {
             if (!parser_expr(state, &rhs))
@@ -547,26 +550,143 @@ parser_expr_struct(struct parser *state, struct expr *op, struct expr **expr)
                 goto fail;
         }
 
-        assert(count < 32 && "too many fields");
-        fields[count].field = (struct expr_ident *)lhs;
-        fields[count].value = rhs;
-        fields[count].colon = colon;
-        count++;
+        slot = scratch_append(sizeof(struct struct_init));
+        slot->field = (struct expr_ident *)lhs;
+        slot->value = rhs;
+        slot->colon = colon;
+        fields_count++;
     }
 
     state->parens = saved_parens;
     state->no_block = saved_noblock;
 
-    *expr = expr_make_struct(op, count);
-    if (count > 0) {
-        memcpy(((struct expr_struct *)*expr)->fields, fields,
-                count * sizeof(struct struct_init));
+    *expr = expr_make_struct(op, fields_count);
+    if (fields_count > 0) {
+        memcpy(((struct expr_struct *)*expr)->fields, scratch_data(&scratch),
+               fields_count * sizeof(struct struct_init));
     }
+    scratch_end(&scratch);
     return true;
 
 fail:
     state->parens = saved_parens;
     state->no_block = saved_noblock;
+    scratch_end(&scratch);
+    return false;
+}
+
+static bool
+parser_expr_array(struct parser *state, struct expr **expr)
+{
+    struct scratch_frame scratch;
+    struct expr **slot, *op;
+    bool ok, saved_parens, saved_noblock;
+    size_t items_count;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = true;
+    state->no_block = false;
+
+    ok = true;
+    items_count = 0;
+    scratch_begin(&scratch);
+
+    if (!parser_match(state, TOKEN_RBRACK)) {
+        do {
+            if (parser_peek(state, TOKEN_RBRACK))
+                break;
+
+            if (!parser_expr_prec(state, &op, 0)) {
+                ok = false;
+                goto done;
+            }
+
+            slot = scratch_append(sizeof(struct expr *));
+            *slot = op;
+            items_count++;
+        } while (parser_match(state, TOKEN_COMMA));
+
+        if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after array")) {
+            ok = false;
+            goto done;
+        }
+    }
+
+    *expr = expr_make_array(items_count);
+    if (items_count > 0) {
+        memcpy(((struct expr_array *)*expr)->args, scratch_data(&scratch),
+               items_count * sizeof(struct expr *));
+    }
+
+done:
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+    scratch_end(&scratch);
+    return ok;
+}
+
+static bool
+parser_expr_macro(struct parser *state, struct expr **expr)
+{
+    struct scratch_frame scratch;
+    struct expr **slot, *arg, *body;
+    struct symbol *sym;
+    bool saved_parens, saved_noblock;
+    size_t args_count;
+
+    if (!parser_check_sym(state, &sym, "Expected macro name after '@'"))
+        return false;
+
+    args_count = 0;
+    scratch_begin(&scratch);
+
+    if (parser_match(state, TOKEN_LPAREN)) {
+        saved_parens = state->parens;
+        saved_noblock = state->no_block;
+        state->parens = true;
+        state->no_block = false;
+
+        if (!parser_peek(state, TOKEN_RPAREN)) {
+            do {
+                if (!parser_expr_prec(state, &arg, 0)) {
+                    state->parens = saved_parens;
+                    state->no_block = saved_noblock;
+                    goto fail;
+                }
+
+                slot = scratch_append(sizeof(struct expr *));
+                *slot = arg;
+                args_count++;
+            } while (parser_match(state, TOKEN_COMMA));
+        }
+
+        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after macro arguments")) {
+            state->parens = saved_parens;
+            state->no_block = saved_noblock;
+            goto fail;
+        }
+
+        state->parens = saved_parens;
+        state->no_block = saved_noblock;
+    }
+
+    body = NULL;
+    if (!state->no_block && parser_match(state, TOKEN_LBRACE)) {
+        if (!parser_expr_block(state, &body))
+            goto fail;
+    }
+
+    *expr = expr_make_macro(sym, body, args_count);
+    if (args_count > 0) {
+        memcpy(((struct expr_macro *)*expr)->args, scratch_data(&scratch),
+               args_count * sizeof(struct expr *));
+    }
+    scratch_end(&scratch);
+    return true;
+
+fail:
+    scratch_end(&scratch);
     return false;
 }
 
@@ -574,11 +694,9 @@ static bool
 parser_expr_simple(struct parser *state, struct expr **expr)
 {
     int64_t value;
+    struct expr *op;
     struct symbol *sym;
-    struct expr *op, *args[32];
     struct value_string string;
-    struct expr *body;
-    size_t count, i;
     bool saved_parens, saved_noblock;
     struct span start;
 
@@ -602,7 +720,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         goto done;
     }
 
-    if (parser_curr(state)->tag == TOKEN_LBRACE) {
+    if (parser_peek(state, TOKEN_LBRACE)) {
         if (state->no_block) {
             parser_error(state, "Block expression is not allowed in this context");
             return false;
@@ -657,53 +775,15 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         goto done;
     }
 
-    if (parser_match(state, TOKEN_LPAREN)) {
-        saved_parens = state->parens;
-        saved_noblock = state->no_block;
-        state->parens = true;
-        state->no_block = false;
-
-        if (!parser_expr_prec(state, expr, 0))
+    if (parser_match(state, TOKEN_LBRACK)) {
+        if (!parser_expr_array(state, expr))
             return false;
-
-        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after expr"))
-            return false;
-
-        state->parens = saved_parens;
-        state->no_block = saved_noblock;
-
-        // Do not merge the span containing parenthesis
-        return true;
+        goto done;
     }
 
-    if (parser_match(state, TOKEN_LBRACK)) {
-        saved_parens = state->parens;
-        saved_noblock = state->no_block;
-        state->parens = true;
-        state->no_block = false;
-
-        count = 0;
-        if (!parser_match(state, TOKEN_RBRACK)) {
-            do {
-                if (parser_curr(state)->tag == TOKEN_RBRACK)
-                    break;
-
-                assert(count < 32 && "too many array elements");
-                if (!parser_expr_prec(state, &args[count++], 0))
-                    return false;
-            } while (parser_match(state, TOKEN_COMMA));
-
-            if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after array"))
-                return false;
-        }
-
-        state->parens = saved_parens;
-        state->no_block = saved_noblock;
-
-        *expr = expr_make_array(count);
-        for (i = 0; i < count; i++) {
-            ((struct expr_array *)*expr)->args[i] = args[i];
-        }
+    if (parser_match(state, TOKEN_AT)) {
+        if (!parser_expr_macro(state, expr))
+            return false;
         goto done;
     }
 
@@ -739,44 +819,24 @@ parser_expr_simple(struct parser *state, struct expr **expr)
         goto done;
     }
 
-    if (parser_match(state, TOKEN_AT)) {
-        if (!parser_check_sym(state, &sym, "Expected macro name after '@'"))
+    // '(' expr ')'
+    if (parser_match(state, TOKEN_LPAREN)) {
+        saved_parens = state->parens;
+        saved_noblock = state->no_block;
+        state->parens = true;
+        state->no_block = false;
+
+        if (!parser_expr_prec(state, expr, 0))
             return false;
 
-        count = 0;
-        if (parser_match(state, TOKEN_LPAREN)) {
-            saved_parens = state->parens;
-            saved_noblock = state->no_block;
-            state->parens = true;
-            state->no_block = false;
+        if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after expr"))
+            return false;
 
-            if (parser_curr(state)->tag != TOKEN_RPAREN) {
-                do {
-                    assert(count < 32 && "too many args");
-                    if (!parser_expr_prec(state, &args[count++], 0)) {
-                        return false;
-                    }
-                } while (parser_match(state, TOKEN_COMMA));
-            }
+        state->parens = saved_parens;
+        state->no_block = saved_noblock;
 
-            if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after macro arguments"))
-                return false;
-
-            state->parens = saved_parens;
-            state->no_block = saved_noblock;
-        }
-
-        body = NULL;
-        if (!state->no_block && parser_match(state, TOKEN_LBRACE)) {
-            if (!parser_expr_block(state, &body))
-                return false;
-        }
-
-        *expr = expr_make_macro(sym, body, count);
-        for (i = 0; i < count; i++) {
-            ((struct expr_macro *)*expr)->args[i] = args[i];
-        }
-        goto done;
+        // Do not merge the span containing parenthesis
+        return true;
     }
 
     parser_error(state, "Expected expression");
@@ -785,6 +845,83 @@ parser_expr_simple(struct parser *state, struct expr **expr)
 done:
     expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
     return true;
+}
+
+static bool
+parser_expr_call(struct parser *state, struct expr *op, struct expr **expr)
+{
+    struct scratch_frame scratch;
+    struct expr *arg, **slot;
+    bool saved_parens, saved_noblock;
+    size_t args_count;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = true;
+    state->no_block = false;
+
+    args_count = 0;
+    scratch_begin(&scratch);
+
+    if (!parser_peek(state, TOKEN_RPAREN)) {
+        do {
+            if (!parser_expr_prec(state, &arg, 0))
+                goto fail;
+
+            slot = scratch_append(sizeof(struct expr *));
+            *slot = arg;
+            args_count++;
+        } while (parser_match(state, TOKEN_COMMA));
+    }
+
+    if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after arguments"))
+        goto fail;
+
+    *expr = expr_make_call(op, args_count);
+    if (args_count > 0) {
+        memcpy(((struct expr_call *)*expr)->args, scratch_data(&scratch),
+               args_count * sizeof(struct expr *));
+    }
+
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+    scratch_end(&scratch);
+    return true;
+
+fail:
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+    scratch_end(&scratch);
+    return false;
+}
+
+static bool
+parser_expr_index(struct parser *state, struct expr **expr)
+{
+    struct expr *rhs;
+    bool saved_parens, saved_noblock;
+
+    saved_parens = state->parens;
+    saved_noblock = state->no_block;
+    state->parens = true;
+    state->no_block = false;
+
+    if (!parser_expr_prec(state, &rhs, 0))
+        goto fail;
+
+    if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after index"))
+        goto fail;
+
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+
+    *expr = expr_make_index(*expr, rhs);
+    return true;
+
+fail:
+    state->parens = saved_parens;
+    state->no_block = saved_noblock;
+    return false;
 }
 
 static inline unsigned
@@ -868,11 +1005,10 @@ parser_token_binop(enum token_tag tag)
 static bool
 parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
 {
-    struct expr *rhs, *args[32];
+    struct expr *rhs;
     struct symbol *field;
     enum token_tag op_tag;
-    unsigned prec, count, i;
-    bool saved_parens, saved_noblock;
+    unsigned prec;
     struct span start;
 
     start = parser_curr(state)->span;
@@ -901,51 +1037,17 @@ parser_expr_prec(struct parser *state, struct expr **expr, unsigned base_prec)
          * Special cases
          */
         if (op_tag == TOKEN_LPAREN) {
-            saved_parens = state->parens;
-            saved_noblock = state->no_block;
-            state->parens = true;
-            state->no_block = false;
-
-            count = 0;
-            if (parser_curr(state)->tag != TOKEN_RPAREN) {
-                do {
-                    assert(count < 32 && "too many args");
-                    if (!parser_expr_prec(state, &args[count++], 0))
-                        return false;
-                } while (parser_match(state, TOKEN_COMMA));
-            }
-
-            if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after arguments"))
+            if (!parser_expr_call(state, *expr, expr))
                 return false;
-
-            state->parens = saved_parens;
-            state->no_block = saved_noblock;
-
-            *expr = expr_make_call(*expr, count);
-            for (i = 0; i < count; i++) {
-                ((struct expr_call *)*expr)->args[i] = args[i];
-            }
 
             expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
             continue;
         }
 
         if (op_tag == TOKEN_LBRACK) {
-            saved_parens = state->parens;
-            saved_noblock = state->no_block;
-            state->parens = true;
-            state->no_block = false;
-
-            if (!parser_expr_prec(state, &rhs, 0))
+            if (!parser_expr_index(state, expr))
                 return false;
 
-            if (!parser_check(state, TOKEN_RBRACK, "Expected ']' after index"))
-                return false;
-
-            state->parens = saved_parens;
-            state->no_block = saved_noblock;
-
-            *expr = expr_make_index(*expr, rhs);
             expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
             continue;
         }

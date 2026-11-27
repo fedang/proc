@@ -1844,6 +1844,7 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
 static bool
 checker_expr_call(struct checker *state, struct expr_call *expr)
 {
+    struct binding *bind;
     struct type *proc;
     size_t i;
 
@@ -1879,6 +1880,13 @@ checker_expr_call(struct checker *state, struct expr_call *expr)
         TYCHK_ERROR(state, expr->expr.span,
                     "Procedure expects %zu arguments, but %zu were provided\n",
                     proc->proc.args_count, expr->args_count);
+
+        bind = expr_get_binding(expr->op);
+        if (bind) {
+            TYCHK_INFO(state, bind->decl->span,
+                       "Procedure '%pS' was declared here\n",
+                       bind->sym);
+        }
         return false;
     }
 

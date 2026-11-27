@@ -197,6 +197,16 @@ struct expr_return {
     struct expr *value;
 };
 
+static inline struct binding *
+expr_get_binding(struct expr *expr)
+{
+    if (expr->tag == EXPR_IDENT)
+        return ((struct expr_ident *)expr)->bind;
+    if (expr->tag == EXPR_ACCESS)
+        return ((struct expr_access *)expr)->bind;
+    return NULL;
+}
+
 static inline void
 expr_set_span(struct expr *expr, struct span span)
 {
