@@ -17,6 +17,8 @@ struct options {
     size_t clang_args_size;
     const char *output;
     const struct target *target;
+    const char *optimize;
+    bool dbg_info;
     bool emit_asm;
     bool emit_obj;
     bool emit_ir;

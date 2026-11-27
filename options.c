@@ -50,6 +50,7 @@ options_init(int argc, const char **argv)
     int i;
 
     opts.color = isatty(STDERR_FILENO) && !getenv("NO_COLOR");
+    opts.optimize = "-O1";
 
     for (i = 1; i < argc; i++) {
         if (argv[i][0] != '-') {
@@ -92,6 +93,18 @@ options_init(int argc, const char **argv)
                 return false;
             }
             opts.output = argv[i];
+            continue;
+        }
+
+        if (!strcmp(argv[i], "-O0") || !strcmp(argv[i], "-O1") ||
+            !strcmp(argv[i], "-O2") || !strcmp(argv[i], "-O3") ||
+            !strcmp(argv[i], "-Os") || !strcmp(argv[i], "-Oz")) {
+            opts.optimize = argv[i];
+            continue;
+        }
+
+        if (!strcmp(argv[i], "-g")) {
+            opts.dbg_info = true;
             continue;
         }
 
@@ -187,6 +200,8 @@ options_help(const char *prog)
     printf("Usage: %s [options] file...\n\n", prog);
     printf("Options:\n");
     printf("  -o <file>          Select output file\n");
+    printf("  -O<level>          Set optimization level (0, 1, 2, 3, s, z)\n");
+    printf("  -g                 Enable debug information\n");
     printf("  -C <clang_arg>     Pass option directly to the clang backend\n");
     printf("  -c, --emit-obj     Compile to object file without linking\n");
     printf("  -S, --emit-asm     Emit assembly instead of linking\n");
@@ -215,7 +230,7 @@ options_run_clang(const char *ir_file)
 
     argc = 0;
     argv[argc++] = "clang";
-    argv[argc++] = "-O1";
+    argv[argc++] = opts.optimize;
     argv[argc++] = "-Wno-override-module";
 
     if (opts.emit_asm) {

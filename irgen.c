@@ -1564,6 +1564,7 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
     size_t i, j, len;
     uint8_t c;
 
+    assert(!opts.dbg_info && "not supported yet");
     assert(opts.target && "no target!");
     IR_EMITF(state, "target triple = \"%s\"\n", opts.target->triple);
 
