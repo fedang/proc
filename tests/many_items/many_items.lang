@@ -1,4 +1,4 @@
-proc main() {
+proc main(): i32 {
     var x0: i32 = 0
     var x1: i32 = 1
     var x2: i32 = 2
@@ -69,4 +69,6 @@ proc main() {
     var x67: i32 = 67
     var x68: i32 = 68
     var x69: i32 = 69
+
+    return x0
 }

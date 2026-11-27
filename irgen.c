@@ -1322,7 +1322,8 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
         irgen_type_ret(state, decl->out);
         IR_EMITF(state, " @\"%s\"(", link_sym->str);
 
-        for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
+        for (i = 0, k = 0; i < decl->args_count; i++) {
+            ptr = &decl->args[i];
             if (type_is_zst(ptr->type))
                 continue;
 
@@ -1344,7 +1345,8 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
     irgen_type_ret(state, decl->out);
     IR_EMITF(state, " @\"%s\"(", link_sym->str);
 
-    for (ptr = decl->args, k = 0; ptr; ptr = ptr->next) {
+    for (i = 0, k = 0; i < decl->args_count; i++) {
+        ptr = &decl->args[i];
         if (type_is_zst(ptr->type))
             continue;
 
@@ -1364,7 +1366,9 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
     irgen_emit_block(state, 0);
     reg = 1;
 
-    for (ptr = decl->args; ptr; ptr = ptr->next) {
+    for (i = 0; i < decl->args_count; i++) {
+        ptr = &decl->args[i];
+
         slot = irgen_emit_simple0(state, "alloca", ptr->type);
         if (!type_is_zst(ptr->type))
             irgen_emit_store(state, ptr->type, slot, IRVAL_REG(reg++));

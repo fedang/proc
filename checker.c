@@ -1157,8 +1157,10 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                 proc->out = type_get_invalid();
             }
 
-            for (i = 0, ptr = proc->args; ptr != NULL; ptr = ptr->next) {
-                for (prev = proc->args; prev != ptr; prev = prev->next) {
+            for (i = 0; i < proc->args_count; i++) {
+                ptr = &proc->args[i];
+                for (j = 0; j < i; j++) {
+                    prev = &proc->args[j];
                     if (prev->sym == ptr->sym) {
                         TYCHK_ERROR(state, proc->decl.span,
                                     "Procedure '%pS' has duplicate parameter '%pS'\n",
@@ -1178,7 +1180,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                     ptr->type = type_get_invalid();
                 }
                 assert(i < 32 && "too many args!");
-                args[i++] = ptr->type;
+                args[i] = ptr->type;
             }
 
             if (ok) {
@@ -3457,7 +3459,8 @@ checker_validate_decl(struct checker *state, struct decl *decl)
         return true;
 
     assert(state->locals_count == 0 && "leftover locals!");
-    for (ptr = proc->args; ptr != NULL; ptr = ptr->next) {
+    for (i = 0; i < proc->args_count; i++) {
+        ptr = &proc->args[i];
         ptr->slot = checker_local_push(state, ptr->sym, ptr->type);
     }
 

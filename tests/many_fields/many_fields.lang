@@ -70,4 +70,4 @@ struct S {
     f68: i32
     f69: i32
 }
-proc main() {}
+proc main(): int { return 0 }

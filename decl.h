@@ -15,7 +15,6 @@ struct proc_arg {
     struct type *type;
     struct symbol *sym;
     unsigned slot;
-    struct proc_arg *next;
 };
 
 enum decl_tag {
@@ -41,17 +40,17 @@ struct decl_proc {
     struct decl decl;
     struct symbol *sym;
     struct type *out;
-    struct proc_arg *args;
-    size_t args_count;
     struct expr *body;
+    size_t args_count;
+    struct proc_arg args[];
 };
 
 struct decl_struct {
     struct decl decl;
     struct symbol *sym;
-    struct struct_field *fields;
-    size_t fields_count;
     struct type *type;
+    size_t fields_count;
+    struct struct_field fields[];
 };
 
 struct decl_type {

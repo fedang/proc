@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "decl.h"
 #include "arena.h"
@@ -18,13 +19,16 @@ decl_make_proc(struct symbol *sym, struct type *out,
                struct proc_arg *args, size_t args_count, struct expr *body)
 {
     struct decl_proc *decl;
+    size_t size;
 
-    decl = decl_make(sizeof(struct decl_proc), DECL_PROC);
+    size = sizeof(struct decl_proc) + args_count * sizeof(struct proc_arg);
+    decl = decl_make(size, DECL_PROC);
     decl->sym = sym;
     decl->out = out;
-    decl->args = args;
-    decl->args_count = args_count;
     decl->body = body;
+    decl->args_count = args_count;
+    if (args_count > 0)
+        memcpy(decl->args, args, args_count * sizeof(struct proc_arg));
     return &decl->decl;
 }
 
@@ -33,11 +37,14 @@ decl_make_struct(struct symbol *sym, struct struct_field *fields,
                  size_t fields_count)
 {
     struct decl_struct *decl;
+    size_t size;
 
-    decl = decl_make(sizeof(struct decl_struct), DECL_STRUCT);
+    size = sizeof(struct decl_struct) + fields_count * sizeof(struct struct_field);
+    decl = decl_make(size, DECL_STRUCT);
     decl->sym = sym;
-    decl->fields = fields;
     decl->fields_count = fields_count;
+    if (fields_count > 0)
+        memcpy(decl->fields, fields, fields_count * sizeof(struct struct_field));
     return &decl->decl;
 }
 

@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "report.h"
 #include "arena.h"
+#include "scratch.h"
 
 // TODO: Improve flag tracking for recovery
 
@@ -246,7 +247,8 @@ parser_expr_strict(struct parser *state, struct expr **expr)
 static bool
 parser_expr_block(struct parser *state, struct expr **expr)
 {
-    struct decl *items[64];
+    struct scratch_frame scratch;
+    struct decl **slot, *item;
     size_t items_count;
     bool saved_parens, saved_noblock;
     struct span start;
@@ -258,13 +260,19 @@ parser_expr_block(struct parser *state, struct expr **expr)
     state->parens = false;
     state->no_block = false;
 
-    for (items_count = 0; !parser_eof(state); items_count++) {
+    items_count = 0;
+    scratch_begin(&scratch);
+
+    while (!parser_eof(state)) {
         if (parser_peek(state, TOKEN_RBRACE))
             break;
 
-        assert(items_count < 64 && "too many block items!");
-        if (!parser_decl(state, &items[items_count]))
+        if (!parser_decl(state, &item))
             goto fail;
+
+        slot = scratch_append(sizeof(struct decl *));
+        *slot = item;
+        items_count++;
     }
 
     if (!parser_check(state, TOKEN_RBRACE, "Expected '}' after block body"))
@@ -275,15 +283,17 @@ parser_expr_block(struct parser *state, struct expr **expr)
 
     *expr = expr_make_block(items_count);
     if (items_count > 0) {
-        memcpy(((struct expr_block *)*expr)->items, items,
+        memcpy(((struct expr_block *)*expr)->items, scratch_data(&scratch),
                items_count * sizeof(struct decl *));
     }
     expr_set_span(*expr, span_merge(start, parser_prev(state)->span));
+    scratch_end(&scratch);
     return true;
 
 fail:
     state->parens = saved_parens;
     state->no_block = saved_noblock;
+    scratch_end(&scratch);
     return false;
 }
 
@@ -985,7 +995,8 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     struct symbol *sym, *arg_sym;
     struct type *out, *arg_type;
     struct expr *body;
-    struct proc_arg *args, **tail, *tmp;
+    struct scratch_frame scratch;
+    struct proc_arg *slot;
     size_t args_count;
     struct span start;
 
@@ -997,56 +1008,58 @@ parser_decl_proc(struct parser *state, struct decl **decl)
     if (!parser_check(state, TOKEN_LPAREN, "Expected '(' after function name"))
         return false;
 
-    args = NULL;
     args_count = 0;
-    tail = &args;
+    scratch_begin(&scratch);
 
     if (!parser_match(state, TOKEN_RPAREN)) {
         do {
             if (!parser_check_sym(state, &arg_sym, "Expected arg name"))
-                return false;
+                goto fail;
 
             if (!parser_check(state, TOKEN_COLON, "Expected ':' after arg name"))
-                return false;
+                goto fail;
 
             arg_type = NULL;
             if (!parser_type(state, &arg_type))
-                return false;
+                goto fail;
 
-            tmp = calloc(1, sizeof(struct proc_arg));
-            tmp->sym = arg_sym;
-            tmp->type = arg_type;
-
-            *tail = tmp;
-            tail = &tmp->next;
+            slot = scratch_append(sizeof(struct proc_arg));
+            memset(slot, 0, sizeof(struct proc_arg));
+            slot->sym = arg_sym;
+            slot->type = arg_type;
             args_count++;
         } while (parser_match(state, TOKEN_COMMA));
 
         if (!parser_check(state, TOKEN_RPAREN, "Expected ')' after function args"))
-            return false;
+            goto fail;
     }
 
     out = NULL;
     if (parser_match(state, TOKEN_COLON)) {
         if (!parser_type(state, &out))
-            return false;
+            goto fail;
     }
 
     body = NULL;
     if (parser_match(state, TOKEN_LBRACE)) {
         if (!parser_expr_block(state, &body))
-            return false;
+            goto fail;
 
         if (!parser_check_end(state, "Expected newline or ';' after declaration"))
-            return false;
+            goto fail;
     } else {
         if (!parser_check_end(state, "Expected '{' or termination after proc signature"))
-            return false;
+            goto fail;
     }
 
-    *decl = decl_make_proc(sym, out, args, args_count, body);
+    *decl = decl_make_proc(sym, out, scratch_data(&scratch), args_count, body);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    scratch_end(&scratch);
     return true;
+
+fail:
+    scratch_end(&scratch);
+    return false;
 }
 
 static bool
@@ -1054,7 +1067,8 @@ parser_decl_struct(struct parser *state, struct decl **decl)
 {
     struct symbol *sym, *field_sym;
     struct type *field_type;
-    struct struct_field *copy, fields[64];
+    struct scratch_frame scratch;
+    struct struct_field *slot;
     size_t fields_count;
     struct span start;
 
@@ -1067,39 +1081,39 @@ parser_decl_struct(struct parser *state, struct decl **decl)
         return false;
 
     fields_count = 0;
+    scratch_begin(&scratch);
+
     while (!parser_match(state, TOKEN_RBRACE)) {
         if (!parser_check_sym(state, &field_sym, "Expected field name"))
-            return false;
+            goto fail;
 
         if (!parser_check(state, TOKEN_COLON, "Expected ':' after field name"))
-            return false;
+            goto fail;
 
         field_type = NULL;
         if (!parser_type(state, &field_type))
-            return false;
+            goto fail;
 
-        assert(fields_count < 64 && "too many fields!");
-        fields[fields_count].name = field_sym;
-        fields[fields_count].type = field_type;
-        fields[fields_count].index = fields_count;
-        fields_count++;
+        slot = scratch_append(sizeof(struct struct_field));
+        slot->name = field_sym;
+        slot->type = field_type;
+        slot->index = fields_count++;
 
         if (!parser_check_end(state, "Expected newline or ';' after field"))
-            return false;
+            goto fail;
     }
 
     if (!parser_check_end(state, "Expected newline or ';' after declaration"))
-        return false;
+        goto fail;
 
-    copy = NULL;
-    if (fields_count > 0) {
-        copy = malloc(fields_count * sizeof(struct struct_field));
-        memcpy(copy, fields, fields_count * sizeof(struct struct_field));
-    }
-
-    *decl = decl_make_struct(sym, copy, fields_count);
+    *decl = decl_make_struct(sym, scratch_data(&scratch), fields_count);
     decl_set_span(*decl, span_merge(start, parser_prev(state)->span));
+    scratch_end(&scratch);
     return true;
+
+fail:
+    scratch_end(&scratch);
+    return false;
 }
 
 static bool
@@ -1304,24 +1318,20 @@ bool
 parser_module(struct parser *state, struct decl **decl)
 {
     struct expr *block;
-    struct decl **items;
-    size_t items_count, items_size;
+    size_t items_count;
+    struct scratch_frame scratch;
+    struct decl **slot, *item;
     struct span span;
 
     span = parser_curr(state)->span;
 
-    items = NULL;
-    items_size = 0;
     items_count = 0;
+    scratch_begin(&scratch);
 
     while (!parser_eof(state)) {
-        if (items_count >= items_size) {
-            items_size = items_size < 32 ? 32 : items_size * 2;
-            items = realloc(items, items_size * sizeof(struct decl *));
-            assert(items && "out of mem");
-        }
-
-        if (parser_decl(state, &items[items_count])) {
+        if (parser_decl(state, &item)) {
+            slot = scratch_append(sizeof(struct decl *));
+            *slot = item;
             items_count++;
         } else {
             parser_sync(state);
@@ -1337,11 +1347,11 @@ parser_module(struct parser *state, struct decl **decl)
      */
     block = expr_make_block(items_count);
     if (items_count > 0) {
-        memcpy(((struct expr_block *)block)->items, items,
+        memcpy(((struct expr_block *)block)->items, scratch_data(&scratch),
                items_count * sizeof(struct decl *));
     }
+    scratch_end(&scratch);
     expr_set_span(block, span);
-    free(items);
 
     *decl = decl_make_module(NULL, NULL, block);
     decl_set_span(*decl, span);

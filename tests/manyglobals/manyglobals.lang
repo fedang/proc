@@ -298,3 +298,5 @@ var g296: i32 = 296
 var g297: i32 = 297
 var g298: i32 = 298
 var g299: i32 = 299
+
+proc main(): int { return 0 }
