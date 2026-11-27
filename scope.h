@@ -21,7 +21,6 @@
 #define BIND_IS_LINKED(b)   BIND_CHECK_FLAG(b, BIND_LINKED)
 #define BIND_IS_SEALED(b)   BIND_CHECK_FLAG(b, BIND_SEALED)
 
-
 enum resolve_status {
     RESOLVE_NONE,
     RESOLVE_PENDING,

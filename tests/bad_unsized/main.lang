@@ -1,0 +1,16 @@
+type Opaque
+
+proc helper() {}
+
+proc bad_ops(p: *Opaque): int {
+    var x = *p
+    var q = &p[1]
+    var sz = @size_of(Opaque)
+    var al = @align_of(Opaque)
+    var s = struct { f = helper; p = main }
+    return @size_of(@type_of(main))
+}
+
+proc main(): int {
+    return 0
+}

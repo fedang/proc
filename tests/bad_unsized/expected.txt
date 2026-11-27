@@ -1,0 +1,23 @@
+=== COMPILE EXIT: 1 ===
+main.lang:6: error: Cannot dereference pointer to unsized type 'Opaque'
+    6 |     var x = *p
+      |             ^~
+main.lang:7: error: Cannot index pointer to unsized type 'Opaque'
+    7 |     var q = &p[1]
+      |              ^~~~
+main.lang:8: error: Expected a sized type, but got 'Opaque'
+    8 |     var sz = @size_of(Opaque)
+      |              ^~~~~~~~~~~~~~~~
+main.lang:9: error: Expected a sized type, but got 'Opaque'
+    9 |     var al = @align_of(Opaque)
+      |              ^~~~~~~~~~~~~~~~~
+main.lang:10: error: Anonymous struct field 'f' has unsized type 'proc() '
+   10 |     var s = struct { f = helper; p = main }
+      |                          ^~~~~~
+main.lang:10: error: Anonymous struct field 'p' has unsized type 'proc() -> int'
+   10 |     var s = struct { f = helper; p = main }
+      |                                      ^~~~
+main.lang:11: error: Expected a sized type, but got 'proc() -> int'
+   11 |     return @size_of(@type_of(main))
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~
+info: Failed semantic analysis

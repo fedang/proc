@@ -1838,6 +1838,15 @@ checker_expr_unop(struct checker *state, struct expr_unop *expr)
                 return false;
             }
 
+            if (!type_is_sized(expr->op->type->pointer) &&
+                expr->op->type->pointer->tag != TYPE_PROC &&
+                expr->op->type->pointer->tag != TYPE_ANY_INT) {
+                TYCHK_ERROR(state, expr->expr.span,
+                            "Cannot dereference pointer to unsized type '%pT'\n",
+                            expr->op->type->pointer);
+                return false;
+            }
+
             expr->expr.type = expr->op->type->pointer;
             break;
 
@@ -1980,6 +1989,13 @@ checker_expr_index(struct checker *state, struct expr_index *expr)
     }
 
     if (expr->op->type->tag == TYPE_PTR) {
+        if (!type_is_sized(expr->op->type->pointer) &&
+            expr->op->type->pointer->tag != TYPE_ANY_INT) {
+            TYCHK_ERROR(state, expr->expr.span,
+                        "Cannot index pointer to unsized type '%pT'\n",
+                        expr->op->type->pointer);
+            return false;
+        }
         expr->expr.type = expr->op->type->pointer;
         return true;
     }
@@ -2212,6 +2228,15 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
              * Leave untyped literals here and coerce the whole struct later on
              */
             if (!checker_expr(state, expr->fields[i].value)) {
+                expr->fields[i].value->type = type_get_invalid();
+                ok = false;
+            } else if (expr->fields[i].value->type->tag != TYPE_ANY_INT &&
+                       !type_is_invalid(expr->fields[i].value->type) &&
+                       !type_is_sized(expr->fields[i].value->type)) {
+                TYCHK_ERROR(state, expr->fields[i].value->span,
+                            "Anonymous struct field '%pS' has unsized type '%pT'\n",
+                            expr->fields[i].field->sym,
+                            expr->fields[i].value->type);
                 expr->fields[i].value->type = type_get_invalid();
                 ok = false;
             }

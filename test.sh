@@ -254,7 +254,7 @@ run_test() {
         return
     fi
 
-    if diff -u -L "blessed/$name" -L "actual/$name" "$exp" "$out/actual.txt" > "$out/diff.txt"
+    if diff --color=always -u -L "blessed/$name" -L "actual/$name" "$exp" "$out/actual.txt" > "$out/diff.txt"
     then
         print_result "$C_GREEN" "PASS" "$name" "$info"
         [ "$VERBOSE" -eq 1 ] && cat "$out/actual.txt"
