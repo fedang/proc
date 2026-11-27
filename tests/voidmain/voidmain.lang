@@ -1,5 +1,5 @@
-proc clobber(): int { return 0 }
+proc puts(_: *u8): int
 
 proc main() {
-	clobber()
+	puts("Hello World")
 }

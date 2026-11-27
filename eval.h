@@ -22,8 +22,9 @@ struct named {
 
 struct environ {
     struct environ *parent;
-    struct named vars[64];
+    struct named *vars;
     size_t vars_count;
+    size_t vars_size;
 };
 
 struct eval {

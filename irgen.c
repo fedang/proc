@@ -1,9 +1,11 @@
 #include <stdarg.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "irgen.h"
 #include "options.h"
 #include "report.h"
+#include "scratch.h"
 
 #define IR_EMITF(state, ...) \
     fprintf((state)->out, __VA_ARGS__)
@@ -30,10 +32,56 @@ irgen_fresh_label(struct irgen *state)
     return ++state->labels;
 }
 
-static struct irval
-irgen_emit_string(struct irgen *state, struct value_string string)
+static bool
+irgen_alloc_extern(struct irgen *state, struct symbol *sym)
 {
-    assert(state->strings_count < 256 && "too many strings!");
+    size_t i;
+
+    for (i = 0; i < state->externs_count; i++) {
+        if (state->externs[i] == sym)
+            return false;
+    }
+
+    if (state->externs_count >= state->externs_size) {
+        state->externs_size = state->externs_size ? state->externs_size * 2 : 64;
+        state->externs = realloc(state->externs,
+                                 state->externs_size * sizeof(struct symbol *));
+        assert(state->externs && "out of memory");
+    }
+    state->externs[state->externs_count++] = sym;
+    return true;
+}
+
+static void
+irgen_alloc_slot(struct irgen *state, unsigned slot, struct irval val)
+{
+    size_t size;
+
+    if (slot >= state->slots_size) {
+        size = state->slots_size ? state->slots_size * 2 : 64;
+        while (slot >= size)
+            size *= 2;
+
+        state->slots = realloc(state->slots, size * sizeof(struct irval));
+        assert(state->slots && "out of memory");
+        memset(state->slots + state->slots_size, 0,
+               (size - state->slots_size) * sizeof(struct irval));
+        state->slots_size = size;
+    }
+
+    state->slots[slot] = val;
+}
+
+static struct irval
+irgen_alloc_string(struct irgen *state, struct value_string string)
+{
+    if (state->strings_count >= state->strings_size) {
+        state->strings_size = state->strings_size ? state->strings_size * 2 : 64;
+        state->strings = realloc(state->strings,
+                                 state->strings_size * sizeof(struct value_string));
+        assert(state->strings && "out of memory");
+    }
+
     state->strings[state->strings_count] = string;
     return IRVAL_STRING(state->strings_count++);
 }
@@ -432,7 +480,7 @@ irgen_expr_addr(struct irgen *state, struct expr *expr)
                 return IRVAL_GLOBAL(ident->bind->link_sym->str);
             }
 
-            assert(ident->slot < 256 && "local slot out of bound!");
+            assert(ident->slot < state->slots_size && "local slot out of bounds!");
             assert(state->slots[ident->slot].tag != IRVAL_INVALID && "invalid local slot!");
             return state->slots[ident->slot];
 
@@ -568,7 +616,7 @@ irgen_expr_literal(struct irgen *state, struct expr *expr)
             return IRVAL_INT(expr->ctval.integer);
 
         case VALUE_STRING:
-            return irgen_emit_string(state, expr->ctval.string);
+            return irgen_alloc_string(state, expr->ctval.string);
 
         default:
             unreachable();
@@ -757,14 +805,19 @@ irgen_expr_unop(struct irgen *state, struct expr_unop *expr)
 static struct irval
 irgen_expr_call(struct irgen *state, struct expr_call *expr)
 {
-    struct irval func, out, vals[expr->args_count + 1];
+    struct irval func, out, val, *vals;
+    struct scratch_frame scratch;
     unsigned i, k;
 
     func = irgen_expr(state, expr->op);
 
+    scratch_begin(&scratch);
     for (i = 0; i < expr->args_count; i++) {
-        vals[i] = irgen_expr(state, expr->args[i]);
+        val = irgen_expr(state, expr->args[i]);
+        vals = scratch_append(sizeof(struct irval));
+        *vals = val;
     }
+    vals = scratch_data(&scratch);
 
     if (type_is_zst(expr->expr.type)) {
         out = IRVAL_POISON();
@@ -793,6 +846,7 @@ irgen_expr_call(struct irgen *state, struct expr_call *expr)
     }
 
     IR_EMITF(state, ")\n");
+    scratch_end(&scratch);
     return out;
 }
 
@@ -1165,9 +1219,7 @@ irgen_hoist_decl(struct irgen *state, struct decl *decl)
         case DECL_VAR:
             var = (struct decl_var *)decl;
             slot = irgen_emit_simple0(state, "alloca", var->type);
-
-            assert(var->slot < 256 && "invalid local slot!");
-            state->slots[var->slot] = slot;
+            irgen_alloc_slot(state, var->slot, slot);
             irgen_hoist_expr(state, var->value);
             break;
 
@@ -1305,18 +1357,8 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
      * External declaration
      */
     if (!decl->body) {
-        /*
-         * TODO: Move this into a helper for when we have globals
-         * Also add a dedicated check to see if all bindings have the same type
-         */
-        for (i = 0; i < state->externs_count; i++) {
-            if (state->externs[i] == link_sym)
-                return;
-        }
-
-        assert(state->externs_count < 256 && "too many externs!");
-        state->externs[state->externs_count] = link_sym;
-        state->externs_count++;
+        if (!irgen_alloc_extern(state, link_sym))
+            return;
 
         IR_EMITF(state, "\ndeclare ");
         irgen_type_ret(state, decl->out);
@@ -1373,8 +1415,7 @@ irgen_decl_proc(struct irgen *state, struct decl_proc *decl)
         if (!type_is_zst(ptr->type))
             irgen_emit_store(state, ptr->type, slot, IRVAL_REG(reg++));
 
-        assert(ptr->slot < 256 && "invalid local slot!");
-        state->slots[ptr->slot] = slot;
+        irgen_alloc_slot(state, ptr->slot, slot);
     }
 
     irgen_hoist_expr(state, decl->body);
@@ -1414,6 +1455,7 @@ static void
 irgen_decl_var(struct irgen *state, struct decl_var *decl)
 {
     struct symbol *link_sym;
+    struct irval val;
 
     link_sym = irgen_link_sym(state, &decl->decl);
     IR_EMITF(state, "\n@\"%s\" = global ", link_sym->str);
@@ -1440,8 +1482,8 @@ irgen_decl_var(struct irgen *state, struct decl_var *decl)
 
             case VALUE_STRING:
                 IR_EMITC(state, ' ');
-                irgen_val(state, irgen_emit_string(state,
-                                                   decl->value->ctval.string));
+                val = irgen_alloc_string(state, decl->value->ctval.string);
+                irgen_val(state, val);
                 return;
 
             default:

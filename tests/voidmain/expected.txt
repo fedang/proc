@@ -1,2 +1,3 @@
 === COMPILE EXIT: 0 ===
-=== RUN EXIT: 232 ===
+=== RUN EXIT: 12 ===
+Hello World

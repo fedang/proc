@@ -21,8 +21,9 @@ struct checker {
     struct type *ret_type;
     struct scope *root_scope;
     struct scope *curr_scope;
-    struct local_var locals[256];
-    unsigned locals_count;
+    struct local_var *locals;
+    size_t locals_count;
+    size_t locals_size;
 };
 
 void checker_init(struct checker *state, struct modcache *cache);

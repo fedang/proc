@@ -1,0 +1,172 @@
+sig BigSig {
+    type T = i32
+    proc sum40(
+        a0: T, a1: T, a2: T, a3: T, a4: T, a5: T, a6: T, a7: T,
+        a8: T, a9: T, a10: T, a11: T, a12: T, a13: T, a14: T, a15: T,
+        a16: T, a17: T, a18: T, a19: T, a20: T, a21: T, a22: T, a23: T,
+        a24: T, a25: T, a26: T, a27: T, a28: T, a29: T, a30: T, a31: T,
+        a32: T, a33: T, a34: T, a35: T, a36: T, a37: T, a38: T, a39: T
+    ): T
+    proc make(v: i32): T
+    proc get(v: T): i32
+}
+
+module BigMod : BigSig {
+    type T = i32
+
+    proc make(v: i32): T {
+        return v
+    }
+
+    proc get(v: T): i32 {
+        return v
+    }
+
+    proc sum40(
+        a0: T, a1: T, a2: T, a3: T, a4: T, a5: T, a6: T, a7: T,
+        a8: T, a9: T, a10: T, a11: T, a12: T, a13: T, a14: T, a15: T,
+        a16: T, a17: T, a18: T, a19: T, a20: T, a21: T, a22: T, a23: T,
+        a24: T, a25: T, a26: T, a27: T, a28: T, a29: T, a30: T, a31: T,
+        a32: T, a33: T, a34: T, a35: T, a36: T, a37: T, a38: T, a39: T
+    ): T {
+        return a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 +
+               a8 + a9 + a10 + a11 + a12 + a13 + a14 + a15 +
+               a16 + a17 + a18 + a19 + a20 + a21 + a22 + a23 +
+               a24 + a25 + a26 + a27 + a28 + a29 + a30 + a31 +
+               a32 + a33 + a34 + a35 + a36 + a37 + a38 + a39
+    }
+}
+
+struct BigStruct {
+    f0: i32; f1: i32; f2: i32; f3: i32; f4: i32; f5: i32; f6: i32; f7: i32
+    f8: i32; f9: i32; f10: i32; f11: i32; f12: i32; f13: i32; f14: i32; f15: i32
+    f16: i32; f17: i32; f18: i32; f19: i32; f20: i32; f21: i32; f22: i32; f23: i32
+    f24: i32; f25: i32; f26: i32; f27: i32; f28: i32; f29: i32; f30: i32; f31: i32
+    f32: i32; f33: i32; f34: i32; f35: i32; f36: i32; f37: i32; f38: i32; f39: i32
+    f40: i32; f41: i32; f42: i32; f43: i32; f44: i32; f45: i32; f46: i32; f47: i32
+    f48: i32; f49: i32; f50: i32; f51: i32; f52: i32; f53: i32; f54: i32; f55: i32
+    f56: i32; f57: i32; f58: i32; f59: i32; f60: i32; f61: i32; f62: i32; f63: i32
+    f64: i32; f65: i32; f66: i32; f67: i32; f68: i32; f69: i32
+}
+
+proc main(): i32 {
+    var one = BigMod.make(1)
+    var two = BigMod.make(2)
+
+    var s = BigMod.sum40(
+        BigMod.sum40(
+            one, one, one, one, one, one, one, one,
+            one, one, one, one, one, one, one, one,
+            one, one, one, one, one, one, one, one,
+            one, one, one, one, one, one, one, one,
+            one, one, one, one, one, one, one, one
+        ),
+        two, two, two, two, two, two, two,
+        two, two, two, two, two, two, two, two,
+        two, two, two, two, two, two, two, two,
+        two, two, two, two, two, two, two, two,
+        two, two, two, two, two, two, two, two
+    )
+    if BigMod.get(s) != 40 + 39 * 2 {
+        return 1
+    }
+
+    var arr: [i32, 40] = [
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 3
+    ]
+    if arr[39] != 3 {
+        return 2
+    }
+
+    var b = BigStruct {
+        f0 = 1; f1 = 1; f2 = 1; f3 = 1; f4 = 1; f5 = 1; f6 = 1; f7 = 1
+        f8 = 1; f9 = 1; f10 = 1; f11 = 1; f12 = 1; f13 = 1; f14 = 1; f15 = 1
+        f16 = 1; f17 = 1; f18 = 1; f19 = 1; f20 = 1; f21 = 1; f22 = 1; f23 = 1
+        f24 = 1; f25 = 1; f26 = 1; f27 = 1; f28 = 1; f29 = 1; f30 = 1; f31 = 1
+        f32 = 1; f33 = 1; f34 = 1; f35 = 1; f36 = 1; f37 = 1; f38 = 1; f39 = 1
+        f40 = 1; f41 = 1; f42 = 1; f43 = 1; f44 = 1; f45 = 1; f46 = 1; f47 = 1
+        f48 = 1; f49 = 1; f50 = 1; f51 = 1; f52 = 1; f53 = 1; f54 = 1; f55 = 1
+        f56 = 1; f57 = 1; f58 = 1; f59 = 1; f60 = 1; f61 = 1; f62 = 1; f63 = 1
+        f64 = 1; f65 = 1; f66 = 1; f67 = 1; f68 = 1; f69 = 99
+    }
+    if b.f0 + b.f69 != 100 {
+        return 3
+    }
+
+    var acc: i32 = 0
+    var l0: i32 = 1; acc += l0; var l1: i32 = 1; acc += l1; var l2: i32 = 1; acc += l2; var l3: i32 = 1; acc += l3
+    var l4: i32 = 1; acc += l4; var l5: i32 = 1; acc += l5; var l6: i32 = 1; acc += l6; var l7: i32 = 1; acc += l7
+    var l8: i32 = 1; acc += l8; var l9: i32 = 1; acc += l9; var l10: i32 = 1; acc += l10; var l11: i32 = 1; acc += l11
+    var l12: i32 = 1; acc += l12; var l13: i32 = 1; acc += l13; var l14: i32 = 1; acc += l14; var l15: i32 = 1; acc += l15
+    var l16: i32 = 1; acc += l16; var l17: i32 = 1; acc += l17; var l18: i32 = 1; acc += l18; var l19: i32 = 1; acc += l19
+    var l20: i32 = 1; acc += l20; var l21: i32 = 1; acc += l21; var l22: i32 = 1; acc += l22; var l23: i32 = 1; acc += l23
+    var l24: i32 = 1; acc += l24; var l25: i32 = 1; acc += l25; var l26: i32 = 1; acc += l26; var l27: i32 = 1; acc += l27
+    var l28: i32 = 1; acc += l28; var l29: i32 = 1; acc += l29; var l30: i32 = 1; acc += l30; var l31: i32 = 1; acc += l31
+    var l32: i32 = 1; acc += l32; var l33: i32 = 1; acc += l33; var l34: i32 = 1; acc += l34; var l35: i32 = 1; acc += l35
+    var l36: i32 = 1; acc += l36; var l37: i32 = 1; acc += l37; var l38: i32 = 1; acc += l38; var l39: i32 = 1; acc += l39
+    var l40: i32 = 1; acc += l40; var l41: i32 = 1; acc += l41; var l42: i32 = 1; acc += l42; var l43: i32 = 1; acc += l43
+    var l44: i32 = 1; acc += l44; var l45: i32 = 1; acc += l45; var l46: i32 = 1; acc += l46; var l47: i32 = 1; acc += l47
+    var l48: i32 = 1; acc += l48; var l49: i32 = 1; acc += l49; var l50: i32 = 1; acc += l50; var l51: i32 = 1; acc += l51
+    var l52: i32 = 1; acc += l52; var l53: i32 = 1; acc += l53; var l54: i32 = 1; acc += l54; var l55: i32 = 1; acc += l55
+    var l56: i32 = 1; acc += l56; var l57: i32 = 1; acc += l57; var l58: i32 = 1; acc += l58; var l59: i32 = 1; acc += l59
+    var l60: i32 = 1; acc += l60; var l61: i32 = 1; acc += l61; var l62: i32 = 1; acc += l62; var l63: i32 = 1; acc += l63
+    var l64: i32 = 1; acc += l64; var l65: i32 = 1; acc += l65; var l66: i32 = 1; acc += l66; var l67: i32 = 1; acc += l67
+    var l68: i32 = 1; acc += l68; var l69: i32 = 1; acc += l69; var l70: i32 = 1; acc += l70; var l71: i32 = 1; acc += l71
+    var l72: i32 = 1; acc += l72; var l73: i32 = 1; acc += l73; var l74: i32 = 1; acc += l74; var l75: i32 = 1; acc += l75
+    var l76: i32 = 1; acc += l76; var l77: i32 = 1; acc += l77; var l78: i32 = 1; acc += l78; var l79: i32 = 1; acc += l79
+    var l80: i32 = 1; acc += l80; var l81: i32 = 1; acc += l81; var l82: i32 = 1; acc += l82; var l83: i32 = 1; acc += l83
+    var l84: i32 = 1; acc += l84; var l85: i32 = 1; acc += l85; var l86: i32 = 1; acc += l86; var l87: i32 = 1; acc += l87
+    var l88: i32 = 1; acc += l88; var l89: i32 = 1; acc += l89; var l90: i32 = 1; acc += l90; var l91: i32 = 1; acc += l91
+    var l92: i32 = 1; acc += l92; var l93: i32 = 1; acc += l93; var l94: i32 = 1; acc += l94; var l95: i32 = 1; acc += l95
+    var l96: i32 = 1; acc += l96; var l97: i32 = 1; acc += l97; var l98: i32 = 1; acc += l98; var l99: i32 = 1; acc += l99
+    var l100: i32 = 1; acc += l100; var l101: i32 = 1; acc += l101; var l102: i32 = 1; acc += l102; var l103: i32 = 1; acc += l103
+    var l104: i32 = 1; acc += l104; var l105: i32 = 1; acc += l105; var l106: i32 = 1; acc += l106; var l107: i32 = 1; acc += l107
+    var l108: i32 = 1; acc += l108; var l109: i32 = 1; acc += l109; var l110: i32 = 1; acc += l110; var l111: i32 = 1; acc += l111
+    var l112: i32 = 1; acc += l112; var l113: i32 = 1; acc += l113; var l114: i32 = 1; acc += l114; var l115: i32 = 1; acc += l115
+    var l116: i32 = 1; acc += l116; var l117: i32 = 1; acc += l117; var l118: i32 = 1; acc += l118; var l119: i32 = 1; acc += l119
+    var l120: i32 = 1; acc += l120; var l121: i32 = 1; acc += l121; var l122: i32 = 1; acc += l122; var l123: i32 = 1; acc += l123
+    var l124: i32 = 1; acc += l124; var l125: i32 = 1; acc += l125; var l126: i32 = 1; acc += l126; var l127: i32 = 1; acc += l127
+    var l128: i32 = 1; acc += l128; var l129: i32 = 1; acc += l129; var l130: i32 = 1; acc += l130; var l131: i32 = 1; acc += l131
+    var l132: i32 = 1; acc += l132; var l133: i32 = 1; acc += l133; var l134: i32 = 1; acc += l134; var l135: i32 = 1; acc += l135
+    var l136: i32 = 1; acc += l136; var l137: i32 = 1; acc += l137; var l138: i32 = 1; acc += l138; var l139: i32 = 1; acc += l139
+    var l140: i32 = 1; acc += l140; var l141: i32 = 1; acc += l141; var l142: i32 = 1; acc += l142; var l143: i32 = 1; acc += l143
+    var l144: i32 = 1; acc += l144; var l145: i32 = 1; acc += l145; var l146: i32 = 1; acc += l146; var l147: i32 = 1; acc += l147
+    var l148: i32 = 1; acc += l148; var l149: i32 = 1; acc += l149; var l150: i32 = 1; acc += l150; var l151: i32 = 1; acc += l151
+    var l152: i32 = 1; acc += l152; var l153: i32 = 1; acc += l153; var l154: i32 = 1; acc += l154; var l155: i32 = 1; acc += l155
+    var l156: i32 = 1; acc += l156; var l157: i32 = 1; acc += l157; var l158: i32 = 1; acc += l158; var l159: i32 = 1; acc += l159
+    var l160: i32 = 1; acc += l160; var l161: i32 = 1; acc += l161; var l162: i32 = 1; acc += l162; var l163: i32 = 1; acc += l163
+    var l164: i32 = 1; acc += l164; var l165: i32 = 1; acc += l165; var l166: i32 = 1; acc += l166; var l167: i32 = 1; acc += l167
+    var l168: i32 = 1; acc += l168; var l169: i32 = 1; acc += l169; var l170: i32 = 1; acc += l170; var l171: i32 = 1; acc += l171
+    var l172: i32 = 1; acc += l172; var l173: i32 = 1; acc += l173; var l174: i32 = 1; acc += l174; var l175: i32 = 1; acc += l175
+    var l176: i32 = 1; acc += l176; var l177: i32 = 1; acc += l177; var l178: i32 = 1; acc += l178; var l179: i32 = 1; acc += l179
+    var l180: i32 = 1; acc += l180; var l181: i32 = 1; acc += l181; var l182: i32 = 1; acc += l182; var l183: i32 = 1; acc += l183
+    var l184: i32 = 1; acc += l184; var l185: i32 = 1; acc += l185; var l186: i32 = 1; acc += l186; var l187: i32 = 1; acc += l187
+    var l188: i32 = 1; acc += l188; var l189: i32 = 1; acc += l189; var l190: i32 = 1; acc += l190; var l191: i32 = 1; acc += l191
+    var l192: i32 = 1; acc += l192; var l193: i32 = 1; acc += l193; var l194: i32 = 1; acc += l194; var l195: i32 = 1; acc += l195
+    var l196: i32 = 1; acc += l196; var l197: i32 = 1; acc += l197; var l198: i32 = 1; acc += l198; var l199: i32 = 1; acc += l199
+    var l200: i32 = 1; acc += l200; var l201: i32 = 1; acc += l201; var l202: i32 = 1; acc += l202; var l203: i32 = 1; acc += l203
+    var l204: i32 = 1; acc += l204; var l205: i32 = 1; acc += l205; var l206: i32 = 1; acc += l206; var l207: i32 = 1; acc += l207
+    var l208: i32 = 1; acc += l208; var l209: i32 = 1; acc += l209; var l210: i32 = 1; acc += l210; var l211: i32 = 1; acc += l211
+    var l212: i32 = 1; acc += l212; var l213: i32 = 1; acc += l213; var l214: i32 = 1; acc += l214; var l215: i32 = 1; acc += l215
+    var l216: i32 = 1; acc += l216; var l217: i32 = 1; acc += l217; var l218: i32 = 1; acc += l218; var l219: i32 = 1; acc += l219
+    var l220: i32 = 1; acc += l220; var l221: i32 = 1; acc += l221; var l222: i32 = 1; acc += l222; var l223: i32 = 1; acc += l223
+    var l224: i32 = 1; acc += l224; var l225: i32 = 1; acc += l225; var l226: i32 = 1; acc += l226; var l227: i32 = 1; acc += l227
+    var l228: i32 = 1; acc += l228; var l229: i32 = 1; acc += l229; var l230: i32 = 1; acc += l230; var l231: i32 = 1; acc += l231
+    var l232: i32 = 1; acc += l232; var l233: i32 = 1; acc += l233; var l234: i32 = 1; acc += l234; var l235: i32 = 1; acc += l235
+    var l236: i32 = 1; acc += l236; var l237: i32 = 1; acc += l237; var l238: i32 = 1; acc += l238; var l239: i32 = 1; acc += l239
+    var l240: i32 = 1; acc += l240; var l241: i32 = 1; acc += l241; var l242: i32 = 1; acc += l242; var l243: i32 = 1; acc += l243
+    var l244: i32 = 1; acc += l244; var l245: i32 = 1; acc += l245; var l246: i32 = 1; acc += l246; var l247: i32 = 1; acc += l247
+    var l248: i32 = 1; acc += l248; var l249: i32 = 1; acc += l249; var l250: i32 = 1; acc += l250; var l251: i32 = 1; acc += l251
+    var l252: i32 = 1; acc += l252; var l253: i32 = 1; acc += l253; var l254: i32 = 1; acc += l254; var l255: i32 = 1; acc += l255
+    var l256: i32 = 1; acc += l256; var l257: i32 = 1; acc += l257; var l258: i32 = 1; acc += l258; var l259: i32 = 1; acc += l259
+    var l260: i32 = 1; acc += l260; var l261: i32 = 1; acc += l261; var l262: i32 = 1; acc += l262; var l263: i32 = 1; acc += l263
+
+    if acc != 264 {
+        return 4
+    }
+
+    return 0
+}

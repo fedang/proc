@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "eval.h"
 #include "report.h"
 
@@ -25,23 +27,39 @@ void
 eval_env_push(struct eval *state, struct environ *env)
 {
     env->parent = state->env;
+    env->vars = NULL;
+    env->vars_count = 0;
+    env->vars_size = 0;
     state->env = env;
 }
 
 void
 eval_env_pop(struct eval *state)
 {
+    struct environ *env;
+
     assert(state->env != NULL);
-    state->env = state->env->parent;
+    env = state->env;
+    state->env = env->parent;
+    free(env->vars);
 }
 
 void
 eval_env_bind(struct eval *state, struct named var)
 {
+    struct environ *env;
+
     assert(state->env != NULL);
-    assert(state->env->vars_count < 64 && "too many vars!");
-    state->env->vars[state->env->vars_count] = var;
-    state->env->vars_count++;
+    env = state->env;
+
+    if (env->vars_count >= env->vars_size) {
+        env->vars_size = env->vars_size ? env->vars_size * 2 : 16;
+        env->vars = realloc(env->vars, env->vars_size * sizeof(struct named));
+        assert(env->vars && "out of memory");
+    }
+
+    env->vars[env->vars_count] = var;
+    env->vars_count++;
 }
 
 static int64_t

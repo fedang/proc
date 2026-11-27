@@ -4,6 +4,7 @@
 
 #include "checker.h"
 #include "report.h"
+#include "scratch.h"
 
 #define TYCHK_ERROR(state, span, ...) \
     report_error(&(state)->cache->src_map, &(span), __VA_ARGS__)
@@ -24,7 +25,12 @@ static unsigned
 checker_local_push(struct checker *state, struct symbol *sym,
                    struct type *type)
 {
-    assert(state->locals_count < 256 && "too many locals!");
+    if (state->locals_count >= state->locals_size) {
+        state->locals_size = state->locals_size ? state->locals_size * 2 : 64;
+        state->locals = realloc(state->locals,
+                                state->locals_size * sizeof(struct local_var));
+        assert(state->locals && "out of memory");
+    }
 
     state->locals[state->locals_count].sym = sym;
     state->locals[state->locals_count].type = type;
@@ -46,7 +52,9 @@ checker_init(struct checker *state, struct modcache *cache)
     state->cache = cache;
     state->ret_type = NULL;
     state->loop_depth = 0;
+    state->locals = NULL;
     state->locals_count = 0;
+    state->locals_size = 0;
 
     root = scope_make(NULL, NULL, NULL, NULL);
     state->root_scope = root;
@@ -263,7 +271,8 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
     struct expr_access *access;
     struct expr_array *array;
     struct expr_struct *strukt;
-    struct struct_field *fields;
+    struct scratch_frame scratch;
+    struct struct_field *slot;
     struct expr_macro *macro;
     int64_t count;
     size_t i, j;
@@ -443,30 +452,37 @@ checker_resolve_raw(struct checker *state, struct expr *expr)
                 }
             }
 
-            // XXX: leaks
-            fields = calloc(strukt->fields_count, sizeof(struct struct_field));
-
+            scratch_begin(&scratch);
             for (i = 0; i < strukt->fields_count; i++) {
-                fields[i].name = strukt->fields[i].field->sym;
-                fields[i].type = checker_resolve_raw(state, strukt->fields[i].value);
-                fields[i].index = i;
-
-                if (!fields[i].type || type_is_invalid(fields[i].type))
+                type = checker_resolve_raw(state, strukt->fields[i].value);
+                if (!type || type_is_invalid(type)) {
+                    scratch_end(&scratch);
                     return type_get_invalid();
+                }
 
-                if (!type_is_sized(fields[i].type)) {
+                if (!type_is_sized(type)) {
                     TYCHK_ERROR(state, strukt->fields[i].value->span,
                                 "Anonymous struct field '%pS' has unsized type '%pT'\n",
-                                fields[i].name, fields[i].type);
+                                strukt->fields[i].field->sym, type);
+                    scratch_end(&scratch);
                     return NULL;
                 }
 
-                if (!checker_resolve_layout(state, fields[i].type))
+                if (!checker_resolve_layout(state, type)) {
+                    scratch_end(&scratch);
                     return NULL;
+                }
+
+                slot = scratch_append(sizeof(struct struct_field));
+                slot->name = strukt->fields[i].field->sym;
+                slot->type = type;
+                slot->index = i;
             }
 
-            return type_get_struct(NULL, NULL, NULL,
-                                   fields, strukt->fields_count);
+            type = type_get_struct(NULL, NULL, NULL,
+                                   scratch_data(&scratch), strukt->fields_count);
+            scratch_end(&scratch);
+            return type;
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
@@ -788,8 +804,9 @@ checker_rebind_sig(struct type *type, struct scope *scope,
                    struct scope *sig_scope, bool seal)
 {
     struct binding *bind;
-    struct type *item, *args[32];
-    struct struct_field *fields;
+    struct type *item, *arg, *out, **slot;
+    struct struct_field *field_slot;
+    struct scratch_frame scratch;
     size_t i;
 
     if (!type)
@@ -827,28 +844,37 @@ checker_rebind_sig(struct type *type, struct scope *scope,
             return type_get_slice(type->attr, item);
 
         case TYPE_PROC:
-            assert(type->proc.args_count < 32);
+            scratch_begin(&scratch);
             for (i = 0; i < type->proc.args_count; i++) {
-                args[i] = checker_rebind_sig(type->proc.args[i], scope,
-                                             sig_scope, seal);
+                arg = checker_rebind_sig(type->proc.args[i], scope,
+                                         sig_scope, seal);
+                slot = scratch_append(sizeof(struct type *));
+                *slot = arg;
             }
             item = checker_rebind_sig(type->proc.out, scope, sig_scope, seal);
-            return type_get_proc(type->attr, item, args, type->proc.args_count);
+            out = type_get_proc(type->attr, item, scratch_data(&scratch),
+                                type->proc.args_count);
+            scratch_end(&scratch);
+            return out;
 
         case TYPE_STRUCT:
             if (type->strukt.decl)
                 return type;
 
-            fields = calloc(type->strukt.fields_count, sizeof(*fields));
-
+            scratch_begin(&scratch);
             for (i = 0; i < type->strukt.fields_count; i++) {
-                fields[i] = type->strukt.fields[i];
-                fields[i].type = checker_rebind_sig(
-                        fields[i].type, scope, sig_scope, seal);
+                item = checker_rebind_sig(type->strukt.fields[i].type,
+                                          scope, sig_scope, seal);
+                field_slot = scratch_append(sizeof(struct struct_field));
+                *field_slot = type->strukt.fields[i];
+                field_slot->type = item;
             }
 
-            return type_get_struct(type->attr, NULL, NULL,
-                                   fields, type->strukt.fields_count);
+            out = type_get_struct(type->attr, NULL, NULL,
+                                  scratch_data(&scratch),
+                                  type->strukt.fields_count);
+            scratch_end(&scratch);
+            return out;
 
         default:
             return type;
@@ -1030,7 +1056,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct decl_type *d_type;
     struct decl_module *mod;
     struct decl_var *var;
-    struct type *type, *args[32];
+    struct type *type, **slot;
+    struct scratch_frame scratch;
     struct proc_arg *ptr, *prev;
     struct scope *saved, *scope;
     struct binding *inner;
@@ -1179,13 +1206,17 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
                     ok = false;
                     ptr->type = type_get_invalid();
                 }
-                assert(i < 32 && "too many args!");
-                args[i] = ptr->type;
             }
 
             if (ok) {
+                scratch_begin(&scratch);
+                for (i = 0; i < proc->args_count; i++) {
+                    slot = scratch_append(sizeof(struct type *));
+                    *slot = proc->args[i].type;
+                }
                 bind->type = type_get_proc(proc->decl.attr, proc->out,
-                                           args, proc->args_count);
+                                           scratch_data(&scratch), proc->args_count);
+                scratch_end(&scratch);
             } else {
                 bind->type = type_get_invalid();
             }
@@ -1294,7 +1325,8 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
     struct expr_struct *strukt;
     struct expr_macro *macro;
     struct type *type, *inner, *coerce;
-    struct struct_field *fields;
+    struct scratch_frame scratch;
+    struct struct_field *slot;
     size_t i, j;
 
     if (!expr->type || type_is_invalid(expr->type))
@@ -1436,7 +1468,7 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
             }
             break;
 
-        case EXPR_STRUCT: {
+        case EXPR_STRUCT:
             strukt = (struct expr_struct *)expr;
 
             /*
@@ -1482,17 +1514,19 @@ checker_expr_coerce(struct checker *state, struct expr *expr,
             if (target) {
                 expr->type = target;
             } else {
-                fields = calloc(strukt->fields_count, sizeof(*fields));
+                scratch_begin(&scratch);
                 for (i = 0; i < strukt->fields_count; i++) {
-                    fields[i].name  = strukt->fields[i].field->sym;
-                    fields[i].type  = strukt->fields[i].value->type;
-                    fields[i].index = i;
+                    slot = scratch_append(sizeof(struct struct_field));
+                    slot->name  = strukt->fields[i].field->sym;
+                    slot->type  = strukt->fields[i].value->type;
+                    slot->index = i;
                 }
                 expr->type = type_get_struct(NULL, NULL, NULL,
-                                             fields, strukt->fields_count);
+                                             scratch_data(&scratch),
+                                             strukt->fields_count);
+                scratch_end(&scratch);
             }
             break;
-        }
 
         case EXPR_MACRO:
             macro = (struct expr_macro *)expr;
@@ -2140,7 +2174,8 @@ static bool
 checker_expr_struct(struct checker *state, struct expr_struct *expr)
 {
     struct type *type;
-    struct struct_field *fields;
+    struct scratch_frame scratch;
+    struct struct_field *field, *slot;
     size_t i, j;
     bool ok = true;
 
@@ -2148,9 +2183,6 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
      * Anonymous struct literals
      */
     if (!expr->op) {
-        // XXX: leaks
-        fields = calloc(expr->fields_count, sizeof(struct struct_field));
-
         for (i = 0; i < expr->fields_count; i++) {
             if (expr->fields[i].colon && expr->fields[i].value) {
                 TYCHK_ERROR(state, expr->expr.span,
@@ -2183,15 +2215,22 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
                 expr->fields[i].value->type = type_get_invalid();
                 ok = false;
             }
-
-            fields[i].name = expr->fields[i].field->sym;
-            fields[i].type = expr->fields[i].value->type;
-            fields[i].index = i;
         }
 
-        type = ok
-             ? type_get_struct(NULL, NULL, NULL, fields, expr->fields_count)
-             : type_get_invalid();
+        if (ok) {
+            scratch_begin(&scratch);
+            for (i = 0; i < expr->fields_count; i++) {
+                slot = scratch_append(sizeof(struct struct_field));
+                slot->name = expr->fields[i].field->sym;
+                slot->type = expr->fields[i].value->type;
+                slot->index = i;
+            }
+            type = type_get_struct(NULL, NULL, NULL,
+                                   scratch_data(&scratch), expr->fields_count);
+            scratch_end(&scratch);
+        } else {
+            type = type_get_invalid();
+        }
         expr->expr.type = type;
         return ok;
     }
@@ -2219,7 +2258,7 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
     }
 
     for (i = 0; i < expr->fields_count; i++) {
-        fields = NULL;
+        field = NULL;
 
         if (expr->fields[i].colon && expr->fields[i].value) {
             TYCHK_ERROR(state, expr->expr.span,
@@ -2240,12 +2279,12 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
 
         for (j = 0; j < type->strukt.fields_count; j++) {
             if (type->strukt.fields[j].name == expr->fields[i].field->sym) {
-                fields = &type->strukt.fields[j];
+                field = &type->strukt.fields[j];
                 break;
             }
         }
 
-        if (!fields) {
+        if (!field) {
             TYCHK_ERROR(state, expr->fields[i].field->expr.span,
                         "Struct '%pT' has no field named '%pS'\n",
                         type, expr->fields[i].field->sym);
@@ -2267,13 +2306,13 @@ checker_expr_struct(struct checker *state, struct expr_struct *expr)
             expr->fields[i].value = &expr->fields[i].field->expr;
         }
 
-        if (!checker_expr_typed(state, expr->fields[i].value, fields->type)) {
+        if (!checker_expr_typed(state, expr->fields[i].value, field->type)) {
             if (!type_is_invalid(expr->fields[i].value->type)) {
                 TYCHK_ERROR(state, expr->fields[i].value->span,
                             "Field '%pS' type mismatch, got '%pT' instead of '%pT'\n",
                             expr->fields[i].field->sym,
                             expr->fields[i].value->type,
-                            fields->type);
+                            field->type);
                 expr->fields[i].value->type = type_get_invalid();
             }
             ok = false;

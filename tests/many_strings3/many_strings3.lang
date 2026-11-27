@@ -370,4 +370,4 @@ proc p5() {
     var s5_58: *u8 = "str5_58"
     var s5_59: *u8 = "str5_59"
 }
-proc main() {}
+proc main(): int { return 0 }

@@ -7,6 +7,7 @@
 #include "scope.h"
 #include "report.h"
 #include "options.h"
+#include "arena.h"
 
 #define MAX_TYPES 4096
 
@@ -221,8 +222,18 @@ type_get_struct(struct attr *attr, struct decl *decl, struct symbol *name,
     type = type_get_fresh(attr, TYPE_STRUCT);
     type->strukt.decl = (struct decl_struct *)decl;
     type->strukt.name = name;
-    type->strukt.fields = fields;
     type->strukt.fields_count = fields_count;
+
+    if (!decl && fields_count > 0) {
+        // XXX: Copy anonymous struct fields
+        type->strukt.fields = arena_alloc(&arena_type,
+                                          fields_count * sizeof(struct struct_field));
+        memcpy(type->strukt.fields, fields,
+               fields_count * sizeof(struct struct_field));
+    } else {
+        type->strukt.fields = fields;
+    }
+
     return type;
 }
 
