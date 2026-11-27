@@ -14,10 +14,6 @@ lexer_init(struct lexer *state, struct source *src)
     state->line = 1;
     state->start_line = 1;
     state->prev_line = 0;
-
-    state->tokens = NULL;
-    state->tokens_count = 0;
-    state->tokens_max = 0;
 }
 
 static inline bool
@@ -50,17 +46,8 @@ static void
 lexer_push(struct lexer *state, enum token_tag tag)
 {
     struct token *token;
-    size_t max;
 
-    if (state->tokens_count + 1 >= state->tokens_max) {
-        max = state->tokens_max < 32 ? 32 : state->tokens_max * 2;
-        state->tokens = realloc(state->tokens, max * sizeof(struct token));
-
-        assert(state->tokens && "out of memory");
-        state->tokens_max = max;
-    }
-
-    token = &state->tokens[state->tokens_count++];
+    token = scratch_append(sizeof(struct token));
     token->span.src_id = state->src->src_id;
     token->span.start = state->start;
     token->span.end = state->curr;
@@ -68,6 +55,9 @@ lexer_push(struct lexer *state, enum token_tag tag)
     token->tag = tag;
     token->same_line = state->line == state->prev_line;
 
+    /*
+     * Update for same_line tracking
+     */
     state->prev_line = state->line;
 }
 
@@ -332,13 +322,22 @@ lexer_next(struct lexer *state)
     }
 }
 
-void
+bool
 lexer_tokenize(struct lexer *state, struct token **tokens)
 {
+    scratch_begin(&state->tokens);
+
     while (!lexer_eof(state)) {
         lexer_next(state);
     }
-
     lexer_push(state, TOKEN_EOF);
-    *tokens = state->tokens;
+
+    *tokens = scratch_data(&state->tokens);
+    return true;
+}
+
+void
+lexer_release(struct lexer *state)
+{
+    scratch_end(&state->tokens);
 }

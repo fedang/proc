@@ -5,6 +5,7 @@
 
 #include "token.h"
 #include "source.h"
+#include "scratch.h"
 
 struct lexer {
     struct source *src;
@@ -13,14 +14,13 @@ struct lexer {
     unsigned line;
     unsigned start_line;
     unsigned prev_line;
-
-    struct token *tokens;
-    size_t tokens_count;
-    size_t tokens_max;
+    struct scratch_frame tokens;
 };
 
 void lexer_init(struct lexer *state, struct source *src);
 
-void lexer_tokenize(struct lexer *state, struct token **tokens);
+bool lexer_tokenize(struct lexer *state, struct token **tokens);
+
+void lexer_release(struct lexer *state);
 
 #endif

@@ -248,11 +248,17 @@ modcache_load(struct modcache *cache, const char *path,
     }
 
     lexer_init(&lexer, src);
-    lexer_tokenize(&lexer, &tokens);
+    if (!lexer_tokenize(&lexer, &tokens)) {
+        lexer_release(&lexer);
+        return false;
+    }
 
     parser_init(&parser, &cache->src_map, src, tokens);
-    if (!parser_module(&parser, &decl))
+    if (!parser_module(&parser, &decl)) {
+        lexer_release(&lexer);
         return false;
+    }
+    lexer_release(&lexer);
 
     if (!name) {
         /*
