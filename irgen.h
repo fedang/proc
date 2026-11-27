@@ -45,7 +45,7 @@ struct irgen {
     struct irval slots[256];
     struct symbol *externs[256];
     unsigned externs_count;
-    const char *strings[256];
+    struct value_string strings[256];
     unsigned strings_count;
 };
 

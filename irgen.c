@@ -31,7 +31,7 @@ irgen_fresh_label(struct irgen *state)
 }
 
 static struct irval
-irgen_emit_string(struct irgen *state, const char *string)
+irgen_emit_string(struct irgen *state, struct value_string string)
 {
     assert(state->strings_count < 256 && "too many strings!");
     state->strings[state->strings_count] = string;
@@ -1539,17 +1539,14 @@ irgen_modcache(struct irgen *state, struct modcache *cache)
      * Emit collected string literals
      */
     for (i = 0; i < state->strings_count; i++) {
-        // FIXME: store length separately / embedded \0 problems!
-        len = strlen(state->strings[i]);
-
+        len = state->strings[i].len;
         IR_EMITF(state, "\n@.str.%zu ="
                  " private unnamed_addr constant [%zu x i8] c\"",
                  i, len + 1);
 
         for (j = 0; j < len; j++) {
-            c = state->strings[i][j];
+            c = state->strings[i].data[j];
 
-            // XXX
             if (c >= 32 && c <= 126 && c != '"' && c != '\\') {
                 IR_EMITC(state, c);
             } else {

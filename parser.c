@@ -447,7 +447,7 @@ parser_integer(struct parser *state, int64_t *value)
 }
 
 static bool
-parser_escape_string(struct parser *state, const char **string)
+parser_escape_string(struct parser *state, struct value_string *string)
 {
     const char *start;
     struct span span;
@@ -493,9 +493,10 @@ parser_escape_string(struct parser *state, const char **string)
             buf[i++] = c;
         }
     }
-
     buf[i] = '\0';
-    *string = buf;
+
+    string->data = buf;
+    string->len = i;
     return true;
 }
 
@@ -564,7 +565,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
     int64_t value;
     struct symbol *sym;
     struct expr *op, *args[32];
-    const char *string;
+    struct value_string string;
     struct expr *body;
     size_t count, i;
     bool saved_parens, saved_noblock;
@@ -586,7 +587,7 @@ parser_expr_simple(struct parser *state, struct expr **expr)
             return false;
 
         *expr = expr_make_literal();
-        expr_set_ctval(*expr, value_make_string(string));
+        expr_set_ctval(*expr, value_make_string(string.data, string.len));
         goto done;
     }
 

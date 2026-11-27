@@ -14,11 +14,16 @@ enum value_tag {
     VALUE_AGGREGATE,
 };
 
+struct value_string {
+    const char *data;
+    size_t len;
+};
+
 struct value {
     enum value_tag tag;
     union {
         int64_t integer;
-        const char *string;
+        struct value_string string;
         struct value_aggregate *agg;
     };
 };
@@ -47,11 +52,11 @@ value_make_bool(bool val)
 }
 
 static inline struct value
-value_make_string(const char *val)
+value_make_string(const char *data, size_t len)
 {
     return (struct value) {
         .tag = VALUE_STRING,
-        .string = val
+        .string = { .data = data, .len = len }
     };
 }
 
