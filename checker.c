@@ -861,7 +861,6 @@ checker_seal_module(struct checker *state, struct decl_module *mod)
     struct scope *scope, *sig_scope;
     struct binding *bind, *sig_bind;
     struct type *type, *seal_type;
-    size_t i;
     bool ok = true;
 
     scope = mod->type->module.scope;
@@ -870,12 +869,11 @@ checker_seal_module(struct checker *state, struct decl_module *mod)
     /*
      * Mark all bindings in the module as sealed, then clear them as we go
      */
-    for (i = 0; i < scope->bindings_count; i++) {
-        BIND_SET_FLAG(&scope->bindings[i], BIND_SEALED);
+    for (bind = scope->head; bind != NULL; bind = bind->next) {
+        BIND_SET_FLAG(bind, BIND_SEALED);
     }
 
-    for (i = 0; i < sig_scope->bindings_count; i++) {
-        sig_bind = &sig_scope->bindings[i];
+    for (sig_bind = sig_scope->head; sig_bind != NULL; sig_bind = sig_bind->next) {
         bind = scope_lookup_local(scope, sig_bind->sym);
 
         if (!bind) {
@@ -949,7 +947,6 @@ checker_resolve_module(struct checker *state, struct decl_module *mod)
     struct scope *scope, *sig_scope, *saved;
     struct binding *bind, *sig_bind;
     struct decl_type *d_type;
-    size_t i;
     bool seal, ok = true;
 
     scope = mod->type->module.scope;
@@ -986,8 +983,7 @@ checker_resolve_module(struct checker *state, struct decl_module *mod)
          * Forward complete types from the signature into the module scope
          * if they were not explicitly redeclared
          */
-        for (i = 0; i < sig_scope->bindings_count; i++) {
-            sig_bind = &sig_scope->bindings[i];
+        for (sig_bind = sig_scope->head; sig_bind != NULL; sig_bind = sig_bind->next) {
             if (!BIND_IS_TYPE(sig_bind) || sig_bind->status != RESOLVE_DONE)
                 continue;
 
@@ -1013,8 +1009,8 @@ checker_resolve_module(struct checker *state, struct decl_module *mod)
         }
     }
 
-    for (i = 0; i < scope->bindings_count; i++) {
-        if (!checker_resolve_binding(state, &scope->bindings[i])) {
+    for (bind = scope->head; bind != NULL; bind = bind->next) {
+        if (!checker_resolve_binding(state, bind)) {
             ok = false;
         }
     }
@@ -1037,6 +1033,7 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
     struct type *type, *args[32];
     struct proc_arg *ptr, *prev;
     struct scope *saved, *scope;
+    struct binding *inner;
     size_t i, j;
     bool ok = true;
 
@@ -1199,8 +1196,8 @@ checker_resolve_binding(struct checker *state, struct binding *bind)
 
         case DECL_SIG:
             scope = bind->type->sig.scope;
-            for (i = 0; i < scope->bindings_count; i++) {
-                if (!checker_resolve_binding(state, &scope->bindings[i])) {
+            for (inner = scope->head; inner != NULL; inner = inner->next) {
+                if (!checker_resolve_binding(state, inner)) {
                     ok = false;
                 }
             }

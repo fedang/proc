@@ -1,13 +1,16 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "arena.h"
 #include "scope.h"
 
 struct scope *
 scope_make(struct symbol *name, struct symbol *prefix, struct scope *parent,
            struct modfile *file)
 {
-    struct scope *scope = calloc(1, sizeof(struct scope));
+    struct scope *scope;
+
+    scope = arena_alloc_zero(&arena_scope, sizeof(struct scope));
     scope->name = name;
     scope->prefix = prefix;
     scope->parent = parent;
@@ -21,8 +24,13 @@ scope_push(struct scope *scope, struct symbol *sym,
 {
     struct binding *bind;
 
-    assert(scope->bindings_count < 256 && "too many bindings!");
-    bind = &scope->bindings[scope->bindings_count++];
+    bind = arena_alloc_zero(&arena_scope, sizeof(struct binding));
+    if (scope->tail) {
+        scope->tail->next = bind;
+    } else {
+        scope->head = bind;
+    }
+    scope->tail = bind;
 
     bind->sym = sym;
     bind->status = decl ? RESOLVE_NONE : RESOLVE_DONE;
@@ -40,11 +48,11 @@ scope_push(struct scope *scope, struct symbol *sym,
 struct binding *
 scope_lookup_local(struct scope *scope, struct symbol *sym)
 {
-    size_t i;
+    struct binding *bind;
 
-    for (i = 0; i < scope->bindings_count; i++) {
-        if (scope->bindings[i].sym == sym)
-            return &scope->bindings[i];
+    for (bind = scope->head; bind != NULL; bind = bind->next) {
+        if (bind->sym == sym)
+            return bind;
     }
 
     return NULL;

@@ -39,6 +39,7 @@ struct binding {
     struct type *type;
     struct type *seal_type;
     int flags;
+    struct binding *next;
 };
 
 struct scope {
@@ -47,8 +48,8 @@ struct scope {
     struct scope *parent;
     struct modfile *file;
     struct decl *decl;
-    struct binding bindings[256];
-    size_t bindings_count;
+    struct binding *head;
+    struct binding *tail;
 };
 
 struct scope *scope_make(struct symbol *name, struct symbol *prefix,
