@@ -2,6 +2,7 @@
 #define _SYMBOL_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define SYMBOL_LIST(X) \
     /* Keywords */ \
@@ -33,7 +34,8 @@
 
 struct symbol {
     const char *str;
-    size_t len;
+    uint32_t len;
+    uint32_t hash;
 };
 
 #define X(sym, _) \

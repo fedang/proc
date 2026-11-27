@@ -6598,3 +6598,5 @@ struct S99 {
     field_99_62: i32
     field_99_63: i32
 }
+
+proc main(): int { return 0 }

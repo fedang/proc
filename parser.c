@@ -5,6 +5,7 @@
 
 #include "parser.h"
 #include "report.h"
+#include "arena.h"
 
 // TODO: Improve flag tracking for recovery
 
@@ -457,7 +458,7 @@ parser_escape_string(struct parser *state, struct value_string *string)
     span = parser_prev(state)->span;
     start = &state->src->str[span.start];
     len = (span.end - span.start) - 2;
-    buf = malloc(len + 1);
+    buf = arena_alloc(&arena_blob, len + 1);
 
     for (i = 0, j = 0; j < len; ++j) {
         c = start[j + 1];
