@@ -216,11 +216,13 @@ run_test() {
     # Record output (strip temp/test paths so its portable)
     {
         printf '=== COMPILE EXIT: %d ===\n' "$c_rc"
-        sed -e "s|$WORKDIR|<BUILD>|g" -e "s|$dir|<TEST>|g" "$out/c.out"
+        sed -e "s|$WORKDIR|<BUILD>|g" -e "s|$dir|<TEST>|g" \
+            -e 's|/tmp/comp-[A-Za-z0-9_-]\{6\}\.ll|<TMP_IR>|g' "$out/c.out"
         if [ -n "$r_rc" ]
         then
             printf '=== RUN EXIT: %d ===\n' "$r_rc"
-            sed -e "s|$WORKDIR|<BUILD>|g" -e "s|$dir|<TEST>|g" "$out/r.out"
+            sed -e "s|$WORKDIR|<BUILD>|g" -e "s|$dir|<TEST>|g" \
+                -e 's|/tmp/comp-[A-Za-z0-9_-]\{6\}\.ll|<TMP_IR>|g' "$out/r.out"
         fi
     } > "$out/actual.txt"
 

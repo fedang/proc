@@ -1,0 +1,6 @@
+module X {
+    // Trick: they appear in two different modules, but the ir is the same
+    proc main(): int { return 1 }
+}
+
+proc main(): int { return 0 }

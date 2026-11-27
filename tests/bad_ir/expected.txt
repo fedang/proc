@@ -1,0 +1,8 @@
+=== COMPILE EXIT: 1 ===
+<TMP_IR>:8:12: error: invalid redefinition of function 'main'
+    8 | define i64 @"main"() {
+      |            ^
+1 error generated.
+error: Failed to run clang, exited with status 1
+info: Full command was: clang -O1 -Wno-override-module -o <BUILD>/bad_ir/a.out <TMP_IR> -target x86_64-pc-linux-gnu
+info: Failed to compile IR

@@ -71,8 +71,13 @@ options_init(int argc, const char **argv)
             continue;
         }
 
-        if (!strcmp(argv[i], "-c")) {
+        if (!strcmp(argv[i], "-c") || !strcmp(argv[i], "--emit-obj")) {
             opts.emit_obj = true;
+            continue;
+        }
+
+        if (!strcmp(argv[i], "-S") || !strcmp(argv[i], "--emit-asm")) {
+            opts.emit_asm = true;
             continue;
         }
 
@@ -103,11 +108,6 @@ options_init(int argc, const char **argv)
                 target_list();
                 return false;
             }
-            continue;
-        }
-
-        if (!strcmp(argv[i], "-S")) {
-            opts.emit_asm = true;
             continue;
         }
 
@@ -188,8 +188,8 @@ options_help(const char *prog)
     printf("Options:\n");
     printf("  -o <file>          Select output file\n");
     printf("  -C <clang_arg>     Pass option directly to the clang backend\n");
-    printf("  -c                 Compile to object file without linking\n");
-    printf("  -S                 Emit assembly instead of linking\n");
+    printf("  -c, --emit-obj     Compile to object file without linking\n");
+    printf("  -S, --emit-asm     Emit assembly instead of linking\n");
     printf("  --emit-ir          Emit LLVM IR only without invoking clang\n");
     printf("  --color            Force colored diagnostics\n");
     printf("  --no-color         Disable colored diagnostics\n");
@@ -207,6 +207,7 @@ options_run_clang(const char *ir_file)
     size_t i, len, argc;
     pid_t pid;
     int status;
+    bool ok;
 
     len = 16 + opts.clang_inputs_count + opts.clang_args_count;
     argv = malloc(len * sizeof(*argv));
@@ -259,9 +260,22 @@ options_run_clang(const char *ir_file)
         _exit(127);
     }
 
-    free(argv);
-    if (waitpid(pid, &status, 0) < 0)
+    if (waitpid(pid, &status, 0) < 0) {
+        free(argv);
         return false;
+    }
 
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    if (!ok) {
+        report_error(NULL, NULL, "Failed to run clang, exited with status %d\n",
+                     WIFEXITED(status) ? WEXITSTATUS(status) : -1);
+
+        report_info(NULL, NULL, "Full command was:");
+        for (i = 0; i < argc; i++)
+            fprintf(stderr, " %s", argv[i]);
+        fprintf(stderr, "\n");
+    }
+
+    free(argv);
+    return ok;
 }
