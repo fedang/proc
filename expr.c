@@ -1,13 +1,14 @@
 #include <stdlib.h>
 
 #include "expr.h"
+#include "arena.h"
 
 static void *
 expr_make(size_t size, enum expr_tag tag)
 {
     struct expr *expr;
 
-    expr = calloc(1, size);
+    expr = arena_alloc_zero(&arena_ast, size);
     expr->tag = tag;
     return expr;
 }

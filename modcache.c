@@ -5,25 +5,14 @@
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "modcache.h"
 #include "lexer.h"
 #include "parser.h"
 #include "report.h"
 
-// XXX
-static bool
-modcache_detect(const char *path)
-{
-    FILE *file;
-
-    file = fopen(path, "rb");
-    if (file) {
-        fclose(file);
-        return true;
-    }
-    return false;
-}
+#define MODCACHE_SIZE (16UL * 1024 * 1024)
 
 void
 modcache_init(struct modcache *cache, const char *rootdir)
@@ -32,30 +21,34 @@ modcache_init(struct modcache *cache, const char *rootdir)
 
     memset(cache, 0, sizeof(struct modcache));
     assert(realpath(rootdir ? rootdir : ".", abs_buf));
-    cache->rootdir = strdup(abs_buf);
+    cache->rootdir = arena_strdup(&arena_blob, abs_buf);
+    arena_setup(&cache->arena, MODCACHE_SIZE);
+    cache->mods = (struct modfile *)cache->arena.base;
+
 
     source_map_init(&cache->src_map);
+}
+
+static bool
+modcache_detect(const char *path)
+{
+    // XXX
+    return access(path, F_OK) == 0;
 }
 
 static char *
 modcache_dirname(const char *abs_path)
 {
     const char *slash;
-    char *buf;
-    size_t len;
 
     slash = strrchr(abs_path, '/');
     if (!slash)
-        return strdup(".");
+        return arena_strdup(&arena_blob, ".");
 
     if (slash == abs_path)
-        return strdup("/");
+        return arena_strdup(&arena_blob, "/");
 
-    len = (size_t)(slash - abs_path);
-    buf = malloc(len + 1);
-    memcpy(buf, abs_path, len);
-    buf[len] = '\0';
-    return buf;
+    return arena_strndup(&arena_blob, abs_path, (size_t)(slash - abs_path));
 }
 
 static const char *
@@ -273,13 +266,14 @@ modcache_load(struct modcache *cache, const char *path,
     mod = (struct decl_module *)decl;
     mod->sym = name;
 
-    assert(cache->mods_count < 256 && "too many modules!");
-    file = &cache->mods[cache->mods_count++];
+    file = arena_append(&cache->arena, sizeof(struct modfile));
+    memset(file, 0, sizeof(struct modfile));
+    cache->mods_count++;
 
     file->src = src;
     file->prefix = prefix;
     file->decl = decl;
-    file->abs_path = strdup(abs_buf);
+    file->abs_path = arena_strdup(&arena_blob, abs_buf);
     file->dir_path = modcache_dirname(abs_buf);
 
     if (out)

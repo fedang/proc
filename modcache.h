@@ -6,6 +6,7 @@
 #include "source.h"
 #include "scope.h"
 #include "decl.h"
+#include "arena.h"
 
 enum import_status {
     IMPORT_NOT_FOUND,
@@ -26,7 +27,8 @@ struct modfile {
 struct modcache {
     const char *rootdir;
     struct source_map src_map;
-    struct modfile mods[256];
+    struct arena arena;
+    struct modfile *mods;
     size_t mods_count;
 };
 

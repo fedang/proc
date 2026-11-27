@@ -1,13 +1,14 @@
 #include <stdlib.h>
 
 #include "decl.h"
+#include "arena.h"
 
 static void *
 decl_make(size_t size, enum decl_tag tag)
 {
     struct decl *decl;
 
-    decl = calloc(1, size);
+    decl = arena_alloc_zero(&arena_ast, size);
     decl->tag = tag;
     return decl;
 }
