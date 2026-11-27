@@ -21,6 +21,18 @@
 #define BIND_IS_LINKED(b)   BIND_CHECK_FLAG(b, BIND_LINKED)
 #define BIND_IS_SEALED(b)   BIND_CHECK_FLAG(b, BIND_SEALED)
 
+#define SCOPE_FILE   (1 << 0)
+#define SCOPE_OPAQUE (1 << 1)
+#define SCOPE_VTABLE (1 << 2)
+
+#define SCOPE_CHECK_FLAG(s, f)  (((s)->flags & (f)) == (f))
+#define SCOPE_CLEAR_FLAG(s, f)  ((s)->flags &= ~(f))
+#define SCOPE_SET_FLAG(s, f)    ((s)->flags |= (f))
+
+#define SCOPE_IS_FILE(s)   SCOPE_CHECK_FLAG(s, SCOPE_FILE)
+#define SCOPE_IS_OPAQUE(s) SCOPE_CHECK_FLAG(s, SCOPE_OPAQUE)
+#define SCOPE_IS_VTABLE(s) SCOPE_CHECK_FLAG(s, SCOPE_VTABLE)
+
 enum resolve_status {
     RESOLVE_NONE,
     RESOLVE_PENDING,
@@ -47,6 +59,7 @@ struct scope {
     struct scope *parent;
     struct modfile *file;
     struct decl *decl;
+    int flags;
     struct binding *head;
     struct binding *tail;
 };

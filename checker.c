@@ -3171,11 +3171,11 @@ checker_seal_file(struct checker *state, struct decl_module *mod)
     struct decl_module *file_mod;
 
     /*
-     * Fail if we are in a module that is not in a file context
+     * Reject if the module is not in a file context
      */
-    if (state->curr_scope->parent != state->root_scope
-            || !state->curr_scope->decl
-            || state->curr_scope->decl->tag != DECL_MODULE) {
+    if (!SCOPE_IS_FILE(state->curr_scope) ||
+        !state->curr_scope->decl ||
+        state->curr_scope->decl->tag != DECL_MODULE) {
         TYCHK_ERROR(state, mod->decl.span,
                     "Nested module '%pS' must have a body\n",
                     mod->sym);
@@ -3284,9 +3284,16 @@ checker_register_decl(struct checker *state, struct decl *decl)
             /*
              * If no alias type is given, treat as opaque
              */
-            type = d_type->type
-                 ? NULL
-                 : type_get_opaque(decl->attr, decl, d_type->sym);
+            if (!d_type->type) {
+                type = type_get_opaque(decl->attr, decl, d_type->sym);
+
+                if (state->curr_scope->decl &&
+                    state->curr_scope->decl->tag == DECL_SIG) {
+                    SCOPE_SET_FLAG(state->curr_scope, SCOPE_OPAQUE);
+                }
+            } else {
+                type = NULL;
+            }
 
             bind = scope_push(state->curr_scope, d_type->sym, type, decl,
                               BIND_TYPE);
@@ -3417,6 +3424,7 @@ checker_register_file(struct checker *state, struct modfile *file)
          * Principal modules calculate their prefix from their file path
          */
         scope = scope_make(mod->sym, file->prefix, state->root_scope, file);
+        SCOPE_SET_FLAG(scope, SCOPE_FILE);
         mod->type = type_get_module(mod->decl.attr, scope);
         scope->decl = file->decl;
     }
