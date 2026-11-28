@@ -2591,6 +2591,13 @@ checker_expr_if(struct checker *state, struct expr_if *expr)
 static bool
 checker_expr_return(struct checker *state, struct expr_return *expr)
 {
+    if (!state->ret_type) {
+        TYCHK_ERROR(state, expr->expr.span,
+                    "Cannot use 'return' outside of a procedure\n");
+        expr->expr.type = type_get_invalid();
+        return false;
+    }
+
     if (!expr->value) {
         if (!checker_cmp(state, state->ret_type, type_get_void(NULL))) {
             TYCHK_ERROR(state, expr->expr.span,
@@ -3542,6 +3549,7 @@ checker_validate_decl(struct checker *state, struct decl *decl)
     state->loop_depth = 0;
     state->ret_type = proc->out;
     ok = checker_expr(state, proc->body);
+    state->ret_type = NULL;
     checker_local_pop(state, 0);
 
     if (ok && !type_is_invalid(proc->out) && proc->out->tag != TYPE_VOID

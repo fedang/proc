@@ -10,6 +10,7 @@ enum value_tag {
     VALUE_PENDING,
     VALUE_INTEGER,
     VALUE_BOOL,
+    VALUE_VOID,
     VALUE_STRING,
     VALUE_AGGREGATE,
 };
@@ -38,7 +39,7 @@ value_make_integer(int64_t val)
 {
     return (struct value) {
         .tag = VALUE_INTEGER,
-        .integer = val
+        .integer = val,
     };
 }
 
@@ -47,7 +48,15 @@ value_make_bool(bool val)
 {
     return (struct value) {
         .tag = VALUE_BOOL,
-        .integer = val
+        .integer = val,
+    };
+}
+
+static inline struct value
+value_make_void(void)
+{
+    return (struct value) {
+        .tag = VALUE_VOID,
     };
 }
 
@@ -56,7 +65,10 @@ value_make_string(const char *data, size_t len)
 {
     return (struct value) {
         .tag = VALUE_STRING,
-        .string = { .data = data, .len = len }
+        .string = {
+            .data = data,
+            .len = len
+        },
     };
 }
 
