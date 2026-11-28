@@ -129,7 +129,7 @@ symbol_init(void)
     /*
      * Allocate a sensible size for the symbol table
      */
-    symbol_grow(4096);
+    symbol_grow(16384);
 
 #define X(sym, str) \
     symbol_ ## sym = symbol_make(#str);

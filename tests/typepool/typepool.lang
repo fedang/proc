@@ -4618,3 +4618,5 @@ struct S69 {
     f62: [i32, 4478]
     f63: [i32, 4479]
 }
+
+proc main(): int { return 42 }

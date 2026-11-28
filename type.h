@@ -56,6 +56,7 @@ struct decl;
 struct type {
     struct attr *attr;
     enum type_tag tag;
+    uint32_t hash;
     union {
         struct expr *raw;
         size_t bit_width;
