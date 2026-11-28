@@ -197,4 +197,6 @@ struct type *type_get_sig(struct attr *attr, struct scope *scope);
 
 void type_format(FILE *out, const struct type *type);
 
+void type_init(void);
+
 #endif

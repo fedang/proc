@@ -45,15 +45,19 @@ main(int argc, const char **argv)
     if (!options_init(argc, argv))
         return 1;
 
+    /*
+     * Initialize the various memory areas
+     */
     arena_init();
     scratch_init();
     symbol_init();
-
-    modcache_init(&cache, ".");
+    type_init();
 
     /*
      * Load all the root modules asked by the user
      */
+    modcache_init(&cache, ".");
+
     for (i = 0; i < opts.inputs_count; i++) {
         if (!modcache_load(&cache, opts.inputs[i], NULL, NULL)) {
             ok = false;

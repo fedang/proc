@@ -9,6 +9,24 @@
 #include "options.h"
 #include "arena.h"
 
+#define TYPE_PRIM(sym, _tag, ...) \
+    static struct type type_ ## sym = { .tag = _tag, __VA_ARGS__ };
+
+TYPE_PRIM(invalid, TYPE_INVALID)
+TYPE_PRIM(any_int, TYPE_ANY_INT)
+TYPE_PRIM(void, TYPE_VOID)
+TYPE_PRIM(bool, TYPE_BOOL)
+TYPE_PRIM(int, TYPE_INT, .bit_width = 0)
+TYPE_PRIM(i8, TYPE_INT, .bit_width = 8)
+TYPE_PRIM(i16, TYPE_INT, .bit_width = 16)
+TYPE_PRIM(i32, TYPE_INT, .bit_width = 32)
+TYPE_PRIM(i64, TYPE_INT, .bit_width = 64)
+TYPE_PRIM(uint, TYPE_UINT, .bit_width = 0)
+TYPE_PRIM(u8, TYPE_UINT, .bit_width = 8)
+TYPE_PRIM(u16, TYPE_UINT, .bit_width = 16)
+TYPE_PRIM(u32, TYPE_UINT, .bit_width = 32)
+TYPE_PRIM(u64, TYPE_UINT, .bit_width = 64)
+
 #define MAX_TYPES 4096
 
 struct type type_pool[MAX_TYPES];
@@ -80,38 +98,72 @@ type_make_raw(struct expr *raw)
 struct type *
 type_get_invalid(void)
 {
-    static struct type invalid = { .tag = TYPE_INVALID };
-    return &invalid;
+    return &type_invalid;
 }
 
 struct type *
 type_get_any_int(void)
 {
-    static struct type any_int = { .tag = TYPE_ANY_INT };
-    return &any_int;
+    return &type_any_int;
 }
 
 struct type *
 type_get_bool(struct attr *attr)
 {
+    if (!attr)
+        return &type_bool;
     return type_get_simple(attr, TYPE_BOOL);
 }
 
 struct type *
 type_get_void(struct attr *attr)
 {
+    if (!attr)
+        return &type_void;
     return type_get_simple(attr, TYPE_VOID);
 }
 
 struct type *
 type_get_int(struct attr *attr, size_t bit_width)
 {
+    if (!attr) {
+        switch (bit_width) {
+            case 0:
+                return &type_int;
+            case 8:
+                return &type_i8;
+            case 16:
+                return &type_i16;
+            case 32:
+                return &type_i32;
+            case 64:
+                return &type_i64;
+            default:
+                break;
+        }
+    }
     return type_get_xint(attr, bit_width, TYPE_INT);
 }
 
 struct type *
 type_get_uint(struct attr *attr, size_t bit_width)
 {
+    if (!attr) {
+        switch (bit_width) {
+            case 0:
+                return &type_uint;
+            case 8:
+                return &type_u8;
+            case 16:
+                return &type_u16;
+            case 32:
+                return &type_u32;
+            case 64:
+                return &type_u64;
+            default:
+                break;
+        }
+    }
     return type_get_xint(attr, bit_width, TYPE_UINT);
 }
 
@@ -580,4 +632,9 @@ type_format(FILE *out, const struct type *type)
         default:
             unreachable();
     }
+}
+
+void
+type_init(void)
+{
 }
